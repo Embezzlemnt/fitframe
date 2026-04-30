@@ -1,20 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-async function askClaude(messages, system) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      system,
-      messages,
-    }),
-  });
-  const data = await res.json();
-  return data.content?.find(b => b.type === "text")?.text ?? "";
-}
-
 // ─── MediaPipe script loader ──────────────────────────────────────────────────
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -52,21 +37,57 @@ function calcMeasurements(landmarks, W, H) {
 }
 
 const FRAMES = [
-  { id: "thin-round",  label: "Thin Round",     tags: ["minimal","soft","retro","classic"],        emoji: "○", desc: "Wire. Circular. Timeless." },
-  { id: "bold-square", label: "Bold Square",    tags: ["bold","strong","modern","confident"],      emoji: "□", desc: "Thick. Acetate. Presence." },
-  { id: "cat-eye",     label: "Cat Eye",        tags: ["vintage","expressive","feminine","retro"], emoji: "◇", desc: "Upswept. Distinct. Playful." },
-  { id: "navigator",   label: "Navigator",      tags: ["teardrop","classic","aviator","clean"],    emoji: "▽", desc: "Teardrop. Works on most faces." },
-  { id: "rectangle",   label: "Slim Rectangle", tags: ["minimal","sleek","modern","sharp"],        emoji: "▭", desc: "Low profile. Understated." },
-  { id: "round-thick", label: "Round Thick",    tags: ["bold","retro","statement","vintage"],      emoji: "◉", desc: "Wide. Retro. Confident." },
-  { id: "sporty-wrap", label: "Sporty Wrap",    tags: ["active","bold","sporty","practical"],      emoji: "⌒", desc: "Curved. Active. Polished." },
-  { id: "geometric",   label: "Geometric",      tags: ["angular","modern","unique","editorial"],   emoji: "⬡", desc: "Angular. Unconventional." },
+  { id: "thin-round",  label: "Thin Round",     tags: ["minimal","soft","retro","classic","clean"],       emoji: "○", desc: "Wire. Circular. Timeless." },
+  { id: "bold-square", label: "Bold Square",    tags: ["bold","statement","modern","confident"],          emoji: "□", desc: "Thick. Acetate. Presence." },
+  { id: "cat-eye",     label: "Cat Eye",        tags: ["vintage","expressive","retro","statement"],       emoji: "◇", desc: "Upswept. Distinct. Playful." },
+  { id: "navigator",   label: "Navigator",      tags: ["classic","clean","modern","adjustable"],          emoji: "▽", desc: "Teardrop. Works on most faces." },
+  { id: "rectangle",   label: "Slim Rectangle", tags: ["minimal","sleek","modern","clean","slim"],        emoji: "▭", desc: "Low profile. Understated." },
+  { id: "round-thick", label: "Round Thick",    tags: ["bold","retro","statement","vintage"],             emoji: "◉", desc: "Wide. Retro. Confident." },
+  { id: "sporty-wrap", label: "Sporty Wrap",    tags: ["sporty","practical","adjustable","bold"],         emoji: "⌒", desc: "Curved. Active. Polished." },
+  { id: "geometric",   label: "Geometric",      tags: ["editorial","modern","statement","bold","unique"], emoji: "⬡", desc: "Angular. Unconventional." },
 ];
 
-const QUESTIONS = [
-  { id: "issues", q: "Any recurring fit issues with glasses?" },
-  { id: "style",  q: "Describe your ideal pair in a few words." },
-  { id: "use",    q: "When will you wear them most?" },
-  { id: "face",   q: "Your face shape — or let the scan decide?" },
+const STYLE_QUESTIONS = [
+  {
+    id: "fit",
+    q: "How do glasses usually feel on you?",
+    options: [
+      { label: "They slide down constantly",        tags: ["adjustable","sporty","practical"] },
+      { label: "Too tight at my temples",           tags: ["slim","minimal","soft"] },
+      { label: "Fine mostly, just never perfect",   tags: ["classic","clean","modern"] },
+      { label: "I've never found a pair that fits", tags: ["adjustable","bold","sporty"] },
+    ],
+  },
+  {
+    id: "vibe",
+    q: "What's your visual instinct?",
+    options: [
+      { label: "Quiet. Clean lines, nothing extra",    tags: ["minimal","clean","soft"] },
+      { label: "Present. Something people notice",     tags: ["bold","statement","confident"] },
+      { label: "Timeless. Classic shapes, no trends",  tags: ["retro","classic","vintage"] },
+      { label: "Relaxed. Comfortable over everything", tags: ["sporty","practical","soft"] },
+    ],
+  },
+  {
+    id: "use",
+    q: "Where will you wear them most?",
+    options: [
+      { label: "At a desk, most of the day",       tags: ["minimal","sleek","clean"] },
+      { label: "Out and about, always on",          tags: ["sporty","practical","bold"] },
+      { label: "Both — they need to do everything", tags: ["clean","modern","classic"] },
+      { label: "Special occasions only",            tags: ["bold","expressive","statement"] },
+    ],
+  },
+  {
+    id: "priority",
+    q: "What matters most in a frame?",
+    options: [
+      { label: "It disappears on my face",      tags: ["minimal","soft","clean"] },
+      { label: "It says something about me",    tags: ["bold","statement","editorial"] },
+      { label: "It holds up to daily use",      tags: ["sporty","practical","modern"] },
+      { label: "It fits without any adjustment", tags: ["classic","adjustable","clean"] },
+    ],
+  },
 ];
 
 const SCAN_SEQUENCE = [
@@ -245,22 +266,21 @@ const css = `
   .meas-v { font-family: 'Geist Mono', monospace; font-size: 20px; color: var(--green); font-weight: 400; }
   .meas-u { font-size: 10px; color: var(--soft); margin-left: 2px; }
 
-  .chat-area { display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto; padding: 2px 0 4px; }
-  .bubble { max-width: 86%; padding: 10px 14px; font-size: 13px; line-height: 1.6; border-radius: 10px; animation: up 0.25s ease both; font-weight: 300; }
-  .bubble.bot  { align-self: flex-start; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 3px; }
-  .bubble.user { align-self: flex-end; background: var(--surface2); border: 1px solid var(--border2); color: var(--dim); border-bottom-right-radius: 3px; }
-  .chat-row { display: flex; gap: 8px; margin-top: 12px; }
-  .chat-in {
-    flex: 1; padding: 10px 14px; font-family: 'Geist', sans-serif;
-    font-size: 13px; background: var(--surface2); border: 1px solid var(--border2);
-    color: var(--text); outline: none; border-radius: 8px;
-    transition: border-color 0.2s; font-weight: 300;
+  /* Choice cards — step 2 */
+  .q-label { font-size: 17px; font-weight: 500; color: var(--white); letter-spacing: -0.02em; line-height: 1.3; margin-bottom: 16px; }
+  .q-progress { font-size: 11px; color: var(--soft); letter-spacing: 0.06em; margin-bottom: 20px; }
+  .choices { display: flex; flex-direction: column; gap: 8px; }
+  .choice {
+    padding: 14px 16px; border: 1px solid var(--border2); border-radius: 10px;
+    cursor: pointer; background: var(--surface2); text-align: left;
+    font-family: 'Geist', sans-serif; font-size: 14px; color: var(--text);
+    font-weight: 300; line-height: 1.4; width: 100%;
+    transition: all 0.15s cubic-bezier(.4,0,.2,1);
+    -webkit-tap-highlight-color: transparent;
   }
-  .chat-in:focus { border-color: var(--mid); }
-  .typing-dots { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
-  .typing-dots span { width: 5px; height: 5px; background: var(--soft); border-radius: 50%; animation: bounce 1.2s infinite; }
-  .typing-dots span:nth-child(2){animation-delay:.2s} .typing-dots span:nth-child(3){animation-delay:.4s}
-  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+  .choice:hover  { border-color: var(--mid); background: var(--surface); }
+  .choice:active { transform: scale(0.98); }
+  .choice.chosen { border-color: var(--green); background: var(--green-bg); color: var(--white); }
 
   .frame-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 14px 0; }
   .frame-card {
@@ -343,23 +363,45 @@ function useCamera() {
 
   const start = useCallback(async () => {
     setCamErr(null);
+
+    // iOS Safari: navigator.mediaDevices is undefined on HTTP
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCamErr({
+        type: "https",
+        headline: "Camera unavailable",
+        detail: "Your browser doesn't support camera access here. Make sure you're on https:// and using Safari or Chrome.",
+        fix: null,
+        debugInfo: `mediaDevices: ${!!navigator.mediaDevices} | proto: ${location.protocol}`,
+      });
+      return;
+    }
+
     try {
-      // Prefer front-facing; fall back to any camera if facingMode unsupported
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
         });
       } catch {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // fallback: drop facingMode constraint (some Android/desktop configs reject it)
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       }
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+
+      const v = videoRef.current;
+      if (v) {
+        v.srcObject = stream;
+        // iOS Safari needs setAttribute, not just the JSX prop
+        v.setAttribute("playsinline", "");
+        v.muted = true;
+        // play() returns a promise on modern browsers — await it
+        try { await v.play(); } catch {}
         setReady(true);
       }
     } catch (err) {
-      setCamErr(classifyCamError(err));
+      const classified = classifyCamError(err);
+      classified.debugInfo = `${err.name}: ${err.message}`;
+      setCamErr(classified);
     }
   }, []);
 
@@ -622,72 +664,47 @@ export default function FramesSite() {
   const [step, setStep]               = useState(0);
   const [scanning, setScanning]       = useState(false);
   const [confirmedMeas, setConfirmedMeas] = useState(null);
-  const [chatLog, setChatLog]         = useState([]);
-  const [chatInput, setChatInput]     = useState("");
-  const [qIndex, setQIndex]           = useState(0);
-  const [answers, setAnswers]         = useState({});
-  const [typing, setTyping]           = useState(false);
-  const [suggestedTags, setSuggestedTags] = useState([]);
+  const [styleAnswers, setStyleAnswers]   = useState({}); // { fit: {label, tags}, vibe: ..., use: ..., priority: ... }
+  const [styleQIdx, setStyleQIdx]         = useState(0);
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [copied, setCopied]           = useState(false);
 
   const cam      = useCamera();
-  // ← NEW: pass videoRef + a canvasRef down to the scan runner
   const canvasRef = useRef(null);
   const scan      = useScanRunner(scanning, cam.videoRef, canvasRef);
-  const chatEndRef = useRef(null);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatLog, typing]);
-  useEffect(() => { if (scan.done) setScanning(false); }, [scan.done]);
-  useEffect(() => { if (step !== 1) cam.stop(); }, [step]);
-  useEffect(() => {
-    if (step === 2 && chatLog.length === 0)
-      setChatLog([{ role: "bot", text: QUESTIONS[0].q }]);
-  }, [step]);
+  // Derive tags from answers — pure JS, no API
+  const suggestedTags = Object.values(styleAnswers).flatMap(a => a.tags);
 
-  async function sendChat() {
-    if (!chatInput.trim() || typing) return;
-    const txt    = chatInput.trim();
-    setChatInput("");
-    const newAns = { ...answers, [QUESTIONS[qIndex].id]: txt };
-    setAnswers(newAns);
-    setChatLog(l => [...l, { role: "user", text: txt }]);
-    setTyping(true);
-    const next = qIndex + 1;
-    if (next < QUESTIONS.length) {
-      await new Promise(r => setTimeout(r, 700));
-      const reply = await askClaude(
-        [{ role: "user", content: `Answer: "${txt}" to: "${QUESTIONS[qIndex].q}". One-sentence acknowledgement then ask: "${QUESTIONS[next].q}". Under 40 words. No filler.` }],
-        "You help find ideal glasses. Ultra brief, direct, friendly. No emojis except ✦ sparingly."
-      );
-      setTyping(false);
-      setChatLog(l => [...l, { role: "bot", text: reply }]);
-      setQIndex(next);
+  function selectOption(option) {
+    const qId = STYLE_QUESTIONS[styleQIdx].id;
+    const newAnswers = { ...styleAnswers, [qId]: option };
+    setStyleAnswers(newAnswers);
+    if (styleQIdx < STYLE_QUESTIONS.length - 1) {
+      setTimeout(() => setStyleQIdx(i => i + 1), 180);
     } else {
-      const allAns = Object.entries(newAns).map(([k, v]) => `${k}: ${v}`).join("\n");
-      const tagRes = await askClaude(
-        [{ role: "user", content: `Answers:\n${allAns}\n\nReturn ONLY a JSON array of 2-4 tags from: minimal,bold,soft,retro,classic,modern,confident,vintage,expressive,clean,sharp,sporty,active,angular,editorial,unique` }],
-        "Return only valid JSON. No markdown, no explanation."
-      );
-      let tags = [];
-      try { tags = JSON.parse(tagRes.replace(/```json|```/g, "").trim()); } catch {}
-      setSuggestedTags(tags);
-      setTyping(false);
-      setChatLog(l => [...l, { role: "bot", text: "Your frames are ready." }]);
+      setTimeout(() => setStep(3), 280);
     }
   }
 
+  useEffect(() => { if (scan.done) setScanning(false); }, [scan.done]);
+  useEffect(() => { if (step !== 1) cam.stop(); }, [step]);
+
   function frameScore(f) {
     if (!suggestedTags.length) return 1;
-    return f.tags.some(t => suggestedTags.includes(t)) ? 2 : 0;
+    const matches = f.tags.filter(t => suggestedTags.includes(t)).length;
+    if (matches >= 2) return 2;
+    if (matches >= 1) return 1;
+    return 0;
   }
 
   const currentMeas = confirmedMeas || (scan.done ? scan.measurements : null);
-  const chatDone    = qIndex >= QUESTIONS.length;
+  const styleDone   = Object.keys(styleAnswers).length === STYLE_QUESTIONS.length;
 
   function buildPrompt() {
     const f = FRAMES.find(f => f.id === selectedFrame);
     const m = currentMeas;
+    const sa = styleAnswers;
     return `FITFRAME — CUSTOM ORDER
 ${new Date().toLocaleString()}
 
@@ -701,12 +718,12 @@ Lens height    ${m?.lensH} mm
 Face width     ${m?.faceW} mm
 
 PREFERENCES
-Fit issues     ${answers.issues || "None"}
-Style          ${answers.style  || "—"}
-Use            ${answers.use    || "—"}
-Face shape     ${answers.face   || "Scan-derived"}
+Fit history    ${sa.fit?.label      || "—"}
+Visual style   ${sa.vibe?.label     || "—"}
+Primary use    ${sa.use?.label      || "—"}
+Priority       ${sa.priority?.label || "—"}
 
-TAGS           ${suggestedTags.join(", ") || "—"}
+STYLE TAGS     ${[...new Set(suggestedTags)].join(", ") || "—"}
 
 MATERIAL       PETG prototype → PA12 final
 LENS           Blue light CR39, edge-cut`;
@@ -746,6 +763,48 @@ LENS           Blue light CR39, edge-cut`;
               <div className="step-eyebrow">Step 1 — Face scan</div>
               <div className="step-title">Scan your face.</div>
 
+              {/* video always in DOM so videoRef.current is never null when cam.start() fires */}
+              <div
+                className="cam-wrap"
+                style={{ display: cam.ready && !scan.done ? "block" : "none" }}
+              >
+                <video ref={cam.videoRef} autoPlay playsInline muted />
+                <canvas ref={canvasRef} />
+                <div className="cam-vignette" />
+                <FaceGuide fill={scan.fill} />
+
+                <div className="cam-hud-top">
+                  {scanning
+                    ? <div className="rec-badge"><div className="rec-dot" />REC</div>
+                    : (
+                      <div className="mp-status">
+                        <div className="mp-dot" style={{ background: scan.mpReady ? "#4caf7d" : "#888" }} />
+                        <span style={{ color: scan.mpReady ? "#4caf7d" : "#888" }}>
+                          {scan.mpReady ? "MP READY" : "LOADING..."}
+                        </span>
+                      </div>
+                    )
+                  }
+                  <div className="pct-badge">{Math.round(scan.fill * 100)}%</div>
+                </div>
+
+                {scanning && scan.seqIdx >= 0 && (
+                  <div className="cam-hud-bottom">
+                    <div className="hud-step-label">
+                      {SCAN_SEQUENCE[Math.min(scan.seqIdx, SCAN_SEQUENCE.length - 1)].label}
+                    </div>
+                    <div className="hud-instruction">
+                      {SCAN_SEQUENCE[Math.min(scan.seqIdx, SCAN_SEQUENCE.length - 1)].instruction}
+                    </div>
+                  </div>
+                )}
+                {!scanning && (
+                  <div className="cam-hud-bottom">
+                    <div className="hud-instruction">Position your face in the oval.</div>
+                  </div>
+                )}
+              </div>
+
               {!cam.ready && !cam.camErr && !currentMeas && (
                 <div className="no-cam">
                   <div className="no-cam-icon">◉</div>
@@ -766,6 +825,9 @@ LENS           Blue light CR39, edge-cut`;
                   {cam.camErr.type === "denied" && (
                     <div className="err-fix-box">{cam.camErr.detail}</div>
                   )}
+                  <div style={{ fontSize: 10, color: "var(--soft)", fontFamily: "var(--font-mono)", marginTop: 4 }}>
+                    {cam.camErr.debugInfo}
+                  </div>
                   {cam.camErr.fix === "retry" && (
                     <button className="btn btn-ghost" style={{ marginTop: 4 }} onClick={cam.start}>Try again</button>
                   )}
@@ -777,46 +839,6 @@ LENS           Blue light CR39, edge-cut`;
 
               {cam.ready && !scan.done && (
                 <>
-                  <div className="cam-wrap">
-                    {/* Video feed */}
-                    <video ref={cam.videoRef} autoPlay playsInline muted />
-                    {/* ← NEW: canvas for landmark overlay */}
-                    <canvas ref={canvasRef} />
-                    <div className="cam-vignette" />
-                    <FaceGuide fill={scan.fill} />
-
-                    <div className="cam-hud-top">
-                      {scanning
-                        ? <div className="rec-badge"><div className="rec-dot" />REC</div>
-                        : (
-                          <div className="mp-status">
-                            <div className="mp-dot" style={{ background: scan.mpReady ? "#4caf7d" : "#888" }} />
-                            <span style={{ color: scan.mpReady ? "#4caf7d" : "#888" }}>
-                              {scan.mpReady ? "MP READY" : "LOADING..."}
-                            </span>
-                          </div>
-                        )
-                      }
-                      <div className="pct-badge">{Math.round(scan.fill * 100)}%</div>
-                    </div>
-
-                    {scanning && scan.seqIdx >= 0 && (
-                      <div className="cam-hud-bottom">
-                        <div className="hud-step-label">
-                          {SCAN_SEQUENCE[Math.min(scan.seqIdx, SCAN_SEQUENCE.length - 1)].label}
-                        </div>
-                        <div className="hud-instruction">
-                          {SCAN_SEQUENCE[Math.min(scan.seqIdx, SCAN_SEQUENCE.length - 1)].instruction}
-                        </div>
-                      </div>
-                    )}
-                    {!scanning && (
-                      <div className="cam-hud-bottom">
-                        <div className="hud-instruction">Position your face in the oval.</div>
-                      </div>
-                    )}
-                  </div>
-
                   <div className="scan-list">
                     {SCAN_SEQUENCE.map((s, i) => (
                       <div
@@ -889,44 +911,38 @@ LENS           Blue light CR39, edge-cut`;
             </div>
           )}
 
-          {/* ── Step 2 — Chat ── */}
-          {step === 2 && (
-            <div className="card">
-              <div className="step-eyebrow">Step 2 — Style</div>
-              <div className="step-title">Four questions.</div>
-              <div className="step-sub">Your answers shape the options.</div>
-              <hr className="divider" />
-              <div className="chat-area">
-                {chatLog.map((m, i) => (
-                  <div key={i} className={`bubble ${m.role}`}>{m.text}</div>
-                ))}
-                {typing && (
-                  <div className="bubble bot">
-                    <div className="typing-dots"><span /><span /><span /></div>
+          {/* ── Step 2 — Style questions ── */}
+          {step === 2 && (() => {
+            const q = STYLE_QUESTIONS[styleQIdx];
+            return (
+              <div className="card" key={styleQIdx}>
+                <div className="step-eyebrow">Step 2 — Style</div>
+                <div className="q-progress">{styleQIdx + 1} of {STYLE_QUESTIONS.length}</div>
+                <div className="q-label">{q.q}</div>
+                <div className="choices">
+                  {q.options.map(opt => (
+                    <button
+                      key={opt.label}
+                      className={`choice ${styleAnswers[q.id]?.label === opt.label ? "chosen" : ""}`}
+                      onClick={() => selectOption(opt)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {styleQIdx > 0 && (
+                  <div className="btn-row" style={{ marginTop: 16 }}>
+                    <button className="btn btn-ghost" onClick={() => {
+                      const prev = { ...styleAnswers };
+                      delete prev[STYLE_QUESTIONS[styleQIdx - 1].id];
+                      setStyleAnswers(prev);
+                      setStyleQIdx(i => i - 1);
+                    }}>Back</button>
                   </div>
                 )}
-                <div ref={chatEndRef} />
               </div>
-              {!chatDone && (
-                <div className="chat-row">
-                  <input
-                    className="chat-in"
-                    placeholder="Answer…"
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && sendChat()}
-                    disabled={typing}
-                  />
-                  <button className="btn btn-primary" onClick={sendChat} disabled={!chatInput.trim() || typing}>→</button>
-                </div>
-              )}
-              {chatDone && !typing && (
-                <div className="btn-row" style={{ marginTop: 16 }}>
-                  <button className="btn btn-primary" onClick={() => setStep(3)}>See frames</button>
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── Step 3 — Frames ── */}
           {step === 3 && (
@@ -967,11 +983,12 @@ LENS           Blue light CR39, edge-cut`;
               <hr className="divider" />
               <div className="sum-stack">
                 {[
-                  ["Frame",             FRAMES.find(f => f.id === selectedFrame)?.label],
+                  ["Frame",        FRAMES.find(f => f.id === selectedFrame)?.label],
                   ["PD / Bridge / Temple", `${currentMeas?.pd} / ${currentMeas?.bridge} / ${currentMeas?.temple} mm`],
-                  ["Style",             answers.style],
-                  ["Fit notes",         answers.issues],
-                  ["Use",               answers.use],
+                  ["Fit history",  styleAnswers.fit?.label],
+                  ["Visual style", styleAnswers.vibe?.label],
+                  ["Primary use",  styleAnswers.use?.label],
+                  ["Priority",     styleAnswers.priority?.label],
                 ]
                   .filter(([, v]) => v)
                   .map(([l, v]) => (
@@ -993,8 +1010,8 @@ LENS           Blue light CR39, edge-cut`;
                 <button className="btn btn-ghost"
                   onClick={() => {
                     setStep(0); setScanning(false); cam.stop();
-                    setChatLog([]); setQIndex(0); setAnswers({});
-                    setSuggestedTags([]); setSelectedFrame(null); setConfirmedMeas(null);
+                    setStyleAnswers({}); setStyleQIdx(0);
+                    setSelectedFrame(null); setConfirmedMeas(null);
                   }}>
                   Start over
                 </button>
