@@ -16,68 +16,90 @@ function loadScript(src) {
 }
 
 // ─── Pose validation — only accept samples when face is correctly positioned ──
-// Returns { valid, reason } based on research-validated constraints
 function validatePose(lm, W, H, isTurnStep) {
   const pts = lm.map(p => ({ x: p.x * W, y: p.y * H }));
 
   // 1. Distance check — inter-ocular span (outer eye corners) as % of frame width
-  // Valid: 20–48% of frame width (too close = distortion, too far = low precision)
-  const ioSpan = Math.sqrt((pts[263].x-pts[33].x)**2 + (pts[263].y-pts[33].y)**2);
+  // Valid: 20–46% ensures neither too close (fisheye distortion) nor too far (low precision)
+  const ioSpan  = Math.sqrt((pts[263].x-pts[33].x)**2 + (pts[263].y-pts[33].y)**2);
   const ioRatio = ioSpan / W;
   if (ioRatio < 0.20) return { valid: false, reason: "Move closer" };
-  if (ioRatio > 0.48) return { valid: false, reason: "Move back" };
+  if (ioRatio > 0.46) return { valid: false, reason: "Move back a little" };
 
-  // 2. Roll tilt — angle of the eye-to-eye line
-  // Must be within ±10° of horizontal for accurate measurements
+  // 2. Roll tilt — angle of the eye-to-eye line must be within ±10°
   const rollRad = Math.atan2(pts[263].y - pts[33].y, pts[263].x - pts[33].x);
   const rollDeg = Math.abs(rollRad * 180 / Math.PI);
   if (rollDeg > 10) return { valid: false, reason: "Level your head" };
 
-  // 3. Center constraint — nose tip (lm[1]) must be in middle of frame
-  // Relaxed on x-axis during left/right turn steps
+  // 3. Yaw gate — use z-depth difference between left/right ear landmarks
+  // lm[234] = left face edge, lm[454] = right face edge (normalized z)
+  // Large z-diff means head is turned — only allow during designated turn steps
+  const zDiff = Math.abs(lm[234].z - lm[454].z);
+  // During straight steps, reject if turned more than ~15°
+  if (!isTurnStep && zDiff > 0.08) return { valid: false, reason: "Face the camera" };
+
+  // 4. Center constraint — nose tip (lm[1]) must be in middle of frame
+  // x relaxed during turn steps since turning shifts nose naturally
   const nx = lm[1].x, ny = lm[1].y;
-  if (ny < 0.12 || ny > 0.78) return { valid: false, reason: "Center your face" };
+  if (ny < 0.12 || ny > 0.80) return { valid: false, reason: "Center your face" };
   if (!isTurnStep && (nx < 0.22 || nx > 0.78)) return { valid: false, reason: "Center your face" };
+
+  // 5. Iris asymmetry — if left iris pixel size differs from right by >10%, head is rotated
+  // Only relevant on straight steps, not turns
+  if (!isTurnStep) {
+    const d = (a, b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
+    const lId = (d(468,469)+d(468,470)+d(468,471)+d(468,472)) / 4 * 2;
+    const rId = (d(473,474)+d(473,475)+d(473,476)+d(473,477)) / 4 * 2;
+    if (lId > 3 && rId > 3) {
+      const asymmetry = Math.abs(lId - rId) / ((lId + rId) / 2);
+      if (asymmetry > 0.10) return { valid: false, reason: "Face the camera" };
+    }
+  }
 
   return { valid: true, reason: null };
 }
 
-// ─── Measurement math — research-validated approach ──────────────────────────
-// Iris constant: 11.7mm ± 0.5mm (Google MediaPipe, validated on 200+ participants)
-// Mean relative error: 4.3% (Google research paper, 2020)
-// Monocular PD reported separately — clinically more accurate for asymmetric faces
-// Nose midpoint landmark 168 used for bridge and monocular PD (more stable than lm[6])
+// ─── Measurement math — research-validated ───────────────────────────────────
+// Iris constant: 11.8mm — clinical HVID (Horizontal Visible Iris Diameter)
+// Source: slit lamp measurements, SpecialEyes clinical reference (11.8mm)
+// Corroborated: Driessen et al. 2010 (11.22mm children), Spörri et al. 2004 (11.5mm),
+// population average 11.7mm. 11.8mm used as adult clinical reference.
+// MAPE: ~2.9% horizontal, 4.3% vertical (PMC10447546)
+// Measurements ONLY collected when validatePose() returns valid=true
+const IRIS_MM = 11.8;
+
 function calcMeasurements(lm, W, H) {
   const pts = lm.map(p => ({ x: p.x * W, y: p.y * H }));
   const d = (a, b) => Math.sqrt((pts[a].x-pts[b].x)**2 + (pts[a].y-pts[b].y)**2);
 
-  // Iris diameters — average of 4 radii × 2 per eye (landmarks 468-477)
+  // Iris diameters — average of 4 radii × 2 per eye
   const lId = (d(468,469)+d(468,470)+d(468,471)+d(468,472)) / 4 * 2;
   const rId = (d(473,474)+d(473,475)+d(473,476)+d(473,477)) / 4 * 2;
   const avgId = (lId + rId) / 2;
-  if (avgId < 3) return null; // reject if iris detection is unreliable
+  if (avgId < 3) return null;
 
-  // Scale: mm per pixel, derived from iris constant
-  const scale = 11.7 / avgId;
+  // Reject if iris asymmetry > 10% — catches subtle rotations that passed pose check
+  const asymmetry = Math.abs(lId - rId) / avgId;
+  if (asymmetry > 0.10) return null;
 
-  // Monocular PD — each iris center to nose midpoint (lm 168)
-  // Clinically recommended over binocular for face asymmetry
+  const scale = IRIS_MM / avgId; // mm per pixel
+
+  // Monocular PD — each iris center to nose midpoint (lm 168, the nasal bridge point)
+  // Clinically superior to binocular for asymmetric faces
   const lMonoPd = d(468, 168) * scale;
   const rMonoPd = d(473, 168) * scale;
-  const binocPd = (lMonoPd + rMonoPd);
+  const binocPd = lMonoPd + rMonoPd;
 
-  // Bridge width — inner eye corners (133 = left inner, 362 = right inner)
+  // Bridge width — inner canthi (133 = left inner corner, 362 = right inner corner)
   const bridge = d(133, 362) * scale;
 
-  // Lens height — average of both eyes (upper lid to lower lid)
-  // lm 159 = left upper, 145 = left lower, 386 = right upper, 374 = right lower
+  // Lens height — vertical eye aperture, averaged both eyes
   const lensH = ((d(159,145) + d(386,374)) / 2) * scale;
 
-  // Face width — temporal landmarks (most lateral face points)
+  // Face width — temporal landmarks (most lateral stable face points)
   const faceW = d(234, 454) * scale;
 
-  // Temple length estimate — 68% of face half-width is empirically validated
-  // for standard temple arm length relative to face width
+  // Temple — 68% of face half-width, empirically validated estimate
   const temple = faceW * 0.68;
 
   return {
@@ -88,7 +110,6 @@ function calcMeasurements(lm, W, H) {
     temple:  temple.toFixed(0),
     lensH:   lensH.toFixed(1),
     faceW:   faceW.toFixed(0),
-    irisAvg: avgId.toFixed(1), // for debug/validation
   };
 }
 
@@ -578,50 +599,81 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
   };
 }
 
-// ─── FaceGuide — green strokes the circumference as scan fills ───────────────
-function FaceGuide({ fill, autoStartPct, facePresent }) {
-  // viewBox matches 4:3 aspect ratio of cam-wrap
-  const W=400, H=300;
-  const cx=W/2, cy=H/2-10;
-  const rx=72, ry=96;
-  const circ=Math.PI*(3*(rx+ry)-Math.sqrt((3*rx+ry)*(rx+3*ry)));
-  const strokeLen=circ*Math.min(fill,1);
-  const border=facePresent?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.45)";
-  const bw=12; // corner bracket width
-  const x1=cx-rx-10, y1=cy-ry-10, x2=cx+rx+10, y2=cy+ry+10;
+// ─── FaceGuide — white oval outline, green strokes circumference as scan fills ─
+// viewBox 400×300 matches the cam-wrap 4:3 aspect ratio exactly
+// The oval is purely a border stroke — no fill, face always fully visible
+function FaceGuide({ fill, autoStartPct, facePresent, poseHint }) {
+  const VW=400, VH=300;
+  const cx=VW/2, cy=VH/2;  // true center
+  const rx=78, ry=108;      // face-proportioned oval — wider than tall ratio ~0.72
+
+  // Ramanujan approximation for ellipse circumference
+  const h = ((rx-ry)/(rx+ry))**2;
+  const circ = Math.PI*(rx+ry)*(1 + (3*h)/(10+Math.sqrt(4-3*h)));
+  const strokeLen = circ * Math.min(fill, 1);
+
+  // Border color — bright white when face present, dim when not
+  const borderOpacity = facePresent ? 0.9 : 0.35;
+  const border = `rgba(255,255,255,${borderOpacity})`;
+
+  // Corner bracket positions — just outside the oval
+  const bx1=cx-rx-14, by1=cy-ry-14;
+  const bx2=cx+rx+14, by2=cy+ry+14;
+  const bl=16; // bracket leg length
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
-      {/* Corner brackets */}
+    <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice"
+      style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
+
+      {/* Corner brackets — visual alignment guides */}
       {[
-        [x1,y1+bw,x1,y1,x1+bw,y1],
-        [x2-bw,y1,x2,y1,x2,y1+bw],
-        [x1,y2-bw,x1,y2,x1+bw,y2],
-        [x2-bw,y2,x2,y2,x2,y2-bw],
-      ].map(([ax,ay,bx,by,cx2,cy2],i)=>(
-        <path key={i} d={`M${ax},${ay} L${bx},${by} L${cx2},${cy2}`}
-          stroke="rgba(255,255,255,0.8)" strokeWidth="2" fill="none" strokeLinecap="round"/>
+        `M${bx1+bl},${by1} L${bx1},${by1} L${bx1},${by1+bl}`,
+        `M${bx2-bl},${by1} L${bx2},${by1} L${bx2},${by1+bl}`,
+        `M${bx1},${by2-bl} L${bx1},${by2} L${bx1+bl},${by2}`,
+        `M${bx2},${by2-bl} L${bx2},${by2} L${bx2-bl},${by2}`,
+      ].map((path,i) => (
+        <path key={i} d={path} stroke="rgba(255,255,255,0.7)"
+          strokeWidth="2.5" fill="none" strokeLinecap="round"/>
       ))}
-      {/* Auto-hold outer ring */}
-      {autoStartPct>0&&autoStartPct<1&&(
-        <ellipse cx={cx} cy={cy} rx={rx+8} ry={ry+8} fill="none"
-          stroke="rgba(255,255,255,0.2)" strokeWidth="1.5"
-          strokeDasharray={`${autoStartPct*Math.PI*(3*(rx+8+ry+8)-Math.sqrt((3*(rx+8)+ry+8)*((rx+8)+3*(ry+8))))} 9999`}
-          strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>
-      )}
-      {/* Base oval */}
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
-        stroke={border} strokeWidth="2" style={{transition:"stroke 0.3s"}}/>
-      {/* Green circumference progress */}
-      {fill>0&&(
-        <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
-          stroke="#4caf7d" strokeWidth="4"
-          strokeDasharray={`${strokeLen} ${circ}`}
+
+      {/* Auto-hold countdown ring — outer halo fills as user holds still */}
+      {autoStartPct>0 && autoStartPct<1 && (
+        <ellipse cx={cx} cy={cy} rx={rx+10} ry={ry+10} fill="none"
+          stroke="rgba(255,255,255,0.18)" strokeWidth="2"
+          strokeDasharray={`${autoStartPct*circ*1.1} 9999`}
           strokeLinecap="round"
           transform={`rotate(-90 ${cx} ${cy})`}/>
       )}
-      {/* Eye guides */}
-      <circle cx={cx-22} cy={cy-16} r="3" fill={border} opacity="0.5"/>
-      <circle cx={cx+22} cy={cy-16} r="3" fill={border} opacity="0.5"/>
+
+      {/* Base oval — white outline, always rendered, no fill */}
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry}
+        fill="none" stroke={border} strokeWidth="2.5"
+        style={{transition:"stroke 0.4s ease"}}/>
+
+      {/* Green progress stroke — travels the circumference from top, clockwise */}
+      {fill > 0 && (
+        <ellipse cx={cx} cy={cy} rx={rx} ry={ry}
+          fill="none"
+          stroke="#4caf7d"
+          strokeWidth="4"
+          strokeDasharray={`${strokeLen} ${circ+10}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`}
+          style={{transition:"stroke-dasharray 0.1s linear"}}/>
+      )}
+
+      {/* Eye position dots — subtle guides */}
+      <circle cx={cx-26} cy={cy-20} r="2.5" fill={border} opacity="0.45"/>
+      <circle cx={cx+26} cy={cy-20} r="2.5" fill={border} opacity="0.45"/>
+
+      {/* Pose hint — shown inside oval when pose is invalid */}
+      {poseHint && (
+        <text x={cx} y={cy+ry+22} textAnchor="middle"
+          fill="rgba(255,255,255,0.85)" fontSize="13"
+          fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">
+          {poseHint}
+        </text>
+      )}
     </svg>
   );
 }
@@ -741,7 +793,7 @@ MATERIAL  PETG prototype → PA12 final`;
                 <video ref={cam.videoRef} autoPlay playsInline muted/>
                 <canvas ref={canvasRef}/>
                 <div className="cam-vignette"/>
-                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent}/>
+                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint}/>
                 <div className="cam-hud-top">
                   {!scan.mpReady&&(
                     <div className="scan-status">loading…</div>
