@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── Config — change these ────────────────────────────────────────────────────
-const MAKER_EMAIL = "hello@fitframe.store"; // ← your actual email
+const MAKER_EMAIL = "your@email.com"; // ← your actual email
 const BASE_PRICE  = 89;
 
 // ─── Script loader ────────────────────────────────────────────────────────────
@@ -51,10 +51,10 @@ const FRAMES = [
 
 const STYLE_QUESTIONS = [
   { id:"fit", q:"How do glasses usually feel on you?", options:[
-    { label:"They slide down constantly",        tags:["adjustable","sporty","practical"] },
     { label:"Too tight at my temples",           tags:["slim","minimal","soft"] },
-    { label:"Fine mostly, just never perfect",   tags:["classic","clean","modern"] },
+    { label:"They slide down constantly",        tags:["adjustable","sporty","practical"] },
     { label:"I've never found a pair that fits", tags:["adjustable","bold","sporty"] },
+    { label:"Fine mostly, just never perfect",   tags:["classic","clean","modern"] },
   ]},
   { id:"vibe", q:"What's your visual instinct?", options:[
     { label:"Quiet. Clean lines, nothing extra",    tags:["minimal","clean","soft"] },
@@ -424,41 +424,48 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
 
 // ─── FaceGuide — green strokes the circumference as scan fills ───────────────
 function FaceGuide({ fill, autoStartPct, facePresent }) {
-  const cx=50, cy=46, rx=19, ry=26;
-  // Ramanujan ellipse circumference approximation
+  // viewBox matches 4:3 aspect ratio of cam-wrap
+  const W=400, H=300;
+  const cx=W/2, cy=H/2-10;
+  const rx=72, ry=96;
   const circ=Math.PI*(3*(rx+ry)-Math.sqrt((3*rx+ry)*(rx+3*ry)));
   const strokeLen=circ*Math.min(fill,1);
   const border=facePresent?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.45)";
+  const bw=12; // corner bracket width
+  const x1=cx-rx-10, y1=cy-ry-10, x2=cx+rx+10, y2=cy+ry+10;
   return (
-    <svg viewBox="0 0 100 100" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
       {/* Corner brackets */}
-      {[["5","5","13","5","5","13"],["87","5","95","5","95","13"],["5","87","5","95","13","95"],["87","95","95","95","95","87"]].map(([x1,y1,x2,y2,x3,y3],i)=>(
-        <g key={i} stroke="rgba(255,255,255,0.8)" strokeWidth="0.9" fill="none">
-          <line x1={x1} y1={y1} x2={x2} y2={y2}/><line x1={x2} y1={y2} x2={x3} y2={y3}/>
-        </g>
+      {[
+        [x1,y1+bw,x1,y1,x1+bw,y1],
+        [x2-bw,y1,x2,y1,x2,y1+bw],
+        [x1,y2-bw,x1,y2,x1+bw,y2],
+        [x2-bw,y2,x2,y2,x2,y2-bw],
+      ].map(([ax,ay,bx,by,cx2,cy2],i)=>(
+        <path key={i} d={`M${ax},${ay} L${bx},${by} L${cx2},${cy2}`}
+          stroke="rgba(255,255,255,0.8)" strokeWidth="2" fill="none" strokeLinecap="round"/>
       ))}
-      {/* Auto-hold outer ring — shows before scan fires */}
+      {/* Auto-hold outer ring */}
       {autoStartPct>0&&autoStartPct<1&&(
-        <ellipse cx={cx} cy={cy} rx={rx+3} ry={ry+3} fill="none"
-          stroke="rgba(255,255,255,0.2)" strokeWidth="0.7"
-          strokeDasharray={`${autoStartPct*Math.PI*(3*(rx+3+ry+3)-Math.sqrt((3*(rx+3)+ry+3)*((rx+3)+3*(ry+3))))} 999`}
+        <ellipse cx={cx} cy={cy} rx={rx+8} ry={ry+8} fill="none"
+          stroke="rgba(255,255,255,0.2)" strokeWidth="1.5"
+          strokeDasharray={`${autoStartPct*Math.PI*(3*(rx+8+ry+8)-Math.sqrt((3*(rx+8)+ry+8)*((rx+8)+3*(ry+8))))} 9999`}
           strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>
       )}
-      {/* Base oval — white, always visible */}
+      {/* Base oval */}
       <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
-        stroke={border} strokeWidth="1.5"
-        style={{transition:"stroke 0.3s"}}/>
-      {/* Green progress — travels the circumference */}
+        stroke={border} strokeWidth="2" style={{transition:"stroke 0.3s"}}/>
+      {/* Green circumference progress */}
       {fill>0&&(
         <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
-          stroke="#4caf7d" strokeWidth="2.8"
+          stroke="#4caf7d" strokeWidth="4"
           strokeDasharray={`${strokeLen} ${circ}`}
           strokeLinecap="round"
           transform={`rotate(-90 ${cx} ${cy})`}/>
       )}
-      {/* Eye position guides */}
-      <circle cx={cx-5.5} cy={cy-4} r="0.8" fill={border} opacity="0.6"/>
-      <circle cx={cx+5.5} cy={cy-4} r="0.8" fill={border} opacity="0.6"/>
+      {/* Eye guides */}
+      <circle cx={cx-22} cy={cy-16} r="3" fill={border} opacity="0.5"/>
+      <circle cx={cx+22} cy={cy-16} r="3" fill={border} opacity="0.5"/>
     </svg>
   );
 }
@@ -550,7 +557,6 @@ MATERIAL  PETG prototype → PA12 final`;
       <div className="app">
         <div className="site-header">
           <div className="logo">fitframe<span className="logo-dot">.</span></div>
-          <div className="header-right">{orderId}</div>
         </div>
         <div className="container">
           <div className="prog-track"><div className="prog-fill" style={{width:`${pct}%`}}/></div>
@@ -578,10 +584,9 @@ MATERIAL  PETG prototype → PA12 final`;
                 <div className="cam-vignette"/>
                 <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent}/>
                 <div className="cam-hud-top">
-                  <div className={`scan-status ${scanning?"active":""}`}>
-                    {!scan.mpReady?"loading…":scanning?"scanning":"fitframe"}
-                  </div>
-                  {scanning&&<div className={`scan-status active`}>{Math.round(scan.fill*100)}%</div>}
+                  {!scan.mpReady&&(
+                    <div className="scan-status">loading…</div>
+                  )}
                 </div>
                 <div className="cam-hud-bottom">
                   {scanning&&scan.seqIdx>=0
@@ -632,23 +637,27 @@ MATERIAL  PETG prototype → PA12 final`;
                 </div>
               )}
 
-              {currentMeas&&(
-                <>
-                  <div className="quality-row">
-                    <div className="quality-label">Scan quality</div>
-                    <div className={`quality-val q-${scan.quality?.label?.split(" ")[0].toLowerCase()}`}>
-                      {scan.quality?.emoji}&nbsp;{scan.quality?.label}
-                    </div>
-                  </div>
-                  {scan.quality?.rescan&&<div style={{fontSize:12,color:"var(--dim)",marginTop:8,textAlign:"center",lineHeight:1.5}}>A better scan means a better fit. Retake in good light if you can.</div>}
-                  <div className="btn-row">
-                    <button className="btn btn-primary" onClick={()=>{setConfirmedMeas(currentMeas);setStep(2);}}>
-                      {scan.quality?.rescan?"Use anyway":"Looks good →"}
+              {currentMeas&&(()=>{
+                // Auto-advance to step 2 if quality is good — no button needed
+                if (!scan.quality?.rescan) {
+                  setTimeout(()=>{ setConfirmedMeas(currentMeas); setStep(2); }, 1200);
+                }
+                return scan.quality?.rescan ? (
+                  <div className="no-cam" style={{marginTop:12}}>
+                    <div style={{fontSize:22,opacity:0.5}}>↺</div>
+                    <div className="err-headline">Let's try that again.</div>
+                    <div className="err-detail">Face the camera straight on and follow the turn prompts for a better fit.</div>
+                    <button className="btn btn-primary" style={{marginTop:4}}
+                      onClick={()=>{scan.reset();setScanning(false);setConfirmedMeas(null);cam.stop();setTimeout(cam.start,300);}}>
+                      Rescan
                     </button>
-                    <button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);setConfirmedMeas(null);cam.stop();setTimeout(cam.start,200);}}>Rescan</button>
                   </div>
-                </>
-              )}
+                ) : (
+                  <div className="scan-hint" style={{marginTop:12,color:"var(--green)"}}>
+                    Measurements confirmed. Moving on…
+                  </div>
+                );
+              })()}
             </div>
           )}
 
