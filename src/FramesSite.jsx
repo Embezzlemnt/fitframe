@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── Config — change these ────────────────────────────────────────────────────
-const MAKER_EMAIL = "your@email.com"; // ← your actual email
+const MAKER_EMAIL = "hello@fitframe.store"; // ← your actual email
 const BASE_PRICE  = 89;
 
 // ─── Script loader ────────────────────────────────────────────────────────────
