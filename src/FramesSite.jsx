@@ -114,11 +114,11 @@ const css = `
   .header-right { font-size:10px; color:var(--soft); font-family:'Geist Mono',monospace; }
   .prog-track { width:100%; height:1px; background:var(--border); margin-bottom:20px; }
   .prog-fill { height:100%; background:var(--green); transition:width 0.5s cubic-bezier(.4,0,.2,1); }
-  .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px 20px; animation:up 0.35s cubic-bezier(.4,0,.2,1) both; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 18px; animation:up 0.35s cubic-bezier(.4,0,.2,1) both; }
   @keyframes up { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-  .step-eyebrow { font-size:11px; color:var(--mid); letter-spacing:0.06em; margin-bottom:8px; }
-  .step-title { font-size:26px; font-weight:600; color:var(--white); letter-spacing:-0.03em; line-height:1.1; margin-bottom:6px; }
-  .step-sub { font-size:13px; color:var(--dim); line-height:1.6; margin-bottom:20px; font-weight:300; }
+  .step-eyebrow { font-size:11px; color:var(--mid); letter-spacing:0.06em; margin-bottom:6px; }
+  .step-title { font-size:24px; font-weight:600; color:var(--white); letter-spacing:-0.03em; line-height:1.1; margin-bottom:4px; }
+  .step-sub { font-size:13px; color:var(--dim); line-height:1.6; margin-bottom:16px; font-weight:300; }
   .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:11px 22px; font-family:'Geist',sans-serif; font-size:13px; font-weight:500; cursor:pointer; border:none; border-radius:8px; transition:all 0.18s; letter-spacing:-0.01em; -webkit-tap-highlight-color:transparent; }
   .btn-primary { background:var(--white); color:#0d0d0d; }
   .btn-primary:hover { background:#e8e8e8; transform:translateY(-1px); }
@@ -137,12 +137,8 @@ const css = `
   .cam-vignette { position:absolute; inset:0; background:radial-gradient(ellipse at center,transparent 38%,rgba(0,0,0,0.6) 100%); pointer-events:none; z-index:2; }
   .cam-hud-top { position:absolute; top:0; left:0; right:0; z-index:3; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; background:linear-gradient(rgba(0,0,0,0.5),transparent); }
   .cam-hud-bottom { position:absolute; bottom:0; left:0; right:0; z-index:3; padding:28px 16px 14px; background:linear-gradient(transparent,rgba(0,0,0,0.75)); display:flex; flex-direction:column; align-items:center; gap:3px; }
-  .rec-badge { display:flex; align-items:center; gap:5px; font-family:'Geist Mono',monospace; font-size:9px; color:#ff453a; letter-spacing:0.1em; }
-  .rec-dot { width:5px; height:5px; border-radius:50%; background:#ff453a; animation:blink 1s infinite; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.1} }
-  .pct-badge { font-family:'Geist Mono',monospace; font-size:11px; color:var(--green); }
-  .mp-status { display:inline-flex; align-items:center; gap:5px; font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:0.08em; padding:3px 8px; border-radius:4px; background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.08); }
-  .mp-dot { width:5px; height:5px; border-radius:50%; }
+  .scan-status { font-family:'Geist Mono',monospace; font-size:10px; color:rgba(255,255,255,0.5); letter-spacing:0.06em; }
+  .scan-status.active { color:var(--green); }
   .hud-instruction { font-size:15px; font-weight:500; color:var(--white); letter-spacing:-0.01em; text-align:center; }
   .hud-step-label { font-family:'Geist Mono',monospace; font-size:10px; color:var(--green); letter-spacing:0.08em; opacity:0.8; }
   /* No cam */
@@ -151,9 +147,9 @@ const css = `
   .err-headline { font-size:14px; font-weight:500; color:var(--white); }
   .err-detail { font-size:12px; color:var(--dim); line-height:1.6; max-width:280px; }
   .err-fix-box { width:100%; padding:10px 14px; background:var(--surface); border:1px solid var(--border2); border-radius:8px; font-size:11px; color:#e8a04a; line-height:1.7; text-align:left; }
-  .scan-hint { margin-top:12px; padding:10px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--dim); text-align:center; line-height:1.5; }
+  .scan-hint { margin-top:10px; font-size:12px; color:var(--dim); text-align:center; line-height:1.5; padding:0 4px; }
   /* Quality */
-  .quality-row { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; margin-top:14px; }
+  .quality-row { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; margin-top:12px; }
   .quality-label { font-size:11px; color:var(--mid); }
   .quality-val { font-size:13px; font-weight:500; }
   .q-excellent,.q-good { color:var(--green); }
@@ -276,6 +272,7 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
   const fillRef        = useRef(0);
   const faceMeshRef    = useRef(null);
   const samplesRef     = useRef([]);
+  const noseXRef       = useRef([]); // nose x-positions to measure head rotation
   const processingRef  = useRef(false);
   const loopRef        = useRef(null);
   const holdRef        = useRef(0);
@@ -350,6 +347,8 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
     if (scanningRef.current) {
       const m=calcMeasurements(lm,W,H);
       if(m) samplesRef.current.push(m);
+      // track nose tip x (normalized) to detect left/right rotation
+      noseXRef.current.push(lm[1].x);
     }
   }
 
@@ -385,6 +384,7 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
       else {
         setDone(true);
         const s=samplesRef.current;
+        const noseX=noseXRef.current;
         if(s.length>=5){
           const sorted=[...s].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
           const trim=Math.max(1,Math.floor(sorted.length*0.1));
@@ -394,10 +394,15 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
             return (key==="temple"||key==="faceW")?val.toFixed(0):val.toFixed(1);
           };
           setMeasurements({pd:avg("pd"),bridge:avg("bridge"),temple:avg("temple"),lensH:avg("lensH"),faceW:avg("faceW")});
-          const q=s.length>80?{label:"Excellent",emoji:"✦",rescan:false}
-                 :s.length>40?{label:"Good",emoji:"◉",rescan:false}
-                 :s.length>15?{label:"Fair — usable",emoji:"◎",rescan:false}
-                 :             {label:"Low quality — retake",emoji:"↺",rescan:true};
+          // Compliance = did they actually turn their head?
+          // Nose x-range > 0.12 means meaningful left+right rotation
+          const noseMin=Math.min(...noseX), noseMax=Math.max(...noseX);
+          const rotationRange=noseMax-noseMin; // 0.0–1.0 (normalized image width)
+          const rotated=rotationRange>0.10;
+          const q=rotated&&s.length>60 ? {label:"Excellent",emoji:"✦",rescan:false}
+                 :rotated&&s.length>25 ? {label:"Good",emoji:"◉",rescan:false}
+                 :!rotated&&s.length>40? {label:"Fair — hold still next time",emoji:"◎",rescan:false}
+                 :                       {label:"Retake for better fit",emoji:"↺",rescan:true};
           setQuality(q);
         } else { setQuality({label:"Not enough data",emoji:"✕",rescan:true}); }
       }
@@ -410,37 +415,50 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
     setSeqIdx(-1); setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
     setAutoStartPct(0); setFacePresent(false);
-    samplesRef.current=[]; holdRef.current=0; autoStartedRef.current=false;
+    samplesRef.current=[]; noseXRef.current=[];
+    holdRef.current=0; autoStartedRef.current=false;
   },[]);
 
   return { seqIdx, fill, done, measurements, mpReady, autoStartPct, facePresent, quality, reset };
 }
 
-// ─── FaceGuide — oval with green fill ────────────────────────────────────────
+// ─── FaceGuide — green strokes the circumference as scan fills ───────────────
 function FaceGuide({ fill, autoStartPct, facePresent }) {
-  const cx=50, cy=47, rx=15, ry=21;
-  const ovalBottom=cy+ry, ovalH=ry*2;
-  const fillH=ovalH*fill, fillY=ovalBottom-fillH;
-  const border=facePresent?(fill>0?"#4caf7d":"rgba(255,255,255,0.92)"):"rgba(255,255,255,0.55)";
+  const cx=50, cy=46, rx=19, ry=26;
+  // Ramanujan ellipse circumference approximation
+  const circ=Math.PI*(3*(rx+ry)-Math.sqrt((3*rx+ry)*(rx+3*ry)));
+  const strokeLen=circ*Math.min(fill,1);
+  const border=facePresent?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.45)";
   return (
     <svg viewBox="0 0 100 100" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
-      <defs><clipPath id="oc"><ellipse cx={cx} cy={cy} rx={rx} ry={ry}/></clipPath></defs>
-      {[["5","5","14","5","5","14"],["86","5","95","5","95","14"],["5","86","5","95","14","95"],["86","95","95","95","95","86"]].map(([x1,y1,x2,y2,x3,y3],i)=>(
-        <g key={i} stroke="rgba(255,255,255,0.75)" strokeWidth="0.8" fill="none">
+      {/* Corner brackets */}
+      {[["5","5","13","5","5","13"],["87","5","95","5","95","13"],["5","87","5","95","13","95"],["87","95","95","95","95","87"]].map(([x1,y1,x2,y2,x3,y3],i)=>(
+        <g key={i} stroke="rgba(255,255,255,0.8)" strokeWidth="0.9" fill="none">
           <line x1={x1} y1={y1} x2={x2} y2={y2}/><line x1={x2} y1={y2} x2={x3} y2={y3}/>
         </g>
       ))}
+      {/* Auto-hold outer ring — shows before scan fires */}
       {autoStartPct>0&&autoStartPct<1&&(
-        <ellipse cx={cx} cy={cy} rx={rx+2.5} ry={ry+2.5} fill="none"
-          stroke="rgba(255,255,255,0.3)" strokeWidth="0.8"
-          strokeDasharray={`${autoStartPct*2*Math.PI*(rx+2.5)} 999`}
+        <ellipse cx={cx} cy={cy} rx={rx+3} ry={ry+3} fill="none"
+          stroke="rgba(255,255,255,0.2)" strokeWidth="0.7"
+          strokeDasharray={`${autoStartPct*Math.PI*(3*(rx+3+ry+3)-Math.sqrt((3*(rx+3)+ry+3)*((rx+3)+3*(ry+3))))} 999`}
           strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>
       )}
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={border} strokeWidth="1.8" style={{transition:"stroke 0.3s"}}/>
-      {fill>0&&<rect x={cx-rx} y={fillY} width={rx*2} height={fillH}
-        fill={fill>=1?"rgba(76,175,125,0.55)":"rgba(76,175,125,0.38)"} clipPath="url(#oc)"/>}
-      <circle cx={cx-5} cy={cy-2} r="0.9" fill={border} opacity="0.6"/>
-      <circle cx={cx+5} cy={cy-2} r="0.9" fill={border} opacity="0.6"/>
+      {/* Base oval — white, always visible */}
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
+        stroke={border} strokeWidth="1.5"
+        style={{transition:"stroke 0.3s"}}/>
+      {/* Green progress — travels the circumference */}
+      {fill>0&&(
+        <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
+          stroke="#4caf7d" strokeWidth="2.8"
+          strokeDasharray={`${strokeLen} ${circ}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`}/>
+      )}
+      {/* Eye position guides */}
+      <circle cx={cx-5.5} cy={cy-4} r="0.8" fill={border} opacity="0.6"/>
+      <circle cx={cx+5.5} cy={cy-4} r="0.8" fill={border} opacity="0.6"/>
     </svg>
   );
 }
@@ -560,16 +578,10 @@ MATERIAL  PETG prototype → PA12 final`;
                 <div className="cam-vignette"/>
                 <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent}/>
                 <div className="cam-hud-top">
-                  {scanning
-                    ?<div className="rec-badge"><div className="rec-dot"/>REC</div>
-                    :<div className="mp-status">
-                      <div className="mp-dot" style={{background:scan.mpReady?(scan.facePresent?"#4caf7d":"#888"):"#555"}}/>
-                      <span style={{color:scan.mpReady?(scan.facePresent?"#4caf7d":"#888"):"#555"}}>
-                        {!scan.mpReady?"LOADING...":scan.facePresent?"FACE DETECTED":"NO FACE"}
-                      </span>
-                    </div>
-                  }
-                  <div className="pct-badge">{Math.round(scan.fill*100)}%</div>
+                  <div className={`scan-status ${scanning?"active":""}`}>
+                    {!scan.mpReady?"loading…":scanning?"scanning":"fitframe"}
+                  </div>
+                  {scanning&&<div className={`scan-status active`}>{Math.round(scan.fill*100)}%</div>}
                 </div>
                 <div className="cam-hud-bottom">
                   {scanning&&scan.seqIdx>=0
