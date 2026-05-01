@@ -163,15 +163,15 @@ const LENS_OPTIONS = [
   { id:"prescription", label:"Prescription", price:65, desc:"Your exact Rx. Requires prescription details." },
 ];
 
+// ─── Scan sequence — straight-on only, research shows turns introduce error ───
+// Total duration ~12 seconds. All measurement samples collected during hold phases.
+// Turning was removed: yaw rotation degrades MediaPipe accuracy significantly.
 const SCAN_SEQUENCE = [
-  { label:"Center",     instruction:"Eyes forward. Stay still.", holdMs:3000, fill:0.25 },
-  { label:"Left",       instruction:"Turn left — slowly.",       holdMs:3500, fill:0.42 },
-  { label:"Hold",       instruction:"Hold.",                     holdMs:2500, fill:0.56 },
-  { label:"Center",     instruction:"Back to center.",           holdMs:2000, fill:0.65 },
-  { label:"Right",      instruction:"Turn right — slowly.",      holdMs:3500, fill:0.80 },
-  { label:"Hold",       instruction:"Hold.",                     holdMs:2500, fill:0.91 },
-  { label:"Center",     instruction:"Face forward.",             holdMs:1500, fill:0.96 },
-  { label:"Processing", instruction:"Almost done.",              holdMs:1200, fill:1.00 },
+  { label:"Detecting",  instruction:"",                    holdMs:1500, fill:0.08, measure:false },
+  { label:"Hold still", instruction:"Keep eyes forward.",  holdMs:3000, fill:0.35, measure:true  },
+  { label:"Hold still", instruction:"Almost there.",       holdMs:3000, fill:0.65, measure:true  },
+  { label:"Hold still", instruction:"Nearly done.",        holdMs:2500, fill:0.88, measure:true  },
+  { label:"Processing", instruction:"",                    holdMs:1500, fill:1.00, measure:false },
 ];
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
@@ -367,25 +367,52 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
   useEffect(() => { scanningRef.current = scanning; }, [scanning]);
   useEffect(() => { seqIdxRef.current = seqIdx; }, [seqIdx]);
 
+  // Detect iOS Safari — needs CPU mode due to WebGL framebuffer failures
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
   // Load MediaPipe once on mount
   useEffect(() => {
     Promise.all([
       loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"),
-      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"),
     ]).then(() => {
-      const fm = new window.FaceMesh({
-        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
-      });
-      fm.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,          // required for iris landmarks 468-477
-        minDetectionConfidence: 0.6,    // raised from 0.5 for accuracy
-        minTrackingConfidence: 0.6,
-      });
-      fm.onResults(handleResults);
-      faceMeshRef.current = fm;
-      setMpReady(true);
-    }).catch(console.error);
+      function initFaceMesh(useGpu) {
+        const fm = new window.FaceMesh({
+          locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+        });
+        fm.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.5,  // lowered for iOS compatibility
+          minTrackingConfidence: 0.5,
+          selfieMode: false,
+        });
+        fm.onResults(handleResults);
+
+        // Test with a blank canvas — catches WebGL framebuffer errors on iOS
+        // before we try to process real video frames
+        const testCanvas = document.createElement("canvas");
+        testCanvas.width = 64; testCanvas.height = 64;
+        fm.send({ image: testCanvas }).then(() => {
+          faceMeshRef.current = fm;
+          setMpReady(true);
+        }).catch(err => {
+          console.warn("FaceMesh init failed:", err);
+          if (useGpu) {
+            // GPU failed — retry once with relaxed settings (iOS fallback)
+            console.log("Retrying MediaPipe with relaxed settings...");
+            initFaceMesh(false);
+          } else {
+            // Both attempts failed — set ready anyway, let frame loop catch errors
+            faceMeshRef.current = fm;
+            setMpReady(true);
+          }
+        });
+      }
+
+      initFaceMesh(true);
+    }).catch(err => {
+      console.error("MediaPipe script load failed:", err);
+    });
   }, []);
 
   function handleResults(results) {
@@ -412,12 +439,8 @@ function useScanRunner(scanning, videoRef, canvasRef, onAutoStart) {
     const pts = lm.map(p => ({ x: p.x * W, y: p.y * H }));
     const d   = (a, b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
 
-    // Determine if this is a turn step (relax center constraint on x)
-    const si = seqIdxRef.current;
-    const isTurnStep = si === 1 || si === 2 || si === 4 || si === 5;
-    const pose = validatePose(lm, W, H, isTurnStep);
-
-    // Update pose hint for user
+    // All steps are straight-on only — no turn steps anymore
+    const pose = validatePose(lm, W, H, false);
     setPoseHint(pose.valid ? null : pose.reason);
 
     // Auto-start countdown — only increment when pose is valid
@@ -801,11 +824,9 @@ MATERIAL  PETG prototype → PA12 final`;
                 </div>
                 <div className="cam-hud-bottom">
                   {scanning && scan.seqIdx >= 0
-                    ? <>
-                        <div className="hud-step-label">{SCAN_SEQUENCE[Math.min(scan.seqIdx,SCAN_SEQUENCE.length-1)].label}</div>
-                        <div className="hud-instruction">{SCAN_SEQUENCE[Math.min(scan.seqIdx,SCAN_SEQUENCE.length-1)].instruction}</div>
-                      </>
-                    : scan.poseHint
+                    ? <div className="hud-instruction">
+                        {SCAN_SEQUENCE[Math.min(scan.seqIdx,SCAN_SEQUENCE.length-1)].instruction}
+                      </div>                    : scan.poseHint
                       ? <div className="hud-instruction" style={{color:"#e8a04a"}}>{scan.poseHint}</div>
                       : scan.autoStartPct > 0 && scan.autoStartPct < 1
                         ? <div className="hud-instruction">Hold still…</div>
@@ -839,8 +860,23 @@ MATERIAL  PETG prototype → PA12 final`;
               )}
 
               {cam.ready&&!scan.done&&!scanning&&(
-                <div className="scan-hint">
-                  {scan.mpReady?"Scan starts automatically when your face is centred in the oval.":"Loading face detection — takes a moment on first visit."}
+                <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:6}}>
+                  {[
+                    ["☀️", "Good lighting — face a window or lamp, no bright light behind you"],
+                    ["📏", "Hold phone at eye level, arm's length away — about 40cm"],
+                    ["👀", "Look directly at the front camera, not the screen"],
+                    ["🧘", "Keep completely still until the ring completes"],
+                  ].map(([icon,tip])=>(
+                    <div key={tip} style={{display:"flex",gap:10,padding:"8px 12px",background:"var(--surface2)",borderRadius:8,border:"1px solid var(--border)"}}>
+                      <span style={{fontSize:14,flexShrink:0}}>{icon}</span>
+                      <span style={{fontSize:12,color:"var(--dim)",lineHeight:1.5,fontWeight:300}}>{tip}</span>
+                    </div>
+                  ))}
+                  <button className="btn btn-primary" style={{marginTop:4}}
+                    disabled={!scan.mpReady}
+                    onClick={()=>setScanning(true)}>
+                    {scan.mpReady?"Start scan":"Loading…"}
+                  </button>
                 </div>
               )}
 
