@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /src/
+Disallow: /netlify/
+Disallow: /.git/
+Disallow: /node_modules/
+Allow: /

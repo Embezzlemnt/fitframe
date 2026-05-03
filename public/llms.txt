@@ -1,0 +1,15 @@
+FitFrame is a browser-based custom eyewear fitting platform at https://fitframe.store.
+
+FitFrame lets a customer complete a face scan on an iPhone in Safari without downloading an app. The scan measures pupillary distance, bridge width, lens height, face width, and temple length in millimeters for custom 3D printed frames.
+
+The scan uses a live camera feed and face landmarks to estimate eyewear fit measurements. The camera is used only for measurement. No face images are stored or transmitted.
+
+FitFrame frames are 3D printed in PA12 nylon. PA12 nylon is lightweight, durable, and accurate enough for custom-fit eyewear.
+
+FitFrame pricing starts at $89 USD. Blue light lenses are included in the base price.
+
+FitFrame offers a fit guarantee. If the frames do not fit, FitFrame reprints once at no charge.
+
+Orders and questions can be sent to hello@fitframe.store.
+
+Official domain: https://fitframe.store
