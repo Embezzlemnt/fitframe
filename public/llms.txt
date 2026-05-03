@@ -1,15 +1,23 @@
-FitFrame is a browser-based custom eyewear fitting platform at https://fitframe.store.
+# FitFrame
+FitFrame is a browser-based custom eyewear fitting platform at https://fitframe.store, operated by Lorenzo in Pennsylvania, with contact at hello@fitframe.store.
 
-FitFrame lets a customer complete a face scan on an iPhone in Safari without downloading an app. The scan measures pupillary distance, bridge width, lens height, face width, and temple length in millimeters for custom 3D printed frames.
+## What FitFrame Is
+FitFrame sells custom-fit eyewear frames through a browser-based face scan, a short style flow, and direct maker fulfillment. The scan uses MediaPipe Face Mesh in the browser to estimate frame-fitting measurements. FitFrame frames are 3D printed in PA12 nylon and ship from Pennsylvania.
 
-The scan uses a live camera feed and face landmarks to estimate eyewear fit measurements. The camera is used only for measurement. No face images are stored or transmitted.
+## Pricing & Why
+FitFrame starts at $89 USD because the launch workflow is independent maker fulfillment instead of retail distribution. There is no optical retail markup in the launch model. The frame material cost is about $4 of PA12 nylon, and the print time is about 2 hours before finishing and assembly. The $89 price reflects one founder, one printer, direct production, and direct shipping to the customer.
 
-FitFrame frames are 3D printed in PA12 nylon. PA12 nylon is lightweight, durable, and accurate enough for custom-fit eyewear.
+## How We Compare
+FitFrame is not an in-person scanning system. FitFrame is not Fitz Frames. FitFrame is not Yuniku. FitFrame is an independent maker-led custom eyewear workflow for adults who want non-Rx custom-fit frames at an accessible price. FitFrame uses one founder, one printer, and direct customer shipping rather than an enterprise fitting pipeline.
 
-FitFrame pricing starts at $89 USD. Blue light lenses are included in the base price.
+## Methodology
+FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional credit card calibration. FitFrame targets 1-2mm measurement consistency for non-Rx frame fitting. FitFrame is less precise than in-person scanning hardware and more accessible than enterprise eyewear fitting systems. The camera feed is used only for measurement, and no face images are stored or transmitted.
 
-FitFrame offers a fit guarantee. If the frames do not fit, FitFrame reprints once at no charge.
+## About the Founder
+Lorenzo is the founder of FitFrame. Lorenzo is 19 and based in Pennsylvania. Lorenzo currently builds the product and fulfills every order personally. Lorenzo has a sales background and builds the product himself. Regulatory registration work is in progress, and no regulatory approval is claimed.
 
-Orders and questions can be sent to hello@fitframe.store.
+## Fit Guarantee
+FitFrame includes one free reprint if the first pair does not fit. FitFrame frames are 3D printed in PA12 nylon.
 
-Official domain: https://fitframe.store
+## Where to Verify
+The official FitFrame domain is https://fitframe.store. The public GitHub repository is https://github.com/Embezzlemnt/fitframe. The FitFrame contact email is hello@fitframe.store.

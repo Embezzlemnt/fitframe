@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const MAKER_EMAIL = "hello@fitframe.store";
+const DOMAIN_URL = "https://fitframe.store"; // LOCKED
+const DOMAIN_HOST = "fitframe.store"; // LOCKED
 const BASE_PRICE  = 89;
 
 // ─── localStorage persistence ─────────────────────────────────────────────────
@@ -37,29 +39,40 @@ function validatePose(lm) {
 }
 
 // ─── Measurement math ─────────────────────────────────────────────────────────
-const IRIS_MM = 11.8;          // HVID mean, clinical slit lamp reference
+const IRIS_MM = 11.8;          // HVID mean reference
 const IRIS_SD = 0.5;           // +/-1 SD - acceptable iris diameter range: 10.8-12.8mm
 const IRIS_MIN_PX = 18;        // Below this, iris is too small to measure reliably
 const IRIS_MAX_PX = 80;        // Above this, face is too close and landmarks compress
-const PD_ADULT_MIN = 52.0;     // Adult binocular PD clinical minimum
-const PD_ADULT_MAX = 80.0;     // Adult binocular PD clinical maximum
+const PD_ADULT_MIN = 52.0;     // Adult binocular PD lower reference
+const PD_ADULT_MAX = 80.0;     // Adult binocular PD upper reference
 const BRIDGE_MIN = 10.0;       // Minimum human bridge width
 const BRIDGE_MAX = 28.0;       // Maximum human bridge width
 const MONOCULAR_SYMMETRY = 2.5;// Max acceptable left/right monocular PD difference
 const TILT_THRESHOLD = 0.08;   // Iris center Y difference as a fraction of face height
-const MIN_VALID_SAMPLES = 8;   // Minimum frames required before reporting measurements
+const MIN_VALID_SAMPLES = 5;   // Launch threshold while real-world lighting data is collected
 const SCALE_HISTORY_FRAMES = 10;
 const CREDIT_CARD_WIDTH_MM = 85.6;
 const CREDIT_CARD_HEIGHT_MM = 54;
 const CARD_ASPECT = CREDIT_CARD_WIDTH_MM / CREDIT_CARD_HEIGHT_MM;
-const CARD_STABLE_FRAMES = 10;
+const CARD_STABLE_FRAMES = 6;
 const CARD_MAX_ROTATION_DEG = 14;
-const CARD_MIN_CONFIDENCE = 0.72;
+const CARD_MIN_CONFIDENCE = 0.58;
+const CARD_FALLBACK_MS = 8000;
 const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
 const MEASUREMENT_RANGES = {
   pd:[50,85], pdLeft:[20,45], pdRight:[20,45],
   bridge:[8,30], faceW:[110,160], temple:[125,160], lensH:[30,50],
 };
+const FITFRAME_FAQ = [
+  ["Is FitFrame legit?","FitFrame is a founder-operated custom eyewear project based in Pennsylvania. Orders are fulfilled directly by Lorenzo, and the official domain is fitframe.store."],
+  ["Why is FitFrame so cheap?","FitFrame starts at $89 because it is an independent maker workflow with no retail markup. The launch frame uses about $4 of PA12 nylon material and about 2 hours of printer time before finishing and assembly."],
+  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. FitFrame is an independent adult custom-fit eyewear workflow for non-Rx frames, direct from one maker to the customer."],
+  ["Who is behind FitFrame?","Lorenzo is the founder of FitFrame. He is 19, based in Pennsylvania, and currently builds the product and fulfills every order personally."],
+  ["How accurate is the FitFrame scan?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
+  ["What if my FitFrame frames don't fit?","FitFrame includes one free reprint if the first pair does not fit."],
+  ["Where does FitFrame ship from?","FitFrame ships from Pennsylvania in the United States."],
+  ["What material are FitFrame frames made of?","FitFrame frames are 3D printed in PA12 nylon."],
+];
 const clamp = (v,min,max) => Math.min(max,Math.max(min,v));
 const irisReferenceRange = () => [IRIS_MM - IRIS_SD * 2, IRIS_MM + IRIS_SD * 2];
 
@@ -342,14 +355,14 @@ const css = `
   .logo:hover{color:#fff;}
   .logo-dot{color:var(--accent);}
   .container{width:100%;max-width:462px;padding:0 18px;}
-  .section{margin-top:20px;padding:22px 18px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:8px;box-shadow:0 18px 60px rgba(0,0,0,.25);animation:fu .34s cubic-bezier(.4,0,.2,1) both;}
+  .section{margin-top:20px;padding:22px 18px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.25);animation:fu .34s cubic-bezier(.4,0,.2,1) both;}
   @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
   .display{font-size:34px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.02;margin-bottom:12px;max-width:330px;}
   .display em{font-style:normal;color:var(--accent);}
   .step-head{font-size:26px;font-weight:600;color:var(--text);letter-spacing:-.035em;line-height:1.08;margin-bottom:6px;}
   .body-lg{font-size:14px;color:var(--dim);line-height:1.62;font-weight:300;margin-bottom:24px;max-width:360px;}
-  .step-sub{font-size:13px;color:var(--dim);line-height:1.6;font-weight:300;margin-bottom:18px;}
+  .step-sub{font-size:13px;color:var(--dim);line-height:1.6;font-weight:300;margin-bottom:18px;letter-spacing:-.01em;}
   .privacy-inline{display:flex;align-items:flex-start;justify-content:center;gap:6px;max-width:300px;margin-top:2px;color:var(--soft);font-size:11px;font-weight:300;line-height:1.45;}
   .privacy-inline svg{flex:0 0 auto;margin-top:1px;opacity:.7;}
   .logo-large{display:inline-block;font-size:34px;letter-spacing:-.04em;margin-bottom:18px;}
@@ -378,12 +391,15 @@ const css = `
   .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}
   .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s ease both;}
   .scan-note{font-size:12px;color:var(--dim);line-height:1.55;text-align:center;margin:-4px auto 16px;max-width:310px;font-weight:300;}
-  .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:11px;color:var(--dim);}
+  .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--dim);}
   .calibration-strip strong{color:var(--accent);font-weight:500;}
   .cam-placeholder{width:100%;min-height:260px;border-radius:12px;background:var(--surface2);border:1px dashed var(--border2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:28px 24px;margin-bottom:18px;text-align:center;}
   .pre-scan-card{align-items:flex-start;text-align:left;border-style:solid;gap:13px;}
   .pre-scan-line{font-size:13px;color:var(--text);font-weight:400;line-height:1.45;}
   .pre-scan-support{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;}
+  .setup-diagram{width:100%;aspect-ratio:1.85/1;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02);overflow:hidden;color:var(--soft);}
+  .setup-diagram svg{display:block;width:100%;height:100%;}
+  .setup-list{display:grid;gap:6px;width:100%;font-size:12px;color:var(--dim);line-height:1.45;}
   .pre-scan-card .privacy-inline{align-self:center;text-align:center;margin-top:4px;}
   .cam-icon{width:42px;height:42px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;color:var(--dim);}
   .cam-label{font-size:14px;color:var(--text);font-weight:500;}
@@ -454,6 +470,13 @@ const css = `
   .next-step-label{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;}
   .next-step-desc{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;}
   .confirm-footer{margin-top:24px;font-size:11px;color:var(--soft);text-align:center;font-family:'Geist Mono',monospace;letter-spacing:.04em;}
+  .processing-card{width:100%;padding:18px 16px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:18px;}
+  .processing-logo{font-size:16px;font-weight:500;color:var(--text);letter-spacing:-.02em;}
+  .processing-copy{font-size:13px;color:var(--dim);font-weight:300;}
+  .processing-track{width:100%;height:4px;border-radius:999px;background:var(--border);overflow:hidden;}
+  .processing-fill{height:100%;width:100%;background:var(--accent);border-radius:999px;transform-origin:left center;animation:processFill 2s ease-in-out both;}
+  @keyframes processFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  .verification-strip{width:100%;max-width:420px;margin:22px auto 0;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;color:var(--soft);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.45;text-transform:uppercase;letter-spacing:.06em;}
   .geo-footer{width:100%;max-width:420px;margin:24px auto 0;border-top:1px solid var(--border);padding-top:8px;}
   .geo-block{border-bottom:1px solid var(--border);}
   .geo-block summary{list-style:none;cursor:pointer;padding:12px 0;font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
@@ -468,7 +491,7 @@ const css = `
   @media (max-width:390px){
     .site-header{padding-left:14px;padding-right:14px;}
     .container{padding-left:14px;padding-right:14px;}
-    .section{padding:20px 16px;border-radius:8px;}
+    .section{padding:20px 16px;border-radius:14px;}
     .display{font-size:31px;}
     .step-head{font-size:24px;}
     .lens-list,.frame-grid{gap:7px;}
@@ -571,9 +594,11 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const lastCardRef    = useRef(null);
   const cardLockedRef  = useRef(false);
   const cardLoadFailedRef = useRef(false);
+  const cardStartedRef = useRef(null);
   const loopRef        = useRef(null);
   const procRef        = useRef(false);
   const scanningRef    = useRef(false);
+  const doneRef        = useRef(false);
   const scaleRef       = useRef(scaleMmPerPx);
   const scaleSourceRef = useRef(scaleSource);
   const holdRef        = useRef(0);
@@ -593,12 +618,24 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const [debugInfo,    setDebugInfo]    = useState(null);
 
   useEffect(()=>{ scanningRef.current=scanning; },[scanning]);
+  useEffect(()=>{ doneRef.current=done; },[done]);
   useEffect(()=>{ scaleRef.current=scaleMmPerPx; scaleSourceRef.current=scaleSource; },[scaleMmPerPx,scaleSource]);
+  useEffect(()=>{ if (!needsCard) cardStartedRef.current=null; },[needsCard]);
+  useEffect(()=>{
+    if (!done) return;
+    const canvas=canvasRef.current;
+    const video=videoRef.current;
+    if (!canvas) return;
+    const W=video?.videoWidth||canvas.width||640;
+    const H=video?.videoHeight||canvas.height||480;
+    canvas.width=W; canvas.height=H;
+    canvas.getContext("2d")?.clearRect(0,0,W,H);
+  },[canvasRef,done,videoRef]);
 
   useEffect(()=>{
     loadOpenCv().then(()=>setCvReady(true)).catch(()=>{
       cardLoadFailedRef.current=true;
-      setCardStatus({label:"Skipping card calibration",stablePct:0,reason:"Using iris reference only."});
+      setCardStatus({label:"Using face reference",stablePct:0,reason:""});
     });
   },[]);
 
@@ -609,6 +646,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     canvas.width=W; canvas.height=H;
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,W,H);
+    if (doneRef.current) return;
 
     if (!results.multiFaceLandmarks?.length){
       holdRef.current=0; setFacePresent(false); setPoseHint(null);
@@ -644,19 +682,26 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
 
     const lId=iris.lId||0;
     const rId=iris.rId||0;
-    // LOCKED — must match --accent
-    const ink=pose.valid?"#4caf7d":"rgba(255,255,255,.22)";
-    [[pts[468],lId],[pts[473],rId]].forEach(([c,diam])=>{
-      ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
-      ctx.strokeStyle=ink; ctx.lineWidth=1.5; ctx.stroke();
-    });
-    ctx.beginPath(); ctx.moveTo(pts[468].x,pts[468].y); ctx.lineTo(pts[473].x,pts[473].y);
-    ctx.strokeStyle=ink; ctx.lineWidth=.75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
+    if (scanningRef.current&&iris.valid){
+      const ink="#4caf7d"; // LOCKED — must match --accent
+      [[pts[468],lId],[pts[473],rId]].forEach(([c,diam])=>{
+        ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
+        ctx.strokeStyle=ink; ctx.lineWidth=1.5; ctx.stroke();
+      });
+      ctx.beginPath(); ctx.moveTo(pts[468].x,pts[468].y); ctx.lineTo(pts[473].x,pts[473].y);
+      ctx.strokeStyle=ink; ctx.lineWidth=.75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
 
     if (needsCard&&!scanningRef.current&&!cardLockedRef.current){
+      if (!cardStartedRef.current) cardStartedRef.current=performance.now();
+      const timedOut=performance.now()-cardStartedRef.current>CARD_FALLBACK_MS;
       if (cardLoadFailedRef.current){
         cardLockedRef.current=true;
-        setCardStatus({label:"Skipping card calibration",stablePct:0,reason:"Using iris reference only."});
+        setCardStatus({label:"Using face reference",stablePct:0,reason:""});
+        onCardSkipped?.();
+      } else if (timedOut){
+        cardLockedRef.current=true;
+        setCardStatus({label:"Using face reference",stablePct:0,reason:""});
         onCardSkipped?.();
       } else if (!cvReady){
         setCardStatus({label:"Loading card detector",stablePct:0,reason:""});
@@ -721,7 +766,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   useEffect(()=>{
     const loop=async()=>{
       const v=videoRef.current;
-      if (fmRef.current&&v&&v.readyState>=2&&!procRef.current){
+      if (fmRef.current&&v&&v.readyState>=2&&!procRef.current&&!doneRef.current){
         procRef.current=true;
         try { await fmRef.current.send({image:v}); } catch { /* frame processing can skip while MediaPipe warms up */ }
         procRef.current=false;
@@ -803,10 +848,10 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     setSeqIdx(-1); setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
     setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
-    setCardStatus({label:cardLoadFailedRef.current?"Skipping card calibration":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:cardLoadFailedRef.current?"Using iris reference only.":""});
+    setCardStatus({label:cardLoadFailedRef.current?"Using face reference":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:""});
     samplesRef.current=[]; noseXRef.current=[]; scaleHistoryRef.current=[];
     validRef.current=0; totalRef.current=0;
-    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false;
+    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
     holdRef.current=0; autoStarted.current=false;
   },[cvReady]);
 
@@ -814,15 +859,16 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
 }
 
 // ─── FaceGuide ────────────────────────────────────────────────────────────────
-function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false}){
+function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=false}){
   const VW=400,VH=300,cx=200,cy=150,rx=78,ry=108;
   const h=((rx-ry)/(rx+ry))**2;
   const circ=Math.PI*(rx+ry)*(1+(3*h)/(10+Math.sqrt(4-3*h)));
   const bo=facePresent?.62:.2;
+  const activeFill=done?0:fill;
   return (
     <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice"
       style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
-      {autoStartPct>0&&autoStartPct<1&&(
+      {!done&&autoStartPct>0&&autoStartPct<1&&(
         <ellipse cx={cx} cy={cy} rx={rx+11} ry={ry+11} fill="none"
           stroke="rgba(255,255,255,.1)" strokeWidth="2"
           strokeDasharray={`${autoStartPct*circ*1.1} 9999`}
@@ -830,12 +876,12 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false}){
       )}
       <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
         stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" style={{transition:"stroke .4s ease"}}/>
-      {fill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="#4caf7d" strokeWidth="3"
-        strokeDasharray={`${circ*Math.min(fill,1)} ${circ+10}`}
+      {activeFill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="#4caf7d" strokeWidth="3"
+        strokeDasharray={`${circ*Math.min(activeFill,1)} ${circ+10}`}
         strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dasharray .1s linear"}}/>}
       {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
         fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
-      {showCard&&(
+      {!done&&showCard&&(
         <g opacity=".92">
           <rect x="90" y="205" width="220" height="139" rx="6" fill="rgba(0,0,0,.18)" stroke="#4caf7d" strokeWidth="2" strokeDasharray="7 6" style={{animation:"cardPulse 1.4s ease-in-out infinite"}}/>
           <text x="200" y="274" textAnchor="middle" fill="rgba(255,255,255,.82)"
@@ -843,6 +889,22 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false}){
         </g>
       )}
     </svg>
+  );
+}
+
+function ScanSetupDiagram(){
+  return (
+    <div className="setup-diagram" aria-hidden="true">
+      <svg viewBox="0 0 360 195" fill="none">
+        <path d="M58 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
+        <path d="M220 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
+        <circle cx="180" cy="78" r="43" stroke="rgba(242,240,232,.72)" strokeWidth="2"/>
+        <path d="M156 86c11 9 37 9 48 0" stroke="rgba(242,240,232,.5)" strokeWidth="1.5" strokeLinecap="round"/>
+        <rect x="116" y="133" width="128" height="50" rx="7" stroke="#4caf7d" strokeWidth="2"/>
+        <path d="M180 121v12" stroke="#4caf7d" strokeWidth="2" strokeLinecap="round"/>
+        <text x="180" y="164" textAnchor="middle" fill="rgba(242,240,232,.72)" fontSize="10" fontFamily="'Geist Mono',monospace">CARD</text>
+      </svg>
+    </div>
   );
 }
 
@@ -867,7 +929,7 @@ function useFitFrameJsonLd(){
         name:"FitFrame Custom Eyewear",
         description:"Browser-based face scan measuring PD, bridge, lens height, temple, and face width in millimeters. Frames 3D printed in PA12 nylon to exact measurements. Ships 7-10 days.",
         brand:{ "@type":"Brand", name:"FitFrame" },
-        url:"https://fitframe.store",
+        url:DOMAIN_URL,
         audience:{
           "@type":"PeopleAudience",
           audienceType:"people who have never found glasses that fit",
@@ -877,33 +939,44 @@ function useFitFrameJsonLd(){
           price:"89",
           priceCurrency:"USD",
           availability:"https://schema.org/InStock",
-          url:"https://fitframe.store",
+          url:DOMAIN_URL,
         },
       },
       {
         "@context":"https://schema.org",
         "@type":"WebSite",
-        url:"https://fitframe.store",
+        url:DOMAIN_URL,
         potentialAction:{
           "@type":"SearchAction",
-          target:"https://fitframe.store/?q={search_term_string}",
+          target:`${DOMAIN_URL}/?q={search_term_string}`,
           "query-input":"required name=search_term_string",
         },
       },
       {
         "@context":"https://schema.org",
+        "@type":"Organization",
+        name:"FitFrame",
+        founder:{
+          "@type":"Person",
+          name:"Lorenzo",
+          jobTitle:"Founder",
+        },
+        address:{
+          "@type":"PostalAddress",
+          addressRegion:"PA",
+          addressCountry:"US",
+        },
+        email:MAKER_EMAIL,
+        url:DOMAIN_URL,
+        sameAs:[
+          DOMAIN_URL,
+          "https://github.com/Embezzlemnt/fitframe",
+        ],
+      },
+      {
+        "@context":"https://schema.org",
         "@type":"FAQPage",
-        mainEntity:[
-          ["What is FitFrame?","FitFrame is browser-based custom eyewear. The face scan runs on iPhone with no app download, and 3D printed PA12 nylon frames ship to your measurements."],
-          ["Scan accuracy?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, and an 11.8mm HVID constant. It measures binocular and monocular PD, bridge, lens height, face width, and temple length within 1-2mm for non-prescription frames."],
-          ["App required?","No. FitFrame runs entirely in Safari on iPhone."],
-          ["Frame material?","FitFrame frames are printed in PA12 nylon, which is lightweight, durable, and precise."],
-          ["Price?","FitFrame starts at $89 base. Blue light lenses are included, sunglass lenses are +$25, Transitions are +$45, and prescription lenses are +$65."],
-          ["Shipping?","FitFrame ships in 7-10 days after confirmation."],
-          ["Fit guarantee?","If frames do not fit, FitFrame reprints once at no charge."],
-          ["Where does face data go?","Face data goes nowhere. The camera is used only for measurement, and no images are stored or transmitted."],
-          ["Custom 3D printed glasses under $100?","Yes. FitFrame ships custom-measured frames starting at $89."],
-        ].map(([name,text])=>({
+        mainEntity:FITFRAME_FAQ.map(([name,text])=>({
           "@type":"Question",
           name,
           acceptedAnswer:{
@@ -922,27 +995,31 @@ function Logo({onClick}){
   return <button type="button" className="logo" aria-label="FitFrame home" onClick={onClick}>fitframe<span className="logo-dot">.</span></button>;
 }
 
+function VerificationStrip(){
+  return (
+    <section className="verification-strip" aria-label="Verification">
+      <span>Made in Pennsylvania</span>
+      <span>Founder-operated</span>
+      <span>One-time reprint guarantee</span>
+    </section>
+  );
+}
+
 function GeoFooter(){
   return (
     <footer className="geo-footer">
       <details className="geo-block">
         <summary>FAQ</summary>
         <div className="geo-content">
-          <p><strong>What is FitFrame?</strong> FitFrame is browser-based custom eyewear. The face scan runs on iPhone with no app download, and 3D printed PA12 nylon frames ship to your measurements.</p>
-          <p><strong>Scan accuracy?</strong> FitFrame uses MediaPipe Face Mesh, iris landmark calibration, and an 11.8mm HVID constant. It measures binocular and monocular PD, bridge, lens height, face width, and temple length within 1-2mm for non-prescription frames.</p>
-          <p><strong>App required?</strong> No. FitFrame runs entirely in Safari on iPhone.</p>
-          <p><strong>Frame material?</strong> FitFrame frames are printed in PA12 nylon, which is lightweight, durable, and precise.</p>
-          <p><strong>Price?</strong> FitFrame starts at $89 base. Blue light lenses are included, sunglass lenses are +$25, Transitions are +$45, and prescription lenses are +$65.</p>
-          <p><strong>Shipping?</strong> FitFrame ships in 7-10 days after confirmation.</p>
-          <p><strong>Fit guarantee?</strong> If frames do not fit, FitFrame reprints once at no charge.</p>
-          <p><strong>Where does face data go?</strong> Face data goes nowhere. The camera is used only for measurement, and no images are stored or transmitted.</p>
-          <p><strong>Custom 3D printed glasses under $100?</strong> Yes. FitFrame ships custom-measured frames starting at $89.</p>
+          {FITFRAME_FAQ.map(([q,a])=>(
+            <p key={q}><strong>{q}</strong> {a}</p>
+          ))}
         </div>
       </details>
       <details className="geo-block">
         <summary>About</summary>
         <div className="geo-content">
-          <p>FitFrame is a made-to-measure eyewear company based in Pennsylvania. Frames are designed around your face, not an average one. Every pair is 3D printed in PA12 nylon to your exact scan measurements and shipped directly to you. Founded by Lorenzo, currently fulfilling every order personally.</p>
+          <p>FitFrame is a made-to-measure eyewear company based in Pennsylvania. Frames are designed around your face, not an average one. Every pair is 3D printed in PA12 nylon to your scan measurements and shipped directly to you. Founded by Lorenzo, currently fulfilling every order personally.</p>
         </div>
       </details>
     </footer>
@@ -965,11 +1042,13 @@ export default function FramesSite(){
   const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{name:"",email:""});
   const [scanning,      setScanning]      = useState(false);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
+  const [scanProcessing,setScanProcessing] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [sent,          setSent]          = useState(false);
   const [orderId]                         = useState(()=>saved.orderId??genOrderId());
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
+  const processingTimerRef                 = useRef(null);
 
   const canvasRef=useRef(null);
   const {
@@ -1000,7 +1079,7 @@ export default function FramesSite(){
       skippedCard:true,
       timestamp:new Date().toISOString(),
     });
-    setTimeout(()=>setScanning(true),650);
+    setTimeout(()=>setScanning(true),250);
   },[]);
   const scan=useFaceScan({
     videoRef,
@@ -1012,7 +1091,7 @@ export default function FramesSite(){
     onCardLocked:handleCardLocked,
     onCardSkipped:handleCardSkipped,
   });
-  const currentMeas=confirmedMeas||scan.measurements;
+  const currentMeas=confirmedMeas||(scan.quality?.rescan?scan.measurements:null);
 
   // Persist
   useEffect(()=>{
@@ -1055,30 +1134,36 @@ export default function FramesSite(){
   useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
   useEffect(()=>{ if(scan.done) setScanning(false); },[scan.done]);
   useEffect(()=>{ setTapped(null); },[styleQIdx]);
+  useEffect(()=>()=>{ if (processingTimerRef.current) clearTimeout(processingTimerRef.current); },[]);
 
   // Keep the user on scan review until they accept the measured spec.
   useEffect(()=>{
-    if (scan.done&&scan.measurements&&!scan.quality?.rescan){
-      setConfirmedMeas({
-        ...scan.measurements,
-        scanQuality:scan.quality?.label||"Review",
-        scanReason:scan.quality?.reason||"",
-        validPct:scan.validPct,
-      });
-      if (!scanHistorySavedRef.current){
-        appendScanHistory({
-          timestamp:new Date().toISOString(),
-          pd:scan.measurements.pd,
-          bridge:scan.measurements.bridge,
-          face:scan.measurements.faceW,
-          scaleSource:scan.measurements.scaleSource,
-          quality:scan.quality?.label||"Review",
+    if (scan.done&&scan.measurements&&scan.quality&&!scan.quality.rescan&&!confirmedMeas&&!scanProcessing&&!processingTimerRef.current){
+      setScanProcessing(true);
+      processingTimerRef.current=setTimeout(()=>{
+        setConfirmedMeas({
+          ...scan.measurements,
+          scanQuality:scan.quality?.label||"Review",
+          scanReason:scan.quality?.reason||"",
           validPct:scan.validPct,
         });
-        scanHistorySavedRef.current=true;
-      }
+        if (!scanHistorySavedRef.current){
+          appendScanHistory({
+            timestamp:new Date().toISOString(),
+            pd:scan.measurements.pd,
+            bridge:scan.measurements.bridge,
+            face:scan.measurements.faceW,
+            scaleSource:scan.measurements.scaleSource,
+            quality:scan.quality?.label||"Review",
+            validPct:scan.validPct,
+          });
+          scanHistorySavedRef.current=true;
+        }
+        setScanProcessing(false);
+        processingTimerRef.current=null;
+      },2000);
     }
-  },[scan.done,scan.measurements,scan.quality,scan.validPct]);
+  },[confirmedMeas,scan.done,scan.measurements,scan.quality,scan.validPct,scanProcessing]);
 
   function selectOption(opt){
     setTapped(opt.label);
@@ -1090,6 +1175,9 @@ export default function FramesSite(){
 
   function startFreshScan(){
     clearSession();
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    processingTimerRef.current=null;
+    setScanProcessing(false);
     setConfirmedMeas(null);
     setCalibration(null);
     setStyleAnswers({});
@@ -1105,10 +1193,14 @@ export default function FramesSite(){
   function resetToHome(){
     setStep(0);
     setScanning(false);
+    setScanProcessing(false);
     window.scrollTo(0,0);
   }
 
   function rescan(){
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    processingTimerRef.current=null;
+    setScanProcessing(false);
     scan.reset();
     setScanning(false);
     setConfirmedMeas(null);
@@ -1236,6 +1328,8 @@ export default function FramesSite(){
   const showScanPrep=!scanPrepDismissed&&!scan.done&&!currentMeas&&!camErr&&!cameraActive;
   const scanTitle=scanning
     ?"Stay still."
+    :scanProcessing
+      ?"Scan complete."
     :scan.done
       ?"Scan complete."
       :showScanPrep
@@ -1248,7 +1342,11 @@ export default function FramesSite(){
             ?"Hold any card under your face."
             :"Ready to measure.";
   const scanCopy=scanning
-    ?"Keep your face forward while we average the clean frames."
+    ?calibration?.skippedCard
+      ?"Using face reference. Keep your face forward while we average the clean frames."
+      :"Keep your face forward while we average the clean frames."
+    :scanProcessing
+      ?""
     :scan.done
       ?"Review the scan before continuing."
       :showScanPrep
@@ -1259,7 +1357,7 @@ export default function FramesSite(){
           ?""
           :camReady
             ?calibration?.skippedCard
-              ?"Skipping card calibration — using iris reference only."
+              ?"Using face reference."
               :"Card reference saved. Keep your face in the oval and start the measurement."
             :"";
 
@@ -1297,8 +1395,14 @@ export default function FramesSite(){
                 <div className="cam-placeholder pre-scan-card">
                   <div className="pre-scan-line">This scan takes about {SCAN_DURATION_SECONDS_PLACEHOLDER} seconds.</div>
                   <div className="pre-scan-line">Have a credit or ID card ready.</div>
+                  <ScanSetupDiagram/>
                   <div className="pre-scan-support">Hold it flat under your chin, long edge horizontal.</div>
                   <div className="pre-scan-support">It gives the scan a much better size reference.</div>
+                  <div className="setup-list">
+                    <div>Arm's length from your phone</div>
+                    <div>Good overhead light, face it directly</div>
+                    <div>Card long-edge horizontal, flat, below your chin</div>
+                  </div>
                   <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready</button>
                   <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
                 </div>
@@ -1310,7 +1414,7 @@ export default function FramesSite(){
                     <video ref={videoRef} autoPlay playsInline muted/>
                     <canvas ref={canvasRef}/>
                     <div className="cam-vignette"/>
-                    <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} showCard={!calibration&&!scanning}/>
+                    <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} showCard={!calibration&&!scanning} done={scan.done}/>
                     {debugEnabled&&(
                       <div className="debug-overlay">
                         <div>L iris: {scan.debugInfo?.lIrisPx ?? "-"}px</div>
@@ -1337,6 +1441,14 @@ export default function FramesSite(){
               )}
 
               {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
+
+              {scanProcessing&&(
+                <div className="processing-card">
+                  <div className="processing-logo">fitframe<span className="logo-dot">.</span></div>
+                  <div className="processing-copy">Analyzing measurements</div>
+                  <div className="processing-track"><div className="processing-fill"/></div>
+                </div>
+              )}
 
               {camErr&&(
                 <div className="cam-placeholder">
@@ -1369,7 +1481,7 @@ export default function FramesSite(){
                 </div>
               )}
 
-              {scan.done&&!currentMeas&&(
+              {scan.done&&!scanProcessing&&!currentMeas&&(
                 <div className="cam-placeholder" style={{marginTop:0}}>
                   <div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label||"No face data captured."}</div>
                   <div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div>
@@ -1377,8 +1489,9 @@ export default function FramesSite(){
                 </div>
               )}
 
-              {currentMeas&&scan.quality?.rescan&&(
+              {currentMeas&&!scanProcessing&&scan.quality?.rescan&&(
                 <div className="cam-placeholder" style={{marginTop:0}}>
+                  <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{scan.quality?.label||"Rescan"}</div>
                   <div className="cam-label">Let's try that again.</div>
                   <div className="cam-sub">{scan.quality?.reason||"Face the camera straight on in good light and hold still."}</div>
                   <button className="btn btn-primary" style={{marginTop:4}}
@@ -1388,7 +1501,7 @@ export default function FramesSite(){
                 </div>
               )}
 
-              {(scan.done||confirmedMeas)&&currentMeas&&!scan.quality?.rescan&&(
+              {(scan.done||confirmedMeas)&&currentMeas&&!scanProcessing&&!scan.quality?.rescan&&(
                 <div className="quality-card">
                   <div className="quality-head">
                     <div className="quality-title">Measurement review</div>
@@ -1535,10 +1648,11 @@ export default function FramesSite(){
                   </div>
                 ))}
               </div>
-              <div className="confirm-footer">{orderId} - fitframe.store</div>
+              <div className="confirm-footer">{orderId} - {DOMAIN_HOST} {/* LOCKED: fitframe.store */}</div>
             </div>
           )}
 
+          <VerificationStrip/>
           <GeoFooter/>
 
         </div>
