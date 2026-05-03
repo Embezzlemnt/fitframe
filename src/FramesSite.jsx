@@ -6,9 +6,16 @@ const BASE_PRICE  = 89;
 
 // ─── localStorage persistence ─────────────────────────────────────────────────
 const STORE_KEY = "fitframe_session_v1";
+const SCAN_HISTORY_KEY = "fitframe_scan_history";
 function saveSession(data) { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch { /* storage can be unavailable in private mode */ } }
 function loadSession()     { try { const r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
 function clearSession()    { try { localStorage.removeItem(STORE_KEY); } catch { /* storage can be unavailable in private mode */ } }
+function appendScanHistory(entry) {
+  try {
+    const prev=JSON.parse(localStorage.getItem(SCAN_HISTORY_KEY)||"[]");
+    localStorage.setItem(SCAN_HISTORY_KEY, JSON.stringify([entry,...prev].slice(0,20)));
+  } catch { /* storage can be unavailable in private mode */ }
+}
 
 // ─── Script loader ────────────────────────────────────────────────────────────
 function loadScript(src) {
@@ -49,6 +56,10 @@ const CARD_STABLE_FRAMES = 10;
 const CARD_MAX_ROTATION_DEG = 14;
 const CARD_MIN_CONFIDENCE = 0.72;
 const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
+const MEASUREMENT_RANGES = {
+  pd:[50,85], pdLeft:[20,45], pdRight:[20,45],
+  bridge:[8,30], faceW:[110,160], temple:[125,160], lensH:[30,50],
+};
 const clamp = (v,min,max) => Math.min(max,Math.max(min,v));
 const irisReferenceRange = () => [IRIS_MM - IRIS_SD * 2, IRIS_MM + IRIS_SD * 2];
 
@@ -67,7 +78,7 @@ function loadOpenCv(){
     const started=performance.now();
     const tick=()=>{
       if (window.cv?.Mat) resolve();
-      else if (performance.now()-started>10000) reject(new Error("OpenCV failed to load"));
+      else if (performance.now()-started>4000) reject(new Error("OpenCV failed to load"));
       else setTimeout(tick,50);
     };
     tick();
@@ -124,7 +135,7 @@ function detectCardOutline(video,W,H,workCanvas){
   const wctx=workCanvas.getContext("2d",{willReadFrequently:true});
   wctx.drawImage(video,0,0,W,H);
 
-  const roiX=Math.round(W*.08), roiY=Math.round(H*.38), roiW=Math.round(W*.84), roiH=Math.round(H*.58);
+  const roiX=Math.round(W*.08), roiY=Math.round(H*.30), roiW=Math.round(W*.84), roiH=Math.round(H*.68);
   let src,roi,gray,blurred,edges,dilated,contours,hierarchy,kernel;
   try {
     src=cv.imread(workCanvas);
@@ -327,7 +338,7 @@ const css = `
   a{color:inherit;text-decoration:none;}
   .app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);}
   .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:flex-start;}
-  .logo{font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1;cursor:pointer;}
+  .logo{font:inherit;font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1;cursor:pointer;background:transparent;border:0;padding:0;}
   .logo:hover{color:#fff;}
   .logo-dot{color:var(--accent);}
   .container{width:100%;max-width:462px;padding:0 18px;}
@@ -453,6 +464,7 @@ const css = `
   .geo-content p{margin-bottom:9px;}
   .geo-content p:last-child{margin-bottom:0;}
   .geo-content strong{color:var(--text);font-weight:400;}
+  .debug-overlay{position:absolute;top:9px;left:9px;z-index:4;padding:8px 9px;border-radius:7px;background:rgba(0,0,0,.68);color:rgba(255,255,255,.78);font-family:'Geist Mono',monospace;font-size:9px;line-height:1.45;text-align:left;pointer-events:none;}
   @media (max-width:390px){
     .site-header{padding-left:14px;padding-right:14px;}
     .container{padding-left:14px;padding-right:14px;}
@@ -545,7 +557,7 @@ function useCamera() {
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
-function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, onCardLocked, onAutoStart }) {
+function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, onCardLocked, onCardSkipped, onAutoStart }) {
   const fmRef          = useRef(null);
   const workCanvasRef  = useRef(null);
   const [mpReady,      setMpReady]      = useState(false);
@@ -558,6 +570,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const cardStableRef  = useRef(0);
   const lastCardRef    = useRef(null);
   const cardLockedRef  = useRef(false);
+  const cardLoadFailedRef = useRef(false);
   const loopRef        = useRef(null);
   const procRef        = useRef(false);
   const scanningRef    = useRef(false);
@@ -577,12 +590,16 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const [quality,      setQuality]      = useState(null);
   const [validPct,     setValidPct]     = useState(0);
   const [cardStatus,   setCardStatus]   = useState({label:"Loading card detector",stablePct:0,reason:""});
+  const [debugInfo,    setDebugInfo]    = useState(null);
 
   useEffect(()=>{ scanningRef.current=scanning; },[scanning]);
   useEffect(()=>{ scaleRef.current=scaleMmPerPx; scaleSourceRef.current=scaleSource; },[scaleMmPerPx,scaleSource]);
 
   useEffect(()=>{
-    loadOpenCv().then(()=>setCvReady(true)).catch(()=>setCardStatus({label:"Card detector unavailable",stablePct:0,reason:"Refresh and try again."}));
+    loadOpenCv().then(()=>setCvReady(true)).catch(()=>{
+      cardLoadFailedRef.current=true;
+      setCardStatus({label:"Skipping card calibration",stablePct:0,reason:"Using iris reference only."});
+    });
   },[]);
 
   const handleResults=useCallback((results)=>{
@@ -605,6 +622,16 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     const d=(a,b)=>Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
     const pose=validatePose(lm);
     const iris=calcIrisMetrics(pts,d);
+    const debugScale=(scaleRef.current || (iris.valid ? IRIS_MM / iris.avgDiam : null));
+    setDebugInfo({
+      lIrisPx:iris.lId?Number(iris.lId.toFixed(1)):null,
+      rIrisPx:iris.rId?Number(iris.rId.toFixed(1)):null,
+      scaleFactor:debugScale?Number(debugScale.toFixed(4)):null,
+      rawPd:debugScale?Number((d(468,473)*debugScale).toFixed(1)):null,
+      validFrames:validRef.current,
+      totalFrames:totalRef.current,
+      scaleSource:scaleSourceRef.current,
+    });
     const tiltHint=iris.valid&&iris.isTilted&&!autoStarted.current&&!scanningRef.current?"Level your head":null;
     setPoseHint(pose.valid?tiltHint:pose.reason);
 
@@ -617,6 +644,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
 
     const lId=iris.lId||0;
     const rId=iris.rId||0;
+    // LOCKED — must match --accent
     const ink=pose.valid?"#4caf7d":"rgba(255,255,255,.22)";
     [[pts[468],lId],[pts[473],rId]].forEach(([c,diam])=>{
       ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
@@ -626,7 +654,11 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     ctx.strokeStyle=ink; ctx.lineWidth=.75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
 
     if (needsCard&&!scanningRef.current&&!cardLockedRef.current){
-      if (!cvReady){
+      if (cardLoadFailedRef.current){
+        cardLockedRef.current=true;
+        setCardStatus({label:"Skipping card calibration",stablePct:0,reason:"Using iris reference only."});
+        onCardSkipped?.();
+      } else if (!cvReady){
         setCardStatus({label:"Loading card detector",stablePct:0,reason:""});
       } else {
         const workCanvas=workCanvasRef.current||(workCanvasRef.current=document.createElement("canvas"));
@@ -667,7 +699,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef);
       if (m){ samplesRef.current.push({...m,scaleSource:scaleSourceRef.current}); noseXRef.current.push(lm[1].x); validRef.current++; }
     } else if (scanningRef.current) totalRef.current++;
-  },[canvasRef,cvReady,needsCard,onAutoStart,onCardLocked,videoRef]);
+  },[canvasRef,cvReady,needsCard,onAutoStart,onCardLocked,onCardSkipped,videoRef]);
 
   useEffect(()=>{
     Promise.all([
@@ -770,15 +802,15 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const reset=useCallback(()=>{
     setSeqIdx(-1); setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
-    setAutoStartPct(0); setFacePresent(false); setPoseHint(null);
-    setCardStatus({label:cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:""});
+    setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
+    setCardStatus({label:cardLoadFailedRef.current?"Skipping card calibration":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:cardLoadFailedRef.current?"Using iris reference only.":""});
     samplesRef.current=[]; noseXRef.current=[]; scaleHistoryRef.current=[];
     validRef.current=0; totalRef.current=0;
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false;
     holdRef.current=0; autoStarted.current=false;
   },[cvReady]);
 
-  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,reset};
+  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset};
 }
 
 // ─── FaceGuide ────────────────────────────────────────────────────────────────
@@ -858,21 +890,36 @@ function useFitFrameJsonLd(){
           "query-input":"required name=search_term_string",
         },
       },
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        mainEntity:[
+          ["What is FitFrame?","FitFrame is browser-based custom eyewear. The face scan runs on iPhone with no app download, and 3D printed PA12 nylon frames ship to your measurements."],
+          ["Scan accuracy?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, and an 11.8mm HVID constant. It measures binocular and monocular PD, bridge, lens height, face width, and temple length within 1-2mm for non-prescription frames."],
+          ["App required?","No. FitFrame runs entirely in Safari on iPhone."],
+          ["Frame material?","FitFrame frames are printed in PA12 nylon, which is lightweight, durable, and precise."],
+          ["Price?","FitFrame starts at $89 base. Blue light lenses are included, sunglass lenses are +$25, Transitions are +$45, and prescription lenses are +$65."],
+          ["Shipping?","FitFrame ships in 7-10 days after confirmation."],
+          ["Fit guarantee?","If frames do not fit, FitFrame reprints once at no charge."],
+          ["Where does face data go?","Face data goes nowhere. The camera is used only for measurement, and no images are stored or transmitted."],
+          ["Custom 3D printed glasses under $100?","Yes. FitFrame ships custom-measured frames starting at $89."],
+        ].map(([name,text])=>({
+          "@type":"Question",
+          name,
+          acceptedAnswer:{
+            "@type":"Answer",
+            text,
+          },
+        })),
+      },
     ]);
     document.head.appendChild(script);
     return ()=>script.remove();
   },[]);
 }
 
-function Logo({className="",href="/about-us"}){
-  const navigate=e=>{
-    if (e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||e.button!==0) return;
-    e.preventDefault();
-    window.history.pushState({}, "", href);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    window.scrollTo(0,0);
-  };
-  return <a className={`logo ${className}`.trim()} href={href} aria-label="About FitFrame" onClick={navigate}>fitframe<span className="logo-dot">.</span></a>;
+function Logo({onClick}){
+  return <button type="button" className="logo" aria-label="FitFrame home" onClick={onClick}>fitframe<span className="logo-dot">.</span></button>;
 }
 
 function GeoFooter(){
@@ -902,27 +949,7 @@ function GeoFooter(){
   );
 }
 
-function AboutUs(){
-  useFitFrameJsonLd();
-  return (
-    <>
-      <style>{css}</style>
-      <div className="app">
-        <main className="container">
-          <section className="section">
-            <Logo className="logo-large" href="/"/>
-            <p className="body-lg">FitFrame is a browser-based eyewear fitting flow for custom 3D-printed frames. It turns a guided phone scan and a few fit questions into a clean maker-ready spec.</p>
-            <p className="body-lg">Measurements are captured from a live camera feed, calibrated with a real-world reference, then reviewed before anything is sent. No app required.</p>
-          </section>
-        </main>
-      </div>
-    </>
-  );
-}
-
 // Main ─────────────────────────────────────────────────────────────────────
-export { AboutUs };
-
 export default function FramesSite(){
   useFitFrameJsonLd();
   const saved=loadSession()||{};
@@ -941,6 +968,8 @@ export default function FramesSite(){
   const [submitting,    setSubmitting]    = useState(false);
   const [sent,          setSent]          = useState(false);
   const [orderId]                         = useState(()=>saved.orderId??genOrderId());
+  const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
+  const scanHistorySavedRef                = useRef(false);
 
   const canvasRef=useRef(null);
   const {
@@ -965,14 +994,23 @@ export default function FramesSite(){
     });
     setTimeout(()=>setScanning(true),650);
   },[]);
+  const handleCardSkipped=useCallback(()=>{
+    setCalibration({
+      source:"iris-fallback",
+      skippedCard:true,
+      timestamp:new Date().toISOString(),
+    });
+    setTimeout(()=>setScanning(true),650);
+  },[]);
   const scan=useFaceScan({
     videoRef,
     scanning,
     canvasRef,
     scaleMmPerPx:calibration?.mmPerPx||null,
-    scaleSource:calibration?"detected-card":"iris-fallback",
+    scaleSource:calibration?.source||"iris-fallback",
     needsCard:step===1&&camReady&&!calibration&&!scanning,
     onCardLocked:handleCardLocked,
+    onCardSkipped:handleCardSkipped,
   });
   const currentMeas=confirmedMeas||scan.measurements;
 
@@ -1027,6 +1065,18 @@ export default function FramesSite(){
         scanReason:scan.quality?.reason||"",
         validPct:scan.validPct,
       });
+      if (!scanHistorySavedRef.current){
+        appendScanHistory({
+          timestamp:new Date().toISOString(),
+          pd:scan.measurements.pd,
+          bridge:scan.measurements.bridge,
+          face:scan.measurements.faceW,
+          scaleSource:scan.measurements.scaleSource,
+          quality:scan.quality?.label||"Review",
+          validPct:scan.validPct,
+        });
+        scanHistorySavedRef.current=true;
+      }
     }
   },[scan.done,scan.measurements,scan.quality,scan.validPct]);
 
@@ -1047,8 +1097,15 @@ export default function FramesSite(){
     setSelectedFrame(null);
     scan.reset();
     setScanning(false);
+    scanHistorySavedRef.current=false;
     setScanPrepDismissed(false);
     setStep(1);
+  }
+
+  function resetToHome(){
+    setStep(0);
+    setScanning(false);
+    window.scrollTo(0,0);
   }
 
   function rescan(){
@@ -1056,6 +1113,7 @@ export default function FramesSite(){
     setScanning(false);
     setConfirmedMeas(null);
     setCalibration(null);
+    scanHistorySavedRef.current=false;
     setScanPrepDismissed(false);
     stopCamera();
   }
@@ -1066,15 +1124,22 @@ export default function FramesSite(){
   }
 
   function updateMeasurement(key,value){
+    const cleaned=value.replace(/[^\d.]/g,"").replace(/(\..*)\./g,"$1");
+    const range=MEASUREMENT_RANGES[key];
+    let next=cleaned;
+    if (range&&cleaned){
+      const n=Number(cleaned);
+      if (Number.isFinite(n)) next=String(clamp(n,range[0],range[1]));
+    }
     setConfirmedMeas(prev=>({
       ...(prev||scan.measurements||{}),
-      [key]:value,
+      [key]:next,
       scaleSource:(prev||scan.measurements)?.scaleSource||"manual-review",
     }));
   }
 
-  function buildMakerSpec(payload){
-    return [
+  function buildMakerSpec(payload,{includeProductionNotes=true}={}){
+    const lines=[
       "FITFRAME MAKER SPEC",
       "",
       `Order ID: ${payload.order_id}`,
@@ -1108,10 +1173,15 @@ export default function FramesSite(){
       `Visual instinct: ${payload.style_vibe}`,
       `Use case: ${payload.style_use}`,
       `Priority: ${payload.style_priority}`,
-      "",
-      "PRODUCTION_NOTES",
-      "Use the matching STL for the selected frame ID. Scale front geometry to face width, set bridge to measured bridge, keep adjustable nose pad allowance, and use PD to center optical openings. PA12 nylon is the default launch material.",
-    ].join("\n");
+    ];
+    if (includeProductionNotes) {
+      lines.push(
+        "",
+        "PRODUCTION_NOTES",
+        "Use the matching STL for the selected frame ID. Scale front geometry to face width, set bridge to measured bridge, keep adjustable nose pad allowance, and use PD to center optical openings. PA12 nylon is the default launch material.",
+      );
+    }
+    return lines.join("\n");
   }
 
   async function submitOrder(){
@@ -1142,7 +1212,7 @@ export default function FramesSite(){
       lens_height_mm:m?.lensH||"-",
       face_width_mm:m?.faceW||"-",
       scale_source:m?.scaleSource||"iris-fallback",
-      card_reference:calibration?`${calibration.cardWidthMm}x${calibration.cardHeightMm}mm card / ${calibration.cardWidthPx}x${calibration.cardHeightPx}px / confidence ${calibration.confidence ?? "-"}`:"not captured",
+      card_reference:calibration?.source==="detected-card"?`${calibration.cardWidthMm}x${calibration.cardHeightMm}mm card / ${calibration.cardWidthPx}x${calibration.cardHeightPx}px / confidence ${calibration.confidence ?? "-"}`:calibration?.skippedCard?"skipped - iris reference only":"not captured",
       scan_quality:m?.scanQuality||scan.quality?.label||"-",
       valid_frames_pct:m?.validPct??(scan.validPct||"-"),
       user_agent:navigator.userAgent,
@@ -1151,7 +1221,9 @@ export default function FramesSite(){
       const spec=buildMakerSpec(payload);
       await navigator.clipboard?.writeText(spec).catch(()=>{});
       const subject=encodeURIComponent(`FitFrame Spec ${orderId}`);
-      const body=encodeURIComponent(spec);
+      const fullBody=encodeURIComponent(spec);
+      const emailSpec=fullBody.length>1800?buildMakerSpec(payload,{includeProductionNotes:false}):spec;
+      const body=encodeURIComponent(emailSpec);
       window.location.assign(`mailto:${MAKER_EMAIL}?subject=${subject}&body=${body}`);
       clearSession();
       setSent(true);
@@ -1186,7 +1258,9 @@ export default function FramesSite(){
       :camReady&&!calibration
           ?""
           :camReady
-            ?"Card reference saved. Keep your face in the oval and start the measurement."
+            ?calibration?.skippedCard
+              ?"Skipping card calibration — using iris reference only."
+              :"Card reference saved. Keep your face in the oval and start the measurement."
             :"";
 
   return (
@@ -1195,7 +1269,7 @@ export default function FramesSite(){
       <div className="app">
 
         <header className="site-header">
-          <Logo/>
+          <Logo onClick={resetToHome}/>
         </header>
 
         <div className="container">
@@ -1225,7 +1299,7 @@ export default function FramesSite(){
                   <div className="pre-scan-line">Have a credit or ID card ready.</div>
                   <div className="pre-scan-support">Hold it flat under your chin, long edge horizontal.</div>
                   <div className="pre-scan-support">It gives the scan a much better size reference.</div>
-                  <button className="btn btn-primary" style={{alignSelf:"stretch",marginTop:4}} onClick={beginScanSetup}>I'm ready</button>
+                  <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready</button>
                   <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
                 </div>
               )}
@@ -1237,6 +1311,16 @@ export default function FramesSite(){
                     <canvas ref={canvasRef}/>
                     <div className="cam-vignette"/>
                     <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} showCard={!calibration&&!scanning}/>
+                    {debugEnabled&&(
+                      <div className="debug-overlay">
+                        <div>L iris: {scan.debugInfo?.lIrisPx ?? "-"}px</div>
+                        <div>R iris: {scan.debugInfo?.rIrisPx ?? "-"}px</div>
+                        <div>Scale: {scan.debugInfo?.scaleFactor ?? "-"}</div>
+                        <div>Raw PD: {scan.debugInfo?.rawPd ?? "-"}mm</div>
+                        <div>Frames: {scan.debugInfo?.validFrames ?? 0}/{scan.debugInfo?.totalFrames ?? 0}</div>
+                        <div>Source: {scan.debugInfo?.scaleSource ?? "iris-fallback"}</div>
+                      </div>
+                    )}
                     <div className="cam-bottom">
                       {scanning&&scan.seqIdx>=0
                         ?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
@@ -1276,7 +1360,7 @@ export default function FramesSite(){
                     </>
                   ):(
                     <>
-                      <div className="calibration-strip"><span>Scale</span><strong>locked from card</strong></div>
+                      <div className="calibration-strip"><span>Scale</span><strong>{calibration.skippedCard?"iris reference":"locked from card"}</strong></div>
                       <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={()=>setScanning(true)}>
                         {scan.mpReady?scan.facePresent?"Start measurement":"Find your face first":"Loading..."}
                       </button>
@@ -1308,7 +1392,7 @@ export default function FramesSite(){
                 <div className="quality-card">
                   <div className="quality-head">
                     <div className="quality-title">Measurement review</div>
-                    <div className="quality-pill">{currentMeas.scanQuality||scan.quality?.label||"Review"}</div>
+                    <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{currentMeas.scanQuality||scan.quality?.label||"Review"}</div>
                   </div>
                   <p className="quality-copy">
                     {currentMeas.scanReason||scan.quality?.reason||"Review the measured spec before continuing."} Valid frames: {currentMeas.validPct??scan.validPct}%.
