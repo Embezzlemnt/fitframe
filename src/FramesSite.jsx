@@ -25,6 +25,7 @@ function loadScript(src) {
     if (document.querySelector(`script[src="${src}"]`)) return resolve();
     const s = document.createElement("script");
     s.src = src; s.crossOrigin = "anonymous";
+    s.defer = true;
     s.onload = resolve; s.onerror = reject;
     document.head.appendChild(s);
   });
@@ -969,7 +970,6 @@ function useFitFrameJsonLd(){
         email:MAKER_EMAIL,
         url:DOMAIN_URL,
         sameAs:[
-          DOMAIN_URL,
           "https://github.com/Embezzlemnt/fitframe",
         ],
       },

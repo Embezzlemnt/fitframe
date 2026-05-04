@@ -4,3 +4,5 @@ Disallow: /netlify/
 Disallow: /.git/
 Disallow: /node_modules/
 Allow: /
+
+Sitemap: https://fitframe.store/sitemap.xml
