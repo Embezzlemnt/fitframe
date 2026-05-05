@@ -65,13 +65,13 @@ const MEASUREMENT_RANGES = {
   bridge:[8,30], faceW:[110,160], temple:[125,160], lensH:[30,50],
 };
 const FITFRAME_FAQ = [
-  ["Is FitFrame legit?","FitFrame is a founder-operated custom eyewear project based in Pennsylvania. Orders are fulfilled directly by Lorenzo, and the official domain is fitframe.store."],
-  ["Why is FitFrame so cheap?","FitFrame starts at $89 because it is an independent maker workflow with no retail markup. The launch frame uses about $4 of PA12 nylon material and about 2 hours of printer time before finishing and assembly."],
-  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. FitFrame is an independent adult custom-fit eyewear workflow for non-Rx frames, direct from one maker to the customer."],
-  ["Who is behind FitFrame?","Lorenzo is the founder of FitFrame. He is 19, based in Pennsylvania, and currently builds the product and fulfills every order personally."],
+  ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
+  ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $89 is the honest price for what this is."],
+  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. FitFrame is an independent adult custom-fit eyewear workflow for non-Rx frames, direct from the maker to the customer."],
+  ["Who is behind FitFrame?","FitFrame is built and operated by its founder, who designs the frames, runs the scans, and fulfills every order personally. It's a small operation by choice - every pair gets real attention."],
   ["How accurate is the FitFrame scan?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
   ["What if my FitFrame frames don't fit?","FitFrame includes one free reprint if the first pair does not fit."],
-  ["Where does FitFrame ship from?","FitFrame ships from Pennsylvania in the United States."],
+  ["Where does FitFrame ship from?","FitFrame ships from the US."],
   ["What material are FitFrame frames made of?","FitFrame frames are 3D printed in PA12 nylon."],
 ];
 const clamp = (v,min,max) => Math.min(max,Math.max(min,v));
@@ -390,6 +390,10 @@ const css = `
   @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
   @keyframes lockIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}
+  .face-intro{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s ease both;}
+  .face-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;line-height:1.08;}
+  .face-intro-sub{margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);font-weight:300;}
+  @keyframes introFade{0%{opacity:0}12%{opacity:1}72%{opacity:1}100%{opacity:0}}
   .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s ease both;}
   .scan-note{font-size:12px;color:var(--dim);line-height:1.55;text-align:center;margin:-4px auto 16px;max-width:310px;font-weight:300;}
   .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--dim);}
@@ -581,7 +585,7 @@ function useCamera() {
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
-function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, onCardLocked, onCardSkipped, onAutoStart }) {
+function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, onCardLocked, onCardSkipped, onAutoStart }) {
   const fmRef          = useRef(null);
   const workCanvasRef  = useRef(null);
   const [mpReady,      setMpReady]      = useState(false);
@@ -633,10 +637,66 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     canvas.getContext("2d")?.clearRect(0,0,W,H);
   },[canvasRef,done,videoRef]);
 
+  const processCardFrame=useCallback(()=>{
+    const video=videoRef.current, canvas=canvasRef.current;
+    if (!canvas||!video) return;
+    const W=video.videoWidth||640, H=video.videoHeight||480;
+    canvas.width=W; canvas.height=H;
+    const ctx=canvas.getContext("2d");
+    ctx.clearRect(0,0,W,H);
+    setFacePresent(false);
+    setPoseHint(null);
+    setAutoStartPct(0);
+
+    if (!cardStartedRef.current) cardStartedRef.current=performance.now();
+    const timedOut=performance.now()-cardStartedRef.current>CARD_FALLBACK_MS;
+    if (cardLoadFailedRef.current||timedOut){
+      cardLockedRef.current=true;
+      setCardStatus({label:"Continuing without card",stablePct:0,reason:""});
+      onCardSkipped?.();
+      return;
+    }
+    if (!cvReady){
+      setCardStatus({label:"Loading card detector",stablePct:0,reason:""});
+      return;
+    }
+
+    const workCanvas=workCanvasRef.current||(workCanvasRef.current=document.createElement("canvas"));
+    const detection=detectCardOutline(video,W,H,workCanvas);
+    if (detection){
+      const similar=detectionSimilarity(detection,lastCardRef.current)<26;
+      const highConfidence=detection.confidence>=CARD_MIN_CONFIDENCE;
+      const flatEnough=detection.angle<=CARD_MAX_ROTATION_DEG;
+      cardStableRef.current=similar&&highConfidence&&flatEnough?Math.min(CARD_STABLE_FRAMES,cardStableRef.current+1):1;
+      lastCardRef.current=detection;
+      const stablePct=cardStableRef.current/CARD_STABLE_FRAMES;
+      drawDetectedCard(ctx,detection,stablePct);
+      const reason=!highConfidence?"Both long sides visible, card facing the camera.":!flatEnough?"Hold the card flatter.":"Hold still.";
+      setCardStatus({label:stablePct>=1?"Scale locked":"Card detected",stablePct,reason,confidence:detection.confidence});
+      if (stablePct>=1){
+        cardLockedRef.current=true;
+        onCardLocked?.({
+          mmPerPx:detection.mmPerPx,
+          cardWidthMm:CREDIT_CARD_WIDTH_MM,
+          cardHeightMm:CREDIT_CARD_HEIGHT_MM,
+          cardWidthPx:Math.round(detection.width),
+          cardHeightPx:Math.round(detection.height),
+          confidence:Number(detection.confidence.toFixed(2)),
+          corners:detection.quad.map(p=>({x:Math.round(p.x),y:Math.round(p.y)})),
+          timestamp:new Date().toISOString(),
+        });
+      }
+    } else {
+      cardStableRef.current=0;
+      lastCardRef.current=null;
+      setCardStatus({label:"Position card",stablePct:0,reason:"Both long sides visible, card facing the camera."});
+    }
+  },[canvasRef,cvReady,onCardLocked,onCardSkipped,videoRef]);
+
   useEffect(()=>{
     loadOpenCv().then(()=>setCvReady(true)).catch(()=>{
       cardLoadFailedRef.current=true;
-      setCardStatus({label:"Using face reference",stablePct:0,reason:""});
+      setCardStatus({label:"Continuing without card",stablePct:0,reason:""});
     });
   },[]);
 
@@ -698,11 +758,11 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       const timedOut=performance.now()-cardStartedRef.current>CARD_FALLBACK_MS;
       if (cardLoadFailedRef.current){
         cardLockedRef.current=true;
-        setCardStatus({label:"Using face reference",stablePct:0,reason:""});
+        setCardStatus({label:"Continuing without card",stablePct:0,reason:""});
         onCardSkipped?.();
       } else if (timedOut){
         cardLockedRef.current=true;
-        setCardStatus({label:"Using face reference",stablePct:0,reason:""});
+        setCardStatus({label:"Continuing without card",stablePct:0,reason:""});
         onCardSkipped?.();
       } else if (!cvReady){
         setCardStatus({label:"Loading card detector",stablePct:0,reason:""});
@@ -767,7 +827,9 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   useEffect(()=>{
     const loop=async()=>{
       const v=videoRef.current;
-      if (fmRef.current&&v&&v.readyState>=2&&!procRef.current&&!doneRef.current){
+      if (needsCard&&v&&v.readyState>=2&&!doneRef.current&&!cardLockedRef.current){
+        processCardFrame();
+      } else if (faceEnabled&&fmRef.current&&v&&v.readyState>=2&&!procRef.current&&!doneRef.current){
         procRef.current=true;
         try { await fmRef.current.send({image:v}); } catch { /* frame processing can skip while MediaPipe warms up */ }
         procRef.current=false;
@@ -776,7 +838,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     };
     loopRef.current=requestAnimationFrame(loop);
     return ()=>{ if(loopRef.current) cancelAnimationFrame(loopRef.current); };
-  },[videoRef]);
+  },[faceEnabled,needsCard,processCardFrame,videoRef]);
 
   useEffect(()=>{
     if (scanning&&!done){
@@ -849,7 +911,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     setSeqIdx(-1); setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
     setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
-    setCardStatus({label:cardLoadFailedRef.current?"Using face reference":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:""});
+    setCardStatus({label:cardLoadFailedRef.current?"Continuing without card":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:""});
     samplesRef.current=[]; noseXRef.current=[]; scaleHistoryRef.current=[];
     validRef.current=0; totalRef.current=0;
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
@@ -964,7 +1026,6 @@ function useFitFrameJsonLd(){
         },
         address:{
           "@type":"PostalAddress",
-          addressRegion:"PA",
           addressCountry:"US",
         },
         email:MAKER_EMAIL,
@@ -991,15 +1052,15 @@ function useFitFrameJsonLd(){
   },[]);
 }
 
-function Logo({onClick}){
-  return <button type="button" className="logo" aria-label="FitFrame home" onClick={onClick}>fitframe<span className="logo-dot">.</span></button>;
+function Logo(){
+  return <a className="logo" aria-label="About FitFrame" href="/about">fitframe<span className="logo-dot">.</span></a>;
 }
 
 function VerificationStrip(){
   return (
     <section className="verification-strip" aria-label="Verification">
-      <span>Made in Pennsylvania</span>
-      <span>Founder-operated</span>
+      <span>American made</span>
+      <span>Zero-waste to order</span>
       <span>One-time reprint guarantee</span>
     </section>
   );
@@ -1019,7 +1080,7 @@ function GeoFooter(){
       <details className="geo-block">
         <summary>About</summary>
         <div className="geo-content">
-          <p>FitFrame is a made-to-measure eyewear company based in Pennsylvania. Frames are designed around your face, not an average one. Every pair is 3D printed in PA12 nylon to your scan measurements and shipped directly to you. Founded by Lorenzo, currently fulfilling every order personally.</p>
+          <p>FitFrame started as a frustration with glasses that never fit right. Every pair built here is measured from your actual face, printed to those measurements, and shipped directly to you. No middleman, no standard sizing, no compromise. It's a small operation built on the belief that fit shouldn't be a luxury.</p>
         </div>
       </details>
     </footer>
@@ -1042,6 +1103,7 @@ export default function FramesSite(){
   const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{name:"",email:""});
   const [scanning,      setScanning]      = useState(false);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
+  const [cameraIntro,   setCameraIntro]   = useState(false);
   const [scanProcessing,setScanProcessing] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [sent,          setSent]          = useState(false);
@@ -1079,7 +1141,7 @@ export default function FramesSite(){
       skippedCard:true,
       timestamp:new Date().toISOString(),
     });
-    setTimeout(()=>setScanning(true),250);
+    setTimeout(()=>setScanning(true),650);
   },[]);
   const scan=useFaceScan({
     videoRef,
@@ -1087,7 +1149,8 @@ export default function FramesSite(){
     canvasRef,
     scaleMmPerPx:calibration?.mmPerPx||null,
     scaleSource:calibration?.source||"iris-fallback",
-    needsCard:step===1&&camReady&&!calibration&&!scanning,
+    needsCard:step===1&&camReady&&!cameraIntro&&!calibration&&!scanning,
+    faceEnabled:step===1&&camReady&&!cameraIntro&&(!!calibration||scanning),
     onCardLocked:handleCardLocked,
     onCardSkipped:handleCardSkipped,
   });
@@ -1135,6 +1198,11 @@ export default function FramesSite(){
   useEffect(()=>{ if(scan.done) setScanning(false); },[scan.done]);
   useEffect(()=>{ setTapped(null); },[styleQIdx]);
   useEffect(()=>()=>{ if (processingTimerRef.current) clearTimeout(processingTimerRef.current); },[]);
+  useEffect(()=>{
+    if (!camReady||!cameraIntro) return;
+    const timer=setTimeout(()=>setCameraIntro(false),2000);
+    return ()=>clearTimeout(timer);
+  },[camReady,cameraIntro]);
 
   // Keep the user on scan review until they accept the measured spec.
   useEffect(()=>{
@@ -1185,16 +1253,10 @@ export default function FramesSite(){
     setSelectedFrame(null);
     scan.reset();
     setScanning(false);
+    setCameraIntro(false);
     scanHistorySavedRef.current=false;
     setScanPrepDismissed(false);
     setStep(1);
-  }
-
-  function resetToHome(){
-    setStep(0);
-    setScanning(false);
-    setScanProcessing(false);
-    window.scrollTo(0,0);
   }
 
   function rescan(){
@@ -1203,6 +1265,7 @@ export default function FramesSite(){
     setScanProcessing(false);
     scan.reset();
     setScanning(false);
+    setCameraIntro(false);
     setConfirmedMeas(null);
     setCalibration(null);
     scanHistorySavedRef.current=false;
@@ -1212,6 +1275,7 @@ export default function FramesSite(){
 
   function beginScanSetup(){
     setScanPrepDismissed(true);
+    setCameraIntro(true);
     startCamera();
   }
 
@@ -1330,6 +1394,8 @@ export default function FramesSite(){
     ?"Stay still."
     :scanProcessing
       ?"Scan complete."
+    :cameraIntro
+      ?"Look straight ahead."
     :scan.done
       ?"Scan complete."
       :showScanPrep
@@ -1339,14 +1405,16 @@ export default function FramesSite(){
       :!camReady
           ?"Opening camera."
           :!calibration
-            ?"Hold any card under your face."
+            ?"Hold your card like you're about to swipe it."
             :"Ready to measure.";
   const scanCopy=scanning
     ?calibration?.skippedCard
-      ?"Using face reference. Keep your face forward while we average the clean frames."
+      ?"Continuing without card. Keep your face forward while we average the clean frames."
       :"Keep your face forward while we average the clean frames."
     :scanProcessing
       ?""
+    :cameraIntro
+      ?"Fill the oval with your face."
     :scan.done
       ?"Review the scan before continuing."
       :showScanPrep
@@ -1354,10 +1422,10 @@ export default function FramesSite(){
       :camRequesting
         ?"Allow camera access to continue."
       :camReady&&!calibration
-          ?""
+          ?"Landscape, flat under your chin. Both long sides visible, card facing the camera."
           :camReady
             ?calibration?.skippedCard
-              ?"Using face reference."
+              ?"Continuing without card."
               :"Card reference saved. Keep your face in the oval and start the measurement."
             :"";
 
@@ -1367,7 +1435,7 @@ export default function FramesSite(){
       <div className="app">
 
         <header className="site-header">
-          <Logo onClick={resetToHome}/>
+          <Logo/>
         </header>
 
         <div className="container">
@@ -1396,12 +1464,13 @@ export default function FramesSite(){
                   <div className="pre-scan-line">This scan takes about {SCAN_DURATION_SECONDS_PLACEHOLDER} seconds.</div>
                   <div className="pre-scan-line">Have a credit or ID card ready.</div>
                   <ScanSetupDiagram/>
-                  <div className="pre-scan-support">Hold it flat under your chin, long edge horizontal.</div>
+                  <div className="pre-scan-support">Hold your card like you're about to swipe it — landscape, flat under your chin.</div>
+                  <div className="pre-scan-support">Both long sides visible, card facing the camera.</div>
                   <div className="pre-scan-support">It gives the scan a much better size reference.</div>
                   <div className="setup-list">
                     <div>Arm's length from your phone</div>
                     <div>Good overhead light, face it directly</div>
-                    <div>Card long-edge horizontal, flat, below your chin</div>
+                    <div>Card landscape, flat, below your chin</div>
                   </div>
                   <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready</button>
                   <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
@@ -1415,6 +1484,12 @@ export default function FramesSite(){
                     <canvas ref={canvasRef}/>
                     <div className="cam-vignette"/>
                     <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} showCard={!calibration&&!scanning} done={scan.done}/>
+                    {cameraIntro&&(
+                      <div className="face-intro">
+                        <div className="face-intro-main">Look straight ahead</div>
+                        <div className="face-intro-sub">Fill the oval with your face</div>
+                      </div>
+                    )}
                     {debugEnabled&&(
                       <div className="debug-overlay">
                         <div>L iris: {scan.debugInfo?.lIrisPx ?? "-"}px</div>
@@ -1429,7 +1504,7 @@ export default function FramesSite(){
                       {scanning&&scan.seqIdx>=0
                         ?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
                         :!calibration
-                          ?<div className="scan-inst">{scan.cardStatus?.label==="Scale locked"?"Scale locked.":scan.cardStatus?.reason||"Show the full card edge."}</div>
+                          ?<div className="scan-inst">{scan.cardStatus?.label==="Scale locked"?"Scale locked.":scan.cardStatus?.reason||"Both long sides visible, card facing the camera."}</div>
                           :scan.poseHint
                           ?<div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
                           :scan.autoStartPct>0&&scan.autoStartPct<1
@@ -1466,13 +1541,13 @@ export default function FramesSite(){
                       {scan.cardStatus?.label==="Scale locked"
                         ?<div className="scale-lock">Scale locked.</div>
                         :<div className="calibration-strip">
-                          <span>{scan.facePresent?(scan.cardStatus?.label||"Find card outline"):"Find your face first"}</span>
+                          <span>{scan.cardStatus?.label||"Position card"}</span>
                           {scan.cardStatus?.stablePct>0&&<strong>{Math.round(scan.cardStatus.stablePct*100)}%</strong>}
                         </div>}
                     </>
                   ):(
                     <>
-                      <div className="calibration-strip"><span>Scale</span><strong>{calibration.skippedCard?"iris reference":"locked from card"}</strong></div>
+                      <div className="calibration-strip"><span>Scale</span><strong>{calibration.skippedCard?"Continuing without card":"locked from card"}</strong></div>
                       <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={()=>setScanning(true)}>
                         {scan.mpReady?scan.facePresent?"Start measurement":"Find your face first":"Loading..."}
                       </button>
