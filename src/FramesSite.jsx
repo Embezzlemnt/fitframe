@@ -392,18 +392,19 @@ const css = `
   .btn-row .btn{flex:1;min-width:128px;}
   .cam-outer{width:100%;border-radius:12px;overflow:hidden;background:var(--scan);position:relative;margin-bottom:18px;border:1px solid var(--border2);}
   .cam-inner{width:100%;aspect-ratio:4/3;position:relative;}
-  .cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
-  .cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none;}
+  .cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;}
+  .cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none;z-index:1;}
   .cam-vignette{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at center,transparent 54%,rgba(0,0,0,.34) 100%);}
-  .cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:3;padding:28px 16px 15px;background:linear-gradient(transparent,rgba(0,0,0,.68));display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .face-guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;filter:drop-shadow(0 0 7px rgba(76,175,125,.55));}
+  .cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:5;padding:28px 16px 15px;background:linear-gradient(transparent,rgba(0,0,0,.68));display:flex;flex-direction:column;align-items:center;gap:4px;}
   @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
   @keyframes lockIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}
-  .face-intro{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s ease both;}
+  .face-intro{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s ease both;}
   .face-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;line-height:1.08;}
   .face-intro-sub{margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);font-weight:300;}
   @keyframes introFade{0%{opacity:0}12%{opacity:1}72%{opacity:1}100%{opacity:0}}
-  .settle-intro{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.1);pointer-events:none;animation:settleFade 1s ease both;}
+  .settle-intro{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.1);pointer-events:none;animation:settleFade 1s ease both;}
   .settle-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;}
   @keyframes settleFade{0%{opacity:0}18%{opacity:1}82%{opacity:1}100%{opacity:0}}
   .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s ease both;}
@@ -504,7 +505,7 @@ const css = `
   .geo-content p{margin-bottom:9px;}
   .geo-content p:last-child{margin-bottom:0;}
   .geo-content strong{color:var(--text);font-weight:400;}
-  .debug-overlay{position:absolute;top:9px;left:9px;z-index:4;padding:8px 9px;border-radius:7px;background:rgba(0,0,0,.68);color:rgba(255,255,255,.78);font-family:'Geist Mono',monospace;font-size:9px;line-height:1.45;text-align:left;pointer-events:none;}
+  .debug-overlay{position:absolute;top:9px;left:9px;z-index:7;padding:8px 9px;border-radius:7px;background:rgba(0,0,0,.68);color:rgba(255,255,255,.78);font-family:'Geist Mono',monospace;font-size:9px;line-height:1.45;text-align:left;pointer-events:none;}
   @media (max-width:390px){
     .site-header{padding-left:14px;padding-right:14px;}
     .container{padding-left:14px;padding-right:14px;}
@@ -1010,10 +1011,9 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
   const h=((rx-ry)/(rx+ry))**2;
   const circ=Math.PI*(rx+ry)*(1+(3*h)/(10+Math.sqrt(4-3*h)));
   const bo=facePresent?.62:.2;
-  const activeFill=done?0:fill;
+  const activeFill=clamp(done?0:fill,0,1);
   return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice"
-      style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
+    <svg className="face-guide" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       {!done&&autoStartPct>0&&autoStartPct<1&&(
         <ellipse cx={cx} cy={cy} rx={rx+11} ry={ry+11} fill="none"
           stroke="rgba(255,255,255,.1)" strokeWidth="2"
@@ -1021,10 +1021,11 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
           strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>
       )}
       <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
-        stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" style={{transition:"stroke .4s ease"}}/>
+        stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" vectorEffect="non-scaling-stroke" style={{transition:"stroke .4s ease"}}/>
       {activeFill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="#4caf7d" strokeWidth="3"
-        strokeDasharray={`${circ*Math.min(activeFill,1)} ${circ+10}`}
-        strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dasharray .1s linear"}}/>}
+        pathLength="1" strokeDasharray="1" strokeDashoffset={1-activeFill}
+        strokeLinecap="round" strokeOpacity="1" vectorEffect="non-scaling-stroke"
+        transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dashoffset .1s linear"}}/>}
       {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
         fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
       {!done&&showCard&&(
