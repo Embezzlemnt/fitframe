@@ -42,15 +42,16 @@ function validatePose(lm) {
 // ─── Measurement math ─────────────────────────────────────────────────────────
 const IRIS_MM = 11.8;          // HVID mean reference
 const IRIS_SD = 0.5;           // +/-1 SD - acceptable iris diameter range: 10.8-12.8mm
-const IRIS_MIN_PX = 18;        // Below this, iris is too small to measure reliably
+const IRIS_MIN_PX = 10;        // Launch-tolerant floor for arm's-length phone scans
 const IRIS_MAX_PX = 80;        // Above this, face is too close and landmarks compress
 const PD_ADULT_MIN = 52.0;     // Adult binocular PD lower reference
 const PD_ADULT_MAX = 80.0;     // Adult binocular PD upper reference
 const BRIDGE_MIN = 10.0;       // Minimum human bridge width
 const BRIDGE_MAX = 28.0;       // Maximum human bridge width
 const MONOCULAR_SYMMETRY = 2.5;// Max acceptable left/right monocular PD difference
-const TILT_THRESHOLD = 0.08;   // Iris center Y difference as a fraction of face height
-const MIN_VALID_SAMPLES = 5;   // Launch threshold while real-world lighting data is collected
+const TILT_THRESHOLD = 0.14;   // Iris center Y difference as a fraction of face height
+const IRIS_MISMATCH_MAX = 0.30;// Launch-tolerant left/right iris diameter difference
+const MIN_VALID_SAMPLES = 3;   // Review-screen safety net handles small usable samples
 const SCALE_HISTORY_FRAMES = 10;
 const CREDIT_CARD_WIDTH_MM = 85.6;
 const CREDIT_CARD_HEIGHT_MM = 54;
@@ -220,7 +221,7 @@ function calcIrisMetrics(pts, d) {
   if (avgDiam < IRIS_MIN_PX) return {valid:false,lId,rId,avgDiam,reason:"too-far"};
   if (avgDiam > IRIS_MAX_PX) return {valid:false,lId,rId,avgDiam,reason:"too-close"};
   const irisDelta = Math.abs(lId - rId) / avgDiam;
-  if (irisDelta > 0.15) return {valid:false,lId,rId,avgDiam,irisDelta,reason:"iris-mismatch"};
+  if (irisDelta > IRIS_MISMATCH_MAX) return {valid:false,lId,rId,avgDiam,irisDelta,reason:"iris-mismatch"};
   const faceH = distPt(pts[10], pts[152]);
   const tiltRatio = faceH ? Math.abs(pts[468].y - pts[473].y) / faceH : 0;
   return {
@@ -585,7 +586,7 @@ function useCamera() {
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
-function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, onCardLocked, onCardSkipped, onAutoStart }) {
+function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, debugScan=false, onCardLocked, onCardSkipped, onAutoStart }) {
   const fmRef          = useRef(null);
   const workCanvasRef  = useRef(null);
   const [mpReady,      setMpReady]      = useState(false);
@@ -595,6 +596,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const noseXRef       = useRef([]);
   const validRef       = useRef(0);
   const totalRef       = useRef(0);
+  const discardRef     = useRef({});
   const cardStableRef  = useRef(0);
   const lastCardRef    = useRef(null);
   const cardLockedRef  = useRef(false);
@@ -626,8 +628,8 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   useEffect(()=>{ doneRef.current=done; },[done]);
   useEffect(()=>{ scaleRef.current=scaleMmPerPx; scaleSourceRef.current=scaleSource; },[scaleMmPerPx,scaleSource]);
   useEffect(()=>{ if (!needsCard) cardStartedRef.current=null; },[needsCard]);
-  useEffect(()=>{
-    if (!done) return;
+
+  const clearScanCanvas=useCallback(()=>{
     const canvas=canvasRef.current;
     const video=videoRef.current;
     if (!canvas) return;
@@ -635,7 +637,29 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     const H=video?.videoHeight||canvas.height||480;
     canvas.width=W; canvas.height=H;
     canvas.getContext("2d")?.clearRect(0,0,W,H);
-  },[canvasRef,done,videoRef]);
+  },[canvasRef,videoRef]);
+
+  const markDiscard=useCallback((reason)=>{
+    const key=reason||"unknown";
+    discardRef.current[key]=(discardRef.current[key]||0)+1;
+  },[]);
+
+  const logScanDebug=useCallback((label,extra={})=>{
+    const payload={
+      validFrames:validRef.current,
+      totalFrames:totalRef.current,
+      samples:samplesRef.current.length,
+      discarded:{...discardRef.current},
+      scaleSource:scaleSourceRef.current,
+      ...extra,
+    };
+    if (debugScan) console.debug(`[FitFrame scan] ${label}`, payload);
+    if (label==="complete") console.info("[FitFrame scan] complete", payload);
+  },[debugScan]);
+
+  useEffect(()=>{
+    if (done) clearScanCanvas();
+  },[clearScanCanvas,done]);
 
   const processCardFrame=useCallback(()=>{
     const video=videoRef.current, canvas=canvasRef.current;
@@ -707,11 +731,16 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     canvas.width=W; canvas.height=H;
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,W,H);
-    if (doneRef.current) return;
+    if (doneRef.current) { clearScanCanvas(); return; }
 
     if (!results.multiFaceLandmarks?.length){
       holdRef.current=0; setFacePresent(false); setPoseHint(null);
       if (!autoStarted.current) setAutoStartPct(0);
+      if (scanningRef.current){
+        totalRef.current++;
+        markDiscard("no-face");
+        if (totalRef.current%15===0) logScanDebug("sampling");
+      }
       return;
     }
 
@@ -729,6 +758,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       rawPd:debugScale?Number((d(468,473)*debugScale).toFixed(1)):null,
       validFrames:validRef.current,
       totalFrames:totalRef.current,
+      discarded:{...discardRef.current},
       scaleSource:scaleSourceRef.current,
     });
     const tiltHint=iris.valid&&iris.isTilted&&!autoStarted.current&&!scanningRef.current?"Level your head":null;
@@ -753,59 +783,32 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       ctx.strokeStyle=ink; ctx.lineWidth=.75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
     }
 
-    if (needsCard&&!scanningRef.current&&!cardLockedRef.current){
-      if (!cardStartedRef.current) cardStartedRef.current=performance.now();
-      const timedOut=performance.now()-cardStartedRef.current>CARD_FALLBACK_MS;
-      if (cardLoadFailedRef.current){
-        cardLockedRef.current=true;
-        setCardStatus({label:"Continuing without card",stablePct:0,reason:""});
-        onCardSkipped?.();
-      } else if (timedOut){
-        cardLockedRef.current=true;
-        setCardStatus({label:"Continuing without card",stablePct:0,reason:""});
-        onCardSkipped?.();
-      } else if (!cvReady){
-        setCardStatus({label:"Loading card detector",stablePct:0,reason:""});
+    if (scanningRef.current){
+      totalRef.current++;
+      if (!pose.valid){
+        markDiscard("pose");
+      } else if (!iris.valid){
+        markDiscard(iris.reason);
       } else {
-        const workCanvas=workCanvasRef.current||(workCanvasRef.current=document.createElement("canvas"));
-        const detection=detectCardOutline(video,W,H,workCanvas);
-        if (detection){
-          const similar=detectionSimilarity(detection,lastCardRef.current)<26;
-          const highConfidence=detection.confidence>=CARD_MIN_CONFIDENCE;
-          const flatEnough=detection.angle<=CARD_MAX_ROTATION_DEG;
-          cardStableRef.current=similar&&highConfidence&&flatEnough?Math.min(CARD_STABLE_FRAMES,cardStableRef.current+1):1;
-          lastCardRef.current=detection;
-          const stablePct=cardStableRef.current/CARD_STABLE_FRAMES;
-          drawDetectedCard(ctx,detection,stablePct);
-          const reason=!highConfidence?"Show all four card corners.":!flatEnough?"Hold the card flatter.":"Hold still.";
-          setCardStatus({label:stablePct>=1?"Scale locked":"Card detected",stablePct,reason,confidence:detection.confidence});
-          if (stablePct>=1){
-            cardLockedRef.current=true;
-            onCardLocked?.({
-              mmPerPx:detection.mmPerPx,
-              cardWidthMm:CREDIT_CARD_WIDTH_MM,
-              cardHeightMm:CREDIT_CARD_HEIGHT_MM,
-              cardWidthPx:Math.round(detection.width),
-              cardHeightPx:Math.round(detection.height),
-              confidence:Number(detection.confidence.toFixed(2)),
-              corners:detection.quad.map(p=>({x:Math.round(p.x),y:Math.round(p.y)})),
-              timestamp:new Date().toISOString(),
-            });
-          }
+        const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef);
+        if (m){
+          samplesRef.current.push({...m,scaleSource:scaleSourceRef.current});
+          noseXRef.current.push(lm[1].x);
+          validRef.current++;
         } else {
-          cardStableRef.current=0;
-          lastCardRef.current=null;
-          setCardStatus({label:"Find card outline",stablePct:0,reason:"Show the full card edge under your face."});
+          markDiscard("measurement-null");
         }
       }
+      if (totalRef.current%15===0) {
+        logScanDebug("sampling",{
+          lIrisPx:iris.lId?Number(iris.lId.toFixed(1)):null,
+          rIrisPx:iris.rId?Number(iris.rId.toFixed(1)):null,
+          irisDelta:iris.irisDelta?Number(iris.irisDelta.toFixed(3)):null,
+          tiltRatio:iris.tiltRatio?Number(iris.tiltRatio.toFixed(3)):null,
+        });
+      }
     }
-
-    if (scanningRef.current&&pose.valid){
-      totalRef.current++;
-      const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef);
-      if (m){ samplesRef.current.push({...m,scaleSource:scaleSourceRef.current}); noseXRef.current.push(lm[1].x); validRef.current++; }
-    } else if (scanningRef.current) totalRef.current++;
-  },[canvasRef,cvReady,needsCard,onAutoStart,onCardLocked,onCardSkipped,videoRef]);
+  },[canvasRef,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,videoRef]);
 
   useEffect(()=>{
     Promise.all([
@@ -845,6 +848,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       samplesRef.current=[]; noseXRef.current=[];
       scaleHistoryRef.current=[];
       validRef.current=0; totalRef.current=0;
+      discardRef.current={};
       setSeqIdx(0);
     }
   },[done,scanning]);
@@ -861,10 +865,11 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       else if (seqIdx<SCAN_SEQ.length-1){ setSeqIdx(i=>i+1); }
       else {
         setDone(true);
+        clearScanCanvas();
         const s=samplesRef.current;
         const vp=totalRef.current>0?validRef.current/totalRef.current:0;
         setValidPct(Math.round(vp*100));
-        if (s.length>=MIN_VALID_SAMPLES){
+        if (s.length>0){
           const sorted=[...s].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
           const trim=Math.floor(sorted.length*.15);
           const good=trim>0&&sorted.length>(trim*2+MIN_VALID_SAMPLES-1)
@@ -885,27 +890,41 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
           const pd=weightedAvg("pd"),br=weightedAvg("bridge"),face=weightedAvg("faceW");
           const lMono=weightedAvg("pdLeft"),rMono=weightedAvg("pdRight");
           const monoSum=lMono+rMono;
-          const finalPd=Math.abs(monoSum-pd)>2?monoSum:pd;
-          const sane=finalPd>=PD_ADULT_MIN&&finalPd<=PD_ADULT_MAX&&br>=BRIDGE_MIN&&br<=BRIDGE_MAX&&Math.abs(lMono-rMono)<=MONOCULAR_SYMMETRY;
-          const stable=weightedStd("pd")<=1.2&&weightedStd("bridge")<=1.0;
+          const directPdSane=pd>=PD_ADULT_MIN&&pd<=PD_ADULT_MAX;
+          const monoSumSane=monoSum>=PD_ADULT_MIN&&monoSum<=PD_ADULT_MAX;
+          const finalPd=Math.abs(monoSum-pd)>2&&monoSumSane?monoSum:pd;
+          const pdStd=weightedStd("pd");
+          const bridgeStd=weightedStd("bridge");
+          const hardOutOfRange=!directPdSane&&!monoSumSane;
+          const reviewRangeIssue=br<BRIDGE_MIN||br>BRIDGE_MAX||Math.abs(lMono-rMono)>MONOCULAR_SYMMETRY;
           setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:s[0]?.scaleSource||scaleSourceRef.current});
-          setQuality(!sane
-            ?{label:"Out of range",rescan:true,reason:"The scan landed outside normal eyewear ranges."}
-            :!stable
-              ?{label:"Unstable",rescan:true,reason:"The measurements moved too much between frames."}
-              :vp>=.7
-                ?{label:"Excellent",rescan:false,reason:"Stable face tracking and enough clean frames."}
-                :vp>=.5
-                  ?{label:"Good",rescan:false,reason:"Usable scan. You can correct any known measurements below."}
-                  :vp>=.3
-                    ?{label:"Fair",rescan:false,reason:"Usable with caution. Correct known measurements if you have them."}
-                    :{label:"Low",rescan:true,reason:"Not enough clean frames to trust the measurements."});
-        } else { setQuality({label:"Move to better light and hold still.",rescan:true,reason:"Move to better light and hold still."}); setMeasurements(null); }
+          const nextQuality=hardOutOfRange
+            ?{label:"Out of range",rescan:true,reason:"The PD landed outside the frame-fitting range."}
+            :s.length<MIN_VALID_SAMPLES||vp<.25
+              ?{label:"Double-check these",rescan:false,reason:"We captured a small sample. Double-check the numbers below."}
+              :reviewRangeIssue||pdStd>4.5||bridgeStd>3
+                ?{label:"Review your numbers",rescan:false,reason:"Usable scan with some movement. Review the numbers below."}
+                :pdStd<=2.5&&bridgeStd<=1.8&&vp>=.6
+                  ?{label:"Clean scan",rescan:false,reason:"The scan had steady tracking and enough usable frames."}
+                  :{label:"Good scan",rescan:false,reason:"Usable scan. You can correct any known measurements below."};
+          setQuality(nextQuality);
+          logScanDebug("complete",{
+            finalPd:Number(finalPd.toFixed(1)),
+            pdStd:Number(pdStd.toFixed(2)),
+            bridgeStd:Number(bridgeStd.toFixed(2)),
+            sampleCount:s.length,
+            quality:nextQuality.label,
+          });
+        } else {
+          setQuality({label:"Double-check these",rescan:false,reason:"No usable measurements were captured. Try again in brighter light."});
+          setMeasurements(null);
+          logScanDebug("complete",{sampleCount:0,quality:"no-measurements"});
+        }
       }
     };
     raf=requestAnimationFrame(animate);
     return ()=>cancelAnimationFrame(raf);
-  },[seqIdx]);
+  },[clearScanCanvas,logScanDebug,seqIdx]);
 
   const reset=useCallback(()=>{
     setSeqIdx(-1); setFill(0); fillRef.current=0;
@@ -914,6 +933,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     setCardStatus({label:cardLoadFailedRef.current?"Continuing without card":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:""});
     samplesRef.current=[]; noseXRef.current=[]; scaleHistoryRef.current=[];
     validRef.current=0; totalRef.current=0;
+    discardRef.current={};
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
     holdRef.current=0; autoStarted.current=false;
   },[cvReady]);
@@ -1151,6 +1171,7 @@ export default function FramesSite(){
     scaleSource:calibration?.source||"iris-fallback",
     needsCard:step===1&&camReady&&!cameraIntro&&!calibration&&!scanning,
     faceEnabled:step===1&&camReady&&!cameraIntro&&(!!calibration||scanning),
+    debugScan:debugEnabled,
     onCardLocked:handleCardLocked,
     onCardSkipped:handleCardSkipped,
   });
@@ -1232,6 +1253,31 @@ export default function FramesSite(){
       },2000);
     }
   },[confirmedMeas,scan.done,scan.measurements,scan.quality,scan.validPct,scanProcessing]);
+
+  function acceptMeasurements(){
+    const m=currentMeas||scan.measurements;
+    if (!m) return;
+    const accepted={
+      ...m,
+      scanQuality:m.scanQuality||scan.quality?.label||"Review your numbers",
+      scanReason:m.scanReason||scan.quality?.reason||"",
+      validPct:m.validPct??scan.validPct,
+    };
+    setConfirmedMeas(accepted);
+    if (!scanHistorySavedRef.current){
+      appendScanHistory({
+        timestamp:new Date().toISOString(),
+        pd:accepted.pd,
+        bridge:accepted.bridge,
+        face:accepted.faceW,
+        scaleSource:accepted.scaleSource,
+        quality:accepted.scanQuality,
+        validPct:accepted.validPct,
+      });
+      scanHistorySavedRef.current=true;
+    }
+    setStep(2);
+  }
 
   function selectOption(opt){
     setTapped(opt.label);
@@ -1498,6 +1544,7 @@ export default function FramesSite(){
                         <div>Raw PD: {scan.debugInfo?.rawPd ?? "-"}mm</div>
                         <div>Frames: {scan.debugInfo?.validFrames ?? 0}/{scan.debugInfo?.totalFrames ?? 0}</div>
                         <div>Source: {scan.debugInfo?.scaleSource ?? "iris-fallback"}</div>
+                        <div>Discard: {scan.debugInfo?.discarded ? Object.entries(scan.debugInfo.discarded).map(([k,v])=>`${k}:${v}`).join(", ") : "-"}</div>
                       </div>
                     )}
                     <div className="cam-bottom">
@@ -1569,10 +1616,10 @@ export default function FramesSite(){
                   <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{scan.quality?.label||"Rescan"}</div>
                   <div className="cam-label">Let's try that again.</div>
                   <div className="cam-sub">{scan.quality?.reason||"Face the camera straight on in good light and hold still."}</div>
-                  <button className="btn btn-primary" style={{marginTop:4}}
-                    onClick={rescan}>
-                    Rescan
-                  </button>
+                  <div className="btn-row" style={{marginTop:4}}>
+                    <button className="btn btn-primary" onClick={rescan}>Rescan</button>
+                    <button className="btn btn-ghost" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
+                  </div>
                 </div>
               )}
 
@@ -1599,7 +1646,7 @@ export default function FramesSite(){
                   </div>
                   <div className="measure-help">If the user already knows a measurement, correct it here. These values are what the maker receives.</div>
                   <div className="btn-row">
-                    <button className="btn btn-primary" onClick={()=>setStep(2)}>Continue</button>
+                    <button className="btn btn-primary" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
                     <button className="btn btn-ghost" onClick={rescan}>Rescan</button>
                   </div>
                 </div>
