@@ -52,6 +52,9 @@ const MONOCULAR_SYMMETRY = 2.5;// Max acceptable left/right monocular PD differe
 const TILT_THRESHOLD = 0.14;   // Iris center Y difference as a fraction of face height
 const IRIS_MISMATCH_MAX = 0.30;// Launch-tolerant left/right iris diameter difference
 const MIN_VALID_SAMPLES = 3;   // Review-screen safety net handles small usable samples
+const FACE_ABORT_FRAMES = 8;   // Roughly 250ms of sustained face/pose loss during active scan
+const FACE_PRESENT_MIN_RATIO = 0.90;
+const POSE_VALID_MIN_RATIO = 0.75;
 const SCALE_HISTORY_FRAMES = 10;
 const CREDIT_CARD_WIDTH_MM = 85.6;
 const CREDIT_CARD_HEIGHT_MM = 54;
@@ -329,17 +332,17 @@ const STYLE_QUESTIONS = [
 const DEFAULT_LENS = { id:"bluelight", label:"Blue Light", price:0 };
 
 const SCAN_SEQ = [
-  { instruction:"",                   holdMs:1500, fill:0.08 },
-  { instruction:"Keep eyes forward.", holdMs:3000, fill:0.35 },
-  { instruction:"Almost there.",      holdMs:3000, fill:0.65 },
-  { instruction:"Nearly done.",       holdMs:2500, fill:0.88 },
-  { instruction:"",                   holdMs:1500, fill:1.00 },
+  { holdMs:1500, fill:0.08 },
+  { holdMs:3000, fill:0.35 },
+  { holdMs:3000, fill:0.65 },
+  { holdMs:2500, fill:0.88 },
+  { holdMs:1500, fill:1.00 },
 ];
+const PRE_SCAN_SETTLE_MS = 1000;
 const SCAN_DURATION_SECONDS_PLACEHOLDER = 12;
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@300;400;500&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
   :root{
     --bg:#0d0d0d;--bg2:#11110f;--surface:#161615;--surface2:#1d1d1b;--panel:#141413;
@@ -348,10 +351,15 @@ const css = `
   }
   html,body{height:100%;}
   html{background:var(--bg);}
-  body{background:radial-gradient(circle at 50% -18%,rgba(76,175,125,.12),transparent 34%),linear-gradient(180deg,var(--bg2),var(--bg));color:var(--text);font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior:none;}
+  body{color:var(--text);font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior:none;}
   button,input{-webkit-tap-highlight-color:transparent;}
   a{color:inherit;text-decoration:none;}
-  .app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);}
+  .app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);opacity:0;}
+  .app.app-ready{animation:pageFade .4s ease-out forwards;}
+  @keyframes pageFade{from{opacity:0}to{opacity:1}}
+  .app.intro-active .site-header .logo{opacity:0;}
+  .intro-logo{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);pointer-events:none;animation:logoCollapse .6s cubic-bezier(.4,0,.2,1) forwards;}
+  @keyframes logoCollapse{to{left:max(18px,calc(50% - 213px));top:27px;transform:none;font-size:15px;font-weight:500;letter-spacing:-.02em;}}
   .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:flex-start;}
   .logo{font:inherit;font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1;cursor:pointer;background:transparent;border:0;padding:0;}
   .logo:hover{color:#fff;}
@@ -395,6 +403,9 @@ const css = `
   .face-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;line-height:1.08;}
   .face-intro-sub{margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);font-weight:300;}
   @keyframes introFade{0%{opacity:0}12%{opacity:1}72%{opacity:1}100%{opacity:0}}
+  .settle-intro{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.1);pointer-events:none;animation:settleFade 1s ease both;}
+  .settle-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;}
+  @keyframes settleFade{0%{opacity:0}18%{opacity:1}82%{opacity:1}100%{opacity:0}}
   .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s ease both;}
   .scan-note{font-size:12px;color:var(--dim);line-height:1.55;text-align:center;margin:-4px auto 16px;max-width:310px;font-weight:300;}
   .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--dim);}
@@ -586,7 +597,7 @@ function useCamera() {
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
-function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, debugScan=false, onCardLocked, onCardSkipped, onAutoStart }) {
+function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, debugScan=false, onCardLocked, onCardSkipped, onAutoStart, onScanAbort }) {
   const fmRef          = useRef(null);
   const workCanvasRef  = useRef(null);
   const [mpReady,      setMpReady]      = useState(false);
@@ -596,6 +607,10 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const noseXRef       = useRef([]);
   const validRef       = useRef(0);
   const totalRef       = useRef(0);
+  const facePresentFramesRef = useRef(0);
+  const poseValidFramesRef = useRef(0);
+  const faceLostRef    = useRef(0);
+  const poseLostRef    = useRef(0);
   const discardRef     = useRef({});
   const cardStableRef  = useRef(0);
   const lastCardRef    = useRef(null);
@@ -611,6 +626,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const holdRef        = useRef(0);
   const autoStarted    = useRef(false);
   const fillRef        = useRef(0);
+  const abortingRef    = useRef(false);
 
   const [seqIdx,       setSeqIdx]       = useState(-1);
   const [fill,         setFill]         = useState(0);
@@ -648,6 +664,8 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     const payload={
       validFrames:validRef.current,
       totalFrames:totalRef.current,
+      faceFrames:facePresentFramesRef.current,
+      poseFrames:poseValidFramesRef.current,
       samples:samplesRef.current.length,
       discarded:{...discardRef.current},
       scaleSource:scaleSourceRef.current,
@@ -656,6 +674,30 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     if (debugScan) console.debug(`[FitFrame scan] ${label}`, payload);
     if (label==="complete") console.info("[FitFrame scan] complete", payload);
   },[debugScan]);
+
+  const resetSampleState=useCallback(()=>{
+    samplesRef.current=[]; noseXRef.current=[]; scaleHistoryRef.current=[];
+    validRef.current=0; totalRef.current=0;
+    facePresentFramesRef.current=0; poseValidFramesRef.current=0;
+    faceLostRef.current=0; poseLostRef.current=0;
+    discardRef.current={};
+  },[]);
+
+  const abortActiveScan=useCallback((reason="Lost your face — let's restart")=>{
+    if (abortingRef.current) return;
+    abortingRef.current=true;
+    clearScanCanvas();
+    setSeqIdx(-1); setFill(0); fillRef.current=0;
+    setDone(false); setMeasurements(null); setQuality(null);
+    setValidPct(0); setAutoStartPct(0); setPoseHint(null); setFacePresent(false);
+    setDebugInfo(null);
+    setCardStatus({label:cvReady?"Position card":"Loading card detector",stablePct:0,reason:"Both long sides visible, card facing the camera."});
+    resetSampleState();
+    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
+    holdRef.current=0; autoStarted.current=false;
+    onScanAbort?.(reason);
+    requestAnimationFrame(()=>{ abortingRef.current=false; });
+  },[clearScanCanvas,cvReady,onScanAbort,resetSampleState]);
 
   useEffect(()=>{
     if (done) clearScanCanvas();
@@ -731,15 +773,18 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     canvas.width=W; canvas.height=H;
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,W,H);
-    if (doneRef.current) { clearScanCanvas(); return; }
+    if (doneRef.current||abortingRef.current) { clearScanCanvas(); return; }
 
     if (!results.multiFaceLandmarks?.length){
       holdRef.current=0; setFacePresent(false); setPoseHint(null);
       if (!autoStarted.current) setAutoStartPct(0);
       if (scanningRef.current){
         totalRef.current++;
+        faceLostRef.current++;
+        poseLostRef.current++;
         markDiscard("no-face");
         if (totalRef.current%15===0) logScanDebug("sampling");
+        if (faceLostRef.current>=FACE_ABORT_FRAMES||poseLostRef.current>=FACE_ABORT_FRAMES) abortActiveScan();
       }
       return;
     }
@@ -771,6 +816,20 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       if (pct>=1){ autoStarted.current=true; onAutoStart?.(); }
     }
 
+    if (scanningRef.current){
+      totalRef.current++;
+      facePresentFramesRef.current++;
+      faceLostRef.current=0;
+      if (!pose.valid){
+        poseLostRef.current++;
+        markDiscard("pose");
+        if (poseLostRef.current>=FACE_ABORT_FRAMES) abortActiveScan();
+        return;
+      }
+      poseValidFramesRef.current++;
+      poseLostRef.current=0;
+    }
+
     const lId=iris.lId||0;
     const rId=iris.rId||0;
     if (scanningRef.current&&iris.valid){
@@ -784,10 +843,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     }
 
     if (scanningRef.current){
-      totalRef.current++;
-      if (!pose.valid){
-        markDiscard("pose");
-      } else if (!iris.valid){
+      if (!iris.valid){
         markDiscard(iris.reason);
       } else {
         const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef);
@@ -808,7 +864,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
         });
       }
     }
-  },[canvasRef,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,videoRef]);
+  },[abortActiveScan,canvasRef,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,videoRef]);
 
   useEffect(()=>{
     Promise.all([
@@ -830,9 +886,11 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   useEffect(()=>{
     const loop=async()=>{
       const v=videoRef.current;
-      if (needsCard&&v&&v.readyState>=2&&!doneRef.current&&!cardLockedRef.current){
+      if (doneRef.current||abortingRef.current){
+        clearScanCanvas();
+      } else if (needsCard&&v&&v.readyState>=2&&!cardLockedRef.current){
         processCardFrame();
-      } else if (faceEnabled&&fmRef.current&&v&&v.readyState>=2&&!procRef.current&&!doneRef.current){
+      } else if (faceEnabled&&fmRef.current&&v&&v.readyState>=2&&!procRef.current){
         procRef.current=true;
         try { await fmRef.current.send({image:v}); } catch { /* frame processing can skip while MediaPipe warms up */ }
         procRef.current=false;
@@ -841,17 +899,15 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     };
     loopRef.current=requestAnimationFrame(loop);
     return ()=>{ if(loopRef.current) cancelAnimationFrame(loopRef.current); };
-  },[faceEnabled,needsCard,processCardFrame,videoRef]);
+  },[clearScanCanvas,faceEnabled,needsCard,processCardFrame,videoRef]);
 
   useEffect(()=>{
     if (scanning&&!done){
-      samplesRef.current=[]; noseXRef.current=[];
-      scaleHistoryRef.current=[];
-      validRef.current=0; totalRef.current=0;
-      discardRef.current={};
+      abortingRef.current=false;
+      resetSampleState();
       setSeqIdx(0);
     }
-  },[done,scanning]);
+  },[done,resetSampleState,scanning]);
 
   useEffect(()=>{
     if (seqIdx<0||seqIdx>=SCAN_SEQ.length) return;
@@ -868,8 +924,19 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
         clearScanCanvas();
         const s=samplesRef.current;
         const vp=totalRef.current>0?validRef.current/totalRef.current:0;
+        const facePct=totalRef.current>0?facePresentFramesRef.current/totalRef.current:0;
+        const posePct=totalRef.current>0?poseValidFramesRef.current/totalRef.current:0;
         setValidPct(Math.round(vp*100));
-        if (s.length>0){
+        if (s.length<MIN_VALID_SAMPLES||facePct<FACE_PRESENT_MIN_RATIO||posePct<POSE_VALID_MIN_RATIO){
+          setQuality({label:"No data captured",rescan:true,reason:"Lost your face — let's restart"});
+          setMeasurements(null);
+          logScanDebug("complete",{
+            sampleCount:s.length,
+            quality:"No data captured",
+            facePct:Number(facePct.toFixed(2)),
+            posePct:Number(posePct.toFixed(2)),
+          });
+        } else {
           const sorted=[...s].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
           const trim=Math.floor(sorted.length*.15);
           const good=trim>0&&sorted.length>(trim*2+MIN_VALID_SAMPLES-1)
@@ -899,7 +966,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
           const reviewRangeIssue=br<BRIDGE_MIN||br>BRIDGE_MAX||Math.abs(lMono-rMono)>MONOCULAR_SYMMETRY;
           setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:s[0]?.scaleSource||scaleSourceRef.current});
           const nextQuality=hardOutOfRange
-            ?{label:"Out of range",rescan:true,reason:"The PD landed outside the frame-fitting range."}
+            ?{label:"Out of range",rescan:false,reason:"The PD landed outside the frame-fitting range. Review before continuing."}
             :s.length<MIN_VALID_SAMPLES||vp<.25
               ?{label:"Double-check these",rescan:false,reason:"We captured a small sample. Double-check the numbers below."}
               :reviewRangeIssue||pdStd>4.5||bridgeStd>3
@@ -913,12 +980,10 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
             pdStd:Number(pdStd.toFixed(2)),
             bridgeStd:Number(bridgeStd.toFixed(2)),
             sampleCount:s.length,
+            facePct:Number(facePct.toFixed(2)),
+            posePct:Number(posePct.toFixed(2)),
             quality:nextQuality.label,
           });
-        } else {
-          setQuality({label:"Double-check these",rescan:false,reason:"No usable measurements were captured. Try again in brighter light."});
-          setMeasurements(null);
-          logScanDebug("complete",{sampleCount:0,quality:"no-measurements"});
         }
       }
     };
@@ -931,12 +996,10 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     setDone(false); setMeasurements(null); setQuality(null);
     setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
     setCardStatus({label:cardLoadFailedRef.current?"Continuing without card":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:""});
-    samplesRef.current=[]; noseXRef.current=[]; scaleHistoryRef.current=[];
-    validRef.current=0; totalRef.current=0;
-    discardRef.current={};
+    resetSampleState();
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
-    holdRef.current=0; autoStarted.current=false;
-  },[cvReady]);
+    holdRef.current=0; autoStarted.current=false; abortingRef.current=false;
+  },[cvReady,resetSampleState]);
 
   return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset};
 }
@@ -1124,6 +1187,10 @@ export default function FramesSite(){
   const [scanning,      setScanning]      = useState(false);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
   const [cameraIntro,   setCameraIntro]   = useState(false);
+  const [scanSettling,  setScanSettling]  = useState(false);
+  const [scanRestartCopy,setScanRestartCopy] = useState("");
+  const [introReady,    setIntroReady]    = useState(false);
+  const [introDone,     setIntroDone]     = useState(false);
   const [scanProcessing,setScanProcessing] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [sent,          setSent]          = useState(false);
@@ -1131,6 +1198,7 @@ export default function FramesSite(){
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
   const processingTimerRef                 = useRef(null);
+  const settleTimerRef                     = useRef(null);
 
   const canvasRef=useRef(null);
   const {
@@ -1141,6 +1209,17 @@ export default function FramesSite(){
     start: startCamera,
     stop: stopCamera,
   } = useCamera();
+  const startSettledScan=useCallback(()=>{
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    setScanRestartCopy("");
+    setScanSettling(true);
+    setScanning(false);
+    settleTimerRef.current=setTimeout(()=>{
+      setScanSettling(false);
+      setScanning(true);
+      settleTimerRef.current=null;
+    },PRE_SCAN_SETTLE_MS);
+  },[]);
   const handleCardLocked=useCallback((card)=>{
     setCalibration({
       source:"detected-card",
@@ -1153,15 +1232,30 @@ export default function FramesSite(){
       corners:card.corners,
       timestamp:card.timestamp,
     });
-    setTimeout(()=>setScanning(true),650);
-  },[]);
+    startSettledScan();
+  },[startSettledScan]);
   const handleCardSkipped=useCallback(()=>{
     setCalibration({
       source:"iris-fallback",
       skippedCard:true,
       timestamp:new Date().toISOString(),
     });
-    setTimeout(()=>setScanning(true),650);
+    startSettledScan();
+  },[startSettledScan]);
+  const handleScanAbort=useCallback((message)=>{
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    processingTimerRef.current=null;
+    settleTimerRef.current=null;
+    setScanProcessing(false);
+    setConfirmedMeas(null);
+    setCalibration(null);
+    setScanning(false);
+    setScanSettling(false);
+    setCameraIntro(false);
+    setScanPrepDismissed(true);
+    setScanRestartCopy(message||"Lost your face — let's restart");
+    scanHistorySavedRef.current=false;
   },[]);
   const scan=useFaceScan({
     videoRef,
@@ -1174,6 +1268,7 @@ export default function FramesSite(){
     debugScan:debugEnabled,
     onCardLocked:handleCardLocked,
     onCardSkipped:handleCardSkipped,
+    onScanAbort:handleScanAbort,
   });
   const currentMeas=confirmedMeas||(scan.quality?.rescan?scan.measurements:null);
 
@@ -1216,9 +1311,22 @@ export default function FramesSite(){
   const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
 
   useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
-  useEffect(()=>{ if(scan.done) setScanning(false); },[scan.done]);
+  useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); } },[scan.done]);
   useEffect(()=>{ setTapped(null); },[styleQIdx]);
-  useEffect(()=>()=>{ if (processingTimerRef.current) clearTimeout(processingTimerRef.current); },[]);
+  useEffect(()=>()=>{ 
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+  },[]);
+  useEffect(()=>{
+    requestAnimationFrame(()=>setIntroReady(true));
+    const timer=setTimeout(()=>setIntroDone(true),720);
+    return ()=>clearTimeout(timer);
+  },[]);
+  useEffect(()=>{
+    if (!scan.done) return;
+    const ctx=canvasRef.current?.getContext("2d");
+    if (ctx) ctx.clearRect(0,0,canvasRef.current.width,canvasRef.current.height);
+  },[scan.done]);
   useEffect(()=>{
     if (!camReady||!cameraIntro) return;
     const timer=setTimeout(()=>setCameraIntro(false),2000);
@@ -1290,8 +1398,12 @@ export default function FramesSite(){
   function startFreshScan(){
     clearSession();
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     processingTimerRef.current=null;
+    settleTimerRef.current=null;
     setScanProcessing(false);
+    setScanSettling(false);
+    setScanRestartCopy("");
     setConfirmedMeas(null);
     setCalibration(null);
     setStyleAnswers({});
@@ -1307,8 +1419,12 @@ export default function FramesSite(){
 
   function rescan(){
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     processingTimerRef.current=null;
+    settleTimerRef.current=null;
     setScanProcessing(false);
+    setScanSettling(false);
+    setScanRestartCopy("");
     scan.reset();
     setScanning(false);
     setCameraIntro(false);
@@ -1320,6 +1436,7 @@ export default function FramesSite(){
   }
 
   function beginScanSetup(){
+    setScanRestartCopy("");
     setScanPrepDismissed(true);
     setCameraIntro(true);
     startCamera();
@@ -1440,10 +1557,14 @@ export default function FramesSite(){
     ?"Stay still."
     :scanProcessing
       ?"Scan complete."
+    :scanSettling
+      ?"Find your spot."
     :cameraIntro
       ?"Look straight ahead."
     :scan.done
       ?"Scan complete."
+      :scanRestartCopy
+        ?scanRestartCopy
       :showScanPrep
         ?"Take a quick calibrated face scan to begin."
       :camRequesting
@@ -1454,15 +1575,17 @@ export default function FramesSite(){
             ?"Hold your card like you're about to swipe it."
             :"Ready to measure.";
   const scanCopy=scanning
-    ?calibration?.skippedCard
-      ?"Continuing without card. Keep your face forward while we average the clean frames."
-      :"Keep your face forward while we average the clean frames."
+    ?""
     :scanProcessing
       ?""
+    :scanSettling
+      ?"Hold still for a second before measuring."
     :cameraIntro
       ?"Fill the oval with your face."
     :scan.done
       ?"Review the scan before continuing."
+      :scanRestartCopy
+        ?"Hold your card like you're about to swipe it — landscape, flat under your chin."
       :showScanPrep
         ?""
       :camRequesting
@@ -1478,7 +1601,8 @@ export default function FramesSite(){
   return (
     <>
       <style>{css}</style>
-      <div className="app">
+      <div className={`app ${introReady?"app-ready":""} ${introDone?"intro-done":"intro-active"}`}>
+        {!introDone&&<div className="intro-logo">fitframe<span className="logo-dot">.</span></div>}
 
         <header className="site-header">
           <Logo/>
@@ -1529,11 +1653,16 @@ export default function FramesSite(){
                     <video ref={videoRef} autoPlay playsInline muted/>
                     <canvas ref={canvasRef}/>
                     <div className="cam-vignette"/>
-                    <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} showCard={!calibration&&!scanning} done={scan.done}/>
+                    <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={!scanning&&!scanSettling?scan.poseHint:null} showCard={!calibration&&!scanning&&!scanSettling} done={scan.done}/>
                     {cameraIntro&&(
                       <div className="face-intro">
                         <div className="face-intro-main">Look straight ahead</div>
                         <div className="face-intro-sub">Fill the oval with your face</div>
+                      </div>
+                    )}
+                    {scanSettling&&(
+                      <div className="settle-intro">
+                        <div className="settle-intro-main">Find your spot</div>
                       </div>
                     )}
                     {debugEnabled&&(
@@ -1548,8 +1677,10 @@ export default function FramesSite(){
                       </div>
                     )}
                     <div className="cam-bottom">
-                      {scanning&&scan.seqIdx>=0
-                        ?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
+                      {scanning
+                        ?<div className="scan-inst">Hold steady</div>
+                        :scanSettling
+                          ?<div className="scan-inst">Find your spot</div>
                         :!calibration
                           ?<div className="scan-inst">{scan.cardStatus?.label==="Scale locked"?"Scale locked.":scan.cardStatus?.reason||"Both long sides visible, card facing the camera."}</div>
                           :scan.poseHint
@@ -1595,7 +1726,7 @@ export default function FramesSite(){
                   ):(
                     <>
                       <div className="calibration-strip"><span>Scale</span><strong>{calibration.skippedCard?"Continuing without card":"locked from card"}</strong></div>
-                      <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={()=>setScanning(true)}>
+                      <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent||scanSettling} onClick={startSettledScan}>
                         {scan.mpReady?scan.facePresent?"Start measurement":"Find your face first":"Loading..."}
                       </button>
                     </>
