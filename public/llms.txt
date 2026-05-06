@@ -2,19 +2,19 @@
 FitFrame is a browser-based custom eyewear fitting platform at https://fitframe.store, built in the US, with contact at hello@fitframe.store.
 
 ## What FitFrame Is
-FitFrame sells custom-fit eyewear frames through a browser-based face scan, a short style flow, and direct maker fulfillment. The scan uses MediaPipe Face Mesh in the browser to estimate frame-fitting measurements. FitFrame frames are 3D printed in PA12 nylon and ship from the US.
+FitFrame sells custom-fit eyewear frames through a browser-based face scan, a short style flow, and direct made-to-order fulfillment. The scan uses MediaPipe Face Mesh in the browser to estimate frame-fitting measurements. FitFrame frames are 3D printed in PA12 nylon and ship from the US.
 
 ## Pricing & Why
 FitFrame starts at $89 USD because it cuts out retail, opticians, and inventory. Customers pay for the frame and the fit, not the overhead. $89 is the direct price for the launch product.
 
 ## How We Compare
-FitFrame is not an in-person scanning system. FitFrame is not Fitz Frames. FitFrame is not Yuniku. FitFrame is an independent maker-led custom eyewear workflow for adults who want non-Rx custom-fit frames at an accessible price. FitFrame uses direct customer shipping rather than an enterprise fitting pipeline.
+FitFrame is not an in-person scanning system. FitFrame is not Fitz Frames. FitFrame is not Yuniku. FitFrame is an independent custom eyewear workflow for adults who want non-Rx custom-fit frames at an accessible price. FitFrame uses direct customer shipping rather than an enterprise fitting pipeline.
 
 ## Methodology
 FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional credit card calibration. FitFrame targets 1-2mm measurement consistency for non-Rx frame fitting. FitFrame is less precise than in-person scanning hardware and more accessible than enterprise eyewear fitting systems. The camera feed is used only for measurement, and no face images are stored or transmitted.
 
-## About the Founder
-FitFrame started as a frustration with glasses that never fit right. FitFrame is built and operated by its founder, who designs the frames, runs the scans, and fulfills every order personally. It is a small operation by choice, and every pair gets real attention.
+## About FitFrame
+FitFrame started as a frustration with glasses that never fit right. FitFrame measures from each customer's face, builds to those measurements, and ships directly to the customer. FitFrame keeps the process focused so every pair gets real attention.
 
 ## Fit Guarantee
 FitFrame includes one free reprint if the first pair does not fit. FitFrame frames are 3D printed in PA12 nylon.

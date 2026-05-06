@@ -5,6 +5,16 @@ const MAKER_EMAIL = "hello@fitframe.store";
 const DOMAIN_URL = "https://fitframe.store"; // LOCKED
 const DOMAIN_HOST = "fitframe.store"; // LOCKED
 const BASE_PRICE  = 89;
+const DEV_MODE = false;
+const SUBMIT_ORDER_ENDPOINT = "/api/submit-order";
+const DEFAULT_CUSTOMER_INFO = {
+  name:"",
+  email:"",
+  street:"",
+  city:"",
+  state:"",
+  zip:"",
+};
 
 // ─── localStorage persistence ─────────────────────────────────────────────────
 const STORE_KEY = "fitframe_session_v1";
@@ -81,14 +91,14 @@ const MEASUREMENT_RANGES = {
   bridge:[8,30], faceW:[110,160], temple:[125,160], lensH:[30,50],
 };
 const FITFRAME_FAQ = [
-  ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
-  ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $89 is the honest price for what this is."],
-  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. FitFrame is an independent adult custom-fit eyewear workflow for non-Rx frames, direct from the maker to the customer."],
-  ["Who is behind FitFrame?","FitFrame is built and operated by its founder, who designs the frames, runs the scans, and fulfills every order personally. It's a small operation by choice - every pair gets real attention."],
-  ["How accurate is the FitFrame scan?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
-  ["What if my FitFrame frames don't fit?","FitFrame includes one free reprint if the first pair does not fit."],
-  ["Where does FitFrame ship from?","FitFrame ships from the US."],
-  ["What material are FitFrame frames made of?","FitFrame frames are 3D printed in PA12 nylon."],
+  ["Is FitFrame legit?","FitFrame is a real eyewear operation based in the US. We scan, fit, and fulfill through the official domain fitframe.store."],
+  ["Why is FitFrame so cheap?","We cut out retail, opticians, and inventory. You pay for the frame and the fit, not the overhead. $89 is the honest price for what this is."],
+  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. We build an adult custom-fit workflow for non-Rx frames, direct through our made-to-order process."],
+  ["Who is behind FitFrame?","FitFrame is built by the team behind the scan, frame design, and fulfillment. We keep the operation focused so every pair gets real attention."],
+  ["How accurate is the FitFrame scan?","We use MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
+  ["What if my FitFrame frames don't fit?","We include one free reprint if the first pair does not fit."],
+  ["Where does FitFrame ship from?","We ship from the US."],
+  ["What material are FitFrame frames made of?","We 3D print FitFrame frames in PA12 nylon."],
 ];
 const clamp = (v,min,max) => Math.min(max,Math.max(min,v));
 const irisReferenceRange = () => [IRIS_MM - IRIS_SD * 2, IRIS_MM + IRIS_SD * 2];
@@ -305,6 +315,15 @@ function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) 
 
 function genOrderId() { return "FF-"+Math.random().toString(36).substring(2,8).toUpperCase(); }
 function getETA()     { const d=new Date(); d.setDate(d.getDate()+10); return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}); }
+function normalizeCustomerInfo(info={}) { return {...DEFAULT_CUSTOMER_INFO,...info}; }
+function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value||"").trim()); }
+function trimCustomerInfo(info) {
+  return Object.fromEntries(Object.entries(normalizeCustomerInfo(info)).map(([k,v])=>[k,String(v||"").trim()]));
+}
+function customerInfoComplete(info) {
+  const c=trimCustomerInfo(info);
+  return !!(c.name&&validEmail(c.email)&&c.street&&c.city&&c.state&&c.zip);
+}
 
 // ─── Frame SVGs ───────────────────────────────────────────────────────────────
 const FrameSVG = ({ id, size=56, color="currentColor" }) => {
@@ -515,7 +534,17 @@ const css = `
   .field{width:100%;min-height:46px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:16px;font-family:'Geist',sans-serif;outline:none;margin-bottom:8px;font-weight:300;transition:border-color .18s var(--ease-premium);-webkit-appearance:none;}
   .field::placeholder{color:var(--soft);}
   .field:focus{border-color:var(--dim);}
-  .trust-line{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:13px;font-size:11px;color:var(--soft);font-weight:300;}
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .field-grid .field{margin-bottom:8px;}
+  .field-full{grid-column:1/-1;}
+  .form-error{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--amber);}
+  .trust-line{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:13px;font-size:11px;color:var(--soft);font-weight:300;line-height:1.45;text-align:center;}
+  .trust-line svg{opacity:.75;flex:0 0 auto;}
+  .debug-panel{margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);}
+  .debug-panel-title{font-family:'Geist Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--soft);margin-bottom:10px;}
+  .debug-list{display:grid;gap:7px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--dim);line-height:1.45;}
+  .debug-list div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid rgba(255,255,255,.04);padding-bottom:6px;}
+  .debug-list span:last-child{color:var(--text);}
   .confirm-id{font-family:'Geist Mono',monospace;font-size:11px;color:var(--soft);letter-spacing:.06em;margin-bottom:18px;}
   .confirm-greeting{font-size:30px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.06;margin-bottom:12px;}
   .confirm-body{font-size:13px;color:var(--dim);line-height:1.65;font-weight:300;margin-bottom:26px;}
@@ -1275,7 +1304,7 @@ function GeoFooter(){
       <details className="geo-block">
         <summary>About</summary>
         <div className="geo-content">
-          <p>FitFrame started as a frustration with glasses that never fit right. Every pair built here is measured from your actual face, printed to those measurements, and shipped directly to you. No middleman, no standard sizing, no compromise. It's a small operation built on the belief that fit shouldn't be a luxury.</p>
+          <p>FitFrame started as a frustration with glasses that never fit right. We measure from your actual face, build to those measurements, and ship directly to you. No middleman, no standard sizing, no compromise. We believe fit should not be a luxury.</p>
         </div>
       </details>
     </footer>
@@ -1295,7 +1324,7 @@ export default function FramesSite(){
   const [styleQIdx,     setStyleQIdx]     = useState(saved.styleQIdx??0);
   const [tapped,        setTapped]        = useState(null);
   const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
-  const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{name:"",email:""});
+  const [customerInfo,  setCustomerInfo]  = useState(()=>normalizeCustomerInfo(saved.customerInfo));
   const [scanning,      setScanning]      = useState(false);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
   const [cameraIntro,   setCameraIntro]   = useState(false);
@@ -1305,9 +1334,10 @@ export default function FramesSite(){
   const [introDone,     setIntroDone]     = useState(false);
   const [scanProcessing,setScanProcessing] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
+  const [submitError,   setSubmitError]   = useState("");
   const [sent,          setSent]          = useState(false);
   const [orderId]                         = useState(()=>saved.orderId??genOrderId());
-  const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
+  const [debugEnabled]                     = useState(()=>DEV_MODE&&new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
   const processingTimerRef                 = useRef(null);
   const settleTimerRef                     = useRef(null);
@@ -1569,6 +1599,11 @@ export default function FramesSite(){
     }));
   }
 
+  function updateCustomerInfo(key,value){
+    setSubmitError("");
+    setCustomerInfo(prev=>({...prev,[key]:value}));
+  }
+
   function buildMakerSpec(payload,{includeProductionNotes=true}={}){
     const lines=[
       "FITFRAME MAKER SPEC",
@@ -1578,10 +1613,16 @@ export default function FramesSite(){
       `Customer email: ${payload.customer_email}`,
       `Created: ${payload.timestamp}`,
       "",
+      "SHIP_TO",
+      payload.shipping_name,
+      payload.shipping_street,
+      `${payload.shipping_city}, ${payload.shipping_state} ${payload.shipping_zip}`,
+      "",
       "FRAME",
       `Style: ${payload.frame}`,
       `Frame ID: ${payload.frame_id}`,
       `Lens: ${payload.lens}`,
+      `Total: $${payload.total}`,
       `Material recommendation: ${payload.material}`,
       "",
       "MEASUREMENTS_MM",
@@ -1616,14 +1657,28 @@ export default function FramesSite(){
   }
 
   async function submitOrder(){
+    const cleanInfo=trimCustomerInfo(customerInfo);
+    if (!customerInfoComplete(cleanInfo)){
+      setSubmitError("Add your name, email, and full shipping address.");
+      return;
+    }
+    if (!currentMeas){
+      setSubmitError("Complete the fit scan before submitting.");
+      return;
+    }
     setSubmitting(true);
+    setSubmitError("");
     const m=currentMeas;
     const payload={
-      _replyto:customerInfo.email,
       _subject:`FitFrame Order ${orderId}`,
       order_id:orderId,
-      customer_name:customerInfo.name,
-      customer_email:customerInfo.email,
+      customer_name:cleanInfo.name,
+      customer_email:cleanInfo.email,
+      shipping_name:cleanInfo.name,
+      shipping_street:cleanInfo.street,
+      shipping_city:cleanInfo.city,
+      shipping_state:cleanInfo.state,
+      shipping_zip:cleanInfo.zip,
       timestamp:new Date().toISOString(),
       frame:chosenFrame?.label||"Custom frame",
       frame_id:chosenFrame?.id||"custom",
@@ -1648,17 +1703,22 @@ export default function FramesSite(){
       valid_frames_pct:m?.validPct??(scan.validPct||"-"),
       user_agent:navigator.userAgent,
     };
+    let spec="";
     try {
-      const spec=buildMakerSpec(payload);
-      await navigator.clipboard?.writeText(spec).catch(()=>{});
-      const subject=encodeURIComponent(`FitFrame Spec ${orderId}`);
-      const fullBody=encodeURIComponent(spec);
-      const emailSpec=fullBody.length>1800?buildMakerSpec(payload,{includeProductionNotes:false}):spec;
-      const body=encodeURIComponent(emailSpec);
-      window.location.assign(`mailto:${MAKER_EMAIL}?subject=${subject}&body=${body}`);
+      spec=buildMakerSpec(payload);
+      const response=await fetch(SUBMIT_ORDER_ENDPOINT,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({order:payload,spec}),
+      });
+      const data=await response.json().catch(()=>({error:"Order submission failed."}));
+      if (!response.ok) throw new Error(data.error||"Order submission failed.");
       clearSession();
       setSent(true);
-    } catch { alert(`Email ${MAKER_EMAIL} and paste the copied spec.`); }
+    } catch (err) {
+      if (spec) await navigator.clipboard?.writeText(spec).catch(()=>{});
+      setSubmitError(`${err?.message||"Order submission failed."} We copied your frame spec. Email ${MAKER_EMAIL} if this keeps happening.`);
+    }
     finally { setSubmitting(false); }
   }
 
@@ -1858,9 +1918,26 @@ export default function FramesSite(){
                   <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{scan.quality?.label||"Rescan"}</div>
                   <div className="cam-label">Let's try that again.</div>
                   <div className="cam-sub">{scan.quality?.reason||"Face the camera straight on in good light and hold still."}</div>
+                  {DEV_MODE&&(
+                    <div className="debug-panel" style={{width:"100%"}}>
+                      <div className="debug-panel-title">Dev measurement review</div>
+                      <div className="debug-list">
+                        <div><span>PD</span><span>{currentMeas.pd} mm</span></div>
+                        <div><span>Left PD</span><span>{currentMeas.pdLeft} mm</span></div>
+                        <div><span>Right PD</span><span>{currentMeas.pdRight} mm</span></div>
+                        <div><span>Bridge</span><span>{currentMeas.bridge} mm</span></div>
+                        <div><span>Face width</span><span>{currentMeas.faceW} mm</span></div>
+                        <div><span>Temple</span><span>{currentMeas.temple} mm</span></div>
+                        <div><span>Lens height</span><span>{currentMeas.lensH} mm</span></div>
+                        <div><span>Quality</span><span>{currentMeas.scanQuality||scan.quality?.label||"Review"}</span></div>
+                        <div><span>Valid frames</span><span>{currentMeas.validPct??scan.validPct}%</span></div>
+                        <div><span>Scale source</span><span>{currentMeas.scaleSource||"iris-fallback"}</span></div>
+                      </div>
+                    </div>
+                  )}
                   <div className="btn-row" style={{marginTop:4}}>
                     <button className="btn btn-primary" onClick={rescan}>Rescan</button>
-                    <button className="btn btn-ghost" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
+                    <button className="btn btn-ghost" onClick={acceptMeasurements}>{DEV_MODE?"Use these measurements":"Continue anyway"} &rarr;</button>
                   </div>
                 </div>
               )}
@@ -1868,27 +1945,47 @@ export default function FramesSite(){
               {(scan.done||confirmedMeas)&&currentMeas&&!scanProcessing&&!scan.quality?.rescan&&(
                 <div className="quality-card">
                   <div className="quality-head">
-                    <div className="quality-title">Measurement review</div>
+                    <div className="quality-title">{DEV_MODE?"Measurement review":"Fit scan captured"}</div>
                     <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{currentMeas.scanQuality||scan.quality?.label||"Review"}</div>
                   </div>
-                  <p className="quality-copy">
-                    {currentMeas.scanReason||scan.quality?.reason||"Review the measured spec before continuing."} Valid frames: {currentMeas.validPct??scan.validPct}%.
-                  </p>
-                  <div className="measure-grid">
-                    {[
-                      ["PD","pd"],["Left PD","pdLeft"],["Right PD","pdRight"],
-                      ["Bridge","bridge"],["Face width","faceW"],["Temple","temple"],["Lens height","lensH"],
-                    ].map(([label,key])=>(
-                      <div className="measure-field" key={key}>
-                        <label>{label}</label>
-                        <input className="measure-input" inputMode="decimal" value={currentMeas[key]||""}
-                          onChange={e=>updateMeasurement(key,e.target.value)}/>
+                  {DEV_MODE?(
+                    <>
+                      <p className="quality-copy">
+                        {currentMeas.scanReason||scan.quality?.reason||"Review the measured spec before continuing."} Valid frames: {currentMeas.validPct??scan.validPct}%.
+                      </p>
+                      <div className="measure-grid">
+                        {[
+                          ["PD","pd"],["Left PD","pdLeft"],["Right PD","pdRight"],
+                          ["Bridge","bridge"],["Face width","faceW"],["Temple","temple"],["Lens height","lensH"],
+                        ].map(([label,key])=>(
+                          <div className="measure-field" key={key}>
+                            <label>{label}</label>
+                            <input className="measure-input" inputMode="decimal" value={currentMeas[key]||""}
+                              onChange={e=>updateMeasurement(key,e.target.value)}/>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                  <div className="measure-help">If the user already knows a measurement, correct it here. These values are what the maker receives.</div>
+                      <div className="debug-panel">
+                        <div className="debug-panel-title">Dev scan data</div>
+                        <div className="debug-list">
+                          <div><span>PD</span><span>{currentMeas.pd} mm</span></div>
+                          <div><span>Left PD</span><span>{currentMeas.pdLeft} mm</span></div>
+                          <div><span>Right PD</span><span>{currentMeas.pdRight} mm</span></div>
+                          <div><span>Bridge</span><span>{currentMeas.bridge} mm</span></div>
+                          <div><span>Face width</span><span>{currentMeas.faceW} mm</span></div>
+                          <div><span>Temple</span><span>{currentMeas.temple} mm</span></div>
+                          <div><span>Lens height</span><span>{currentMeas.lensH} mm</span></div>
+                          <div><span>Scan quality</span><span>{currentMeas.scanQuality||scan.quality?.label||"Review"}</span></div>
+                          <div><span>Valid frame %</span><span>{currentMeas.validPct??scan.validPct}%</span></div>
+                          <div><span>Scale source</span><span>{currentMeas.scaleSource||"iris-fallback"}</span></div>
+                        </div>
+                      </div>
+                    </>
+                  ):(
+                    <p className="quality-copy">We captured the fit data we need. Continue to choose your frame, or scan again if something felt off.</p>
+                  )}
                   <div className="btn-row">
-                    <button className="btn btn-primary" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
+                    <button className="btn btn-primary" onClick={acceptMeasurements}>{DEV_MODE?"Use these measurements":"Continue"} &rarr;</button>
                     <button className="btn btn-ghost" onClick={rescan}>Rescan</button>
                   </div>
                 </div>
@@ -1961,31 +2058,43 @@ export default function FramesSite(){
             </div>
           )}
 
-          {/* Send spec */}
+          {/* Submit order */}
           {step===4&&!sent&&(
             <div className="section">
-              <div className="eyebrow">Send</div>
-              <div className="step-head">Send your maker spec.</div>
-              <p className="step-sub">Your calibrated measurements and frame choice are ready. This opens a pre-filled email to the maker.</p>
+              <div className="eyebrow">Order</div>
+              <div className="step-head">Complete your order.</div>
+              <p className="step-sub">We have your scan and frame choice. Add shipping details and we'll send confirmation here.</p>
               <div className="receipt">
-                <div className="receipt-head">Spec summary - {orderId}</div>
+                <div className="receipt-head">Order summary - {orderId}</div>
                 <div className="receipt-row"><span>Custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
                 {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price===0?"Included":`+$${lensData.price}`}</span></div>}
                 <div className="receipt-total"><span>Total</span><span>${totalPrice}</span></div>
               </div>
-              <input className="field" placeholder="Full name" autoComplete="name"
-                value={customerInfo.name} onChange={e=>setCustomerInfo(p=>({...p,name:e.target.value}))}/>
-              <input className="field" placeholder="Email address" type="email" autoComplete="email"
-                value={customerInfo.email} onChange={e=>setCustomerInfo(p=>({...p,email:e.target.value}))}/>
-              <div className="btn-row" style={{marginTop:10}}>
-                <button className="btn btn-accent"
-                  disabled={!customerInfo.name.trim()||!customerInfo.email.trim()||submitting}
-                  onClick={submitOrder}>
-                  {submitting?"Opening...":"Open email to send"}
-                </button>
-                <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
-              </div>
-              <div className="trust-line"><Padlock/><span>No images are sent. The maker receives measurements only.</span></div>
+              <form onSubmit={e=>{e.preventDefault();submitOrder();}}>
+                <input className="field" placeholder="Full name" autoComplete="name"
+                  value={customerInfo.name} onChange={e=>updateCustomerInfo("name",e.target.value)}/>
+                <input className="field" placeholder="Email address" type="email" autoComplete="email"
+                  value={customerInfo.email} onChange={e=>updateCustomerInfo("email",e.target.value)}/>
+                <input className="field" placeholder="Street address" autoComplete="shipping street-address"
+                  value={customerInfo.street} onChange={e=>updateCustomerInfo("street",e.target.value)}/>
+                <div className="field-grid">
+                  <input className="field field-full" placeholder="City" autoComplete="shipping address-level2"
+                    value={customerInfo.city} onChange={e=>updateCustomerInfo("city",e.target.value)}/>
+                  <input className="field" placeholder="State" autoComplete="shipping address-level1"
+                    value={customerInfo.state} onChange={e=>updateCustomerInfo("state",e.target.value)}/>
+                  <input className="field" placeholder="ZIP" inputMode="numeric" autoComplete="shipping postal-code"
+                    value={customerInfo.zip} onChange={e=>updateCustomerInfo("zip",e.target.value)}/>
+                </div>
+                {submitError&&<div className="form-error" role="alert">{submitError}</div>}
+                <div className="btn-row" style={{marginTop:10}}>
+                  <button className="btn btn-accent" type="submit"
+                    disabled={!customerInfoComplete(customerInfo)||submitting}>
+                    {submitting?"Submitting...":"Place order"}
+                  </button>
+                  <button className="btn btn-ghost" type="button" onClick={()=>setStep(3)}>Back</button>
+                </div>
+              </form>
+              <div className="trust-line"><Padlock/><span>No images are sent. We receive scan measurements and shipping details only.</span></div>
             </div>
           )}
 
@@ -1993,15 +2102,15 @@ export default function FramesSite(){
           {sent&&(
             <div className="section">
               <div className="confirm-id">{orderId}</div>
-              <div className="confirm-greeting">Spec ready,<br/>{firstName}.</div>
+              <div className="confirm-greeting">Order received,<br/>{firstName}.</div>
               <p className="confirm-body">
-                Your maker email opened with the full frame spec. Tap send in your mail app so it reaches <strong>{MAKER_EMAIL}</strong>.
+                We received your frame spec and sent a confirmation to <strong>{customerInfo.email}</strong>.
               </p>
               <div className="next-steps">
                 {[
-                  ["01","Send the email","Your spec is also copied to your clipboard as a backup."],
-                  ["02","We confirm details","You'll hear back within 24 hours with payment and shipping next steps."],
-                  ["03","We print your frames",`Estimated delivery target: ${getETA()}.`],
+                  ["01","Confirmation sent","We emailed a copy of the order details to you."],
+                  ["02","We review the scan","We confirm the frame choice and shipping details before production."],
+                  ["03","We make your frames",`Estimated delivery target: ${getETA()}.`],
                 ].map(([n,label,desc])=>(
                   <div className="next-step" key={n}>
                     <span className="next-step-num">{n}</span>

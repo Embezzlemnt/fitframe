@@ -21,4 +21,13 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'off',
     },
   },
+  {
+    files: ['functions/**/*.js', 'worker/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.serviceworker,
+      },
+    },
+  },
 ])
