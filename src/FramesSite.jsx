@@ -56,6 +56,18 @@ const FACE_ABORT_FRAMES = 8;   // Roughly 250ms of sustained face/pose loss duri
 const FACE_PRESENT_MIN_RATIO = 0.90;
 const POSE_VALID_MIN_RATIO = 0.75;
 const SCALE_HISTORY_FRAMES = 10;
+const DISTANCE_TOO_FAR_PX = 14;
+const DISTANCE_TOO_CLOSE_PX = 60;
+const MOTION_TRACK_POINTS = [468,473,33,263,6,1,10,152,234,454];
+const MOTION_SOFT_RATIO = 0.025;
+const MOTION_REJECT_RATIO = 0.045;
+const QUALITY_KEEP_RATIO = 0.70;
+const LOCK_WINDOW_FRAMES = 5;
+const LOCK_PD_RANGE_MM = 1.0;
+const LOCK_BRIDGE_RANGE_MM = 1.4;
+const EXTEND_SCAN_MS = 3000;
+const HIGH_VARIANCE_PD_STD = 3.0;
+const HIGH_VARIANCE_BRIDGE_STD = 2.0;
 const CREDIT_CARD_WIDTH_MM = 85.6;
 const CREDIT_CARD_HEIGHT_MM = 54;
 const CARD_ASPECT = CREDIT_CARD_WIDTH_MM / CREDIT_CARD_HEIGHT_MM;
@@ -125,7 +137,9 @@ function detectionSimilarity(a,b){
 }
 
 function drawDetectedCard(ctx,detection,stablePct){
-  const quad=detection.quad;
+  const W=ctx.canvas.width;
+  const quad=detection.quad.map(p=>({x:W-p.x,y:p.y}));
+  const center={x:W-detection.center.x,y:detection.center.y};
   ctx.save();
   ctx.lineWidth=3;
   ctx.strokeStyle=detection.confidence>=CARD_MIN_CONFIDENCE?"#4caf7d":"#e5a64a";
@@ -142,7 +156,7 @@ function drawDetectedCard(ctx,detection,stablePct){
   ctx.font="13px 'Geist Mono', monospace";
   ctx.fillStyle="rgba(255,255,255,.9)";
   ctx.textAlign="center";
-  ctx.fillText(stablePct>=1?"SCALE LOCKED":`CARD ${Math.round(stablePct*100)}%`, detection.center.x, detection.center.y);
+  ctx.fillText(stablePct>=1?"SCALE LOCKED":`CARD ${Math.round(stablePct*100)}%`, center.x, center.y);
   ctx.restore();
 }
 
@@ -236,6 +250,24 @@ function calcIrisMetrics(pts, d) {
     tiltRatio,
     isTilted:tiltRatio > TILT_THRESHOLD,
   };
+}
+
+function calcFrameMotion(pts, prevPts) {
+  if (!prevPts) return { ratio:0, score:1 };
+  const faceH = distPt(pts[10], pts[152]) || 1;
+  const deltas = MOTION_TRACK_POINTS.map(i => {
+    const a=pts[i], b=prevPts[i];
+    return a&&b ? Math.hypot(a.x-b.x,a.y-b.y) : null;
+  }).filter(Number.isFinite);
+  const ratio=(median(deltas)||0)/faceH;
+  return { ratio, score:clamp(1 - ratio / MOTION_SOFT_RATIO, 0, 1) };
+}
+
+function distanceCueFromIris(avgDiam) {
+  if (!avgDiam) return null;
+  if (avgDiam > DISTANCE_TOO_CLOSE_PX) return { label:"Move farther", tone:"bad" };
+  if (avgDiam < DISTANCE_TOO_FAR_PX) return { label:"Move closer", tone:"bad" };
+  return { label:"Perfect", tone:"good" };
 }
 
 function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) {
@@ -338,8 +370,8 @@ const SCAN_SEQ = [
   { holdMs:2500, fill:0.88 },
   { holdMs:1500, fill:1.00 },
 ];
+const EXTENDED_SCAN_SEQ = [...SCAN_SEQ, { holdMs:EXTEND_SCAN_MS, fill:1.00 }];
 const PRE_SCAN_SETTLE_MS = 1000;
-const SCAN_DURATION_SECONDS_PLACEHOLDER = 12;
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const css = `
@@ -348,6 +380,7 @@ const css = `
     --bg:#0d0d0d;--bg2:#11110f;--surface:#161615;--surface2:#1d1d1b;--panel:#141413;
     --border:#2b2b28;--border2:#3a3a35;--text:#f2f0e8;--mid:#b0ada2;--dim:#858176;--soft:#555249;
     --accent:#4caf7d;--accent2:#73d7a0;--accent-bg:#0d2117;--red:#ff5a52;--amber:#e5a64a;--scan:#030303;
+    --ease-premium:cubic-bezier(0.32,0.72,0,1);
   }
   html,body{height:100%;}
   html{background:var(--bg);}
@@ -355,18 +388,18 @@ const css = `
   button,input{-webkit-tap-highlight-color:transparent;}
   a{color:inherit;text-decoration:none;}
   .app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);opacity:0;}
-  .app.app-ready{animation:pageFade .4s ease-out forwards;}
+  .app.app-ready{animation:pageFade .4s var(--ease-premium) forwards;}
   @keyframes pageFade{from{opacity:0}to{opacity:1}}
   .app.intro-active .site-header .logo{opacity:0;}
-  .intro-logo{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);pointer-events:none;animation:logoCollapse .6s cubic-bezier(.4,0,.2,1) forwards;}
+  .intro-logo{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);pointer-events:none;animation:logoCollapse .7s var(--ease-premium) forwards;}
   @keyframes logoCollapse{to{left:max(18px,calc(50% - 213px));top:27px;transform:none;font-size:15px;font-weight:500;letter-spacing:-.02em;}}
   .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:flex-start;}
   .logo{font:inherit;font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1;cursor:pointer;background:transparent;border:0;padding:0;}
   .logo:hover{color:#fff;}
   .logo-dot{color:var(--accent);}
   .container{width:100%;max-width:462px;padding:0 18px;}
-  .section{margin-top:20px;padding:22px 18px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.25);animation:fu .34s cubic-bezier(.4,0,.2,1) both;}
-  @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .section{margin-top:20px;padding:22px 18px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.25);animation:stepEnter .4s var(--ease-premium) both;}
+  @keyframes stepEnter{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
   .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
   .display{font-size:34px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.02;margin-bottom:12px;max-width:330px;}
   .display em{font-style:normal;color:var(--accent);}
@@ -380,7 +413,7 @@ const css = `
   .about-row{padding:15px 0;border-bottom:1px solid var(--border);}
   .about-row h2{font-size:13px;font-weight:500;color:var(--text);margin-bottom:5px;letter-spacing:-.01em;}
   .about-row p{font-size:12px;color:var(--dim);line-height:1.55;font-weight:300;}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:12px 18px;font-family:'Geist',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:none;border-radius:9px;transition:background .16s,border-color .16s,color .16s,transform .16s;white-space:nowrap;touch-action:manipulation;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:12px 18px;font-family:'Geist',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:none;border-radius:9px;transition:background .18s var(--ease-premium),border-color .18s var(--ease-premium),color .18s var(--ease-premium),transform .18s var(--ease-premium);white-space:nowrap;touch-action:manipulation;}
   .btn-primary{background:var(--text);color:#0d0d0d;}
   .btn-primary:hover{background:#ffffff;transform:translateY(-1px);}
   .btn-accent{background:var(--accent);color:#07110b;}
@@ -390,12 +423,17 @@ const css = `
   .btn:disabled{opacity:.28;cursor:not-allowed;transform:none!important;}
   .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
   .btn-row .btn{flex:1;min-width:128px;}
-  .cam-outer{width:100%;border-radius:12px;overflow:hidden;background:var(--scan);position:relative;margin-bottom:18px;border:1px solid var(--border2);}
+  .cam-outer{width:100%;border-radius:12px;overflow:hidden;background:var(--scan);position:relative;margin-bottom:18px;border:1px solid var(--border2);transition:border-color .22s var(--ease-premium),box-shadow .22s var(--ease-premium);}
+  .cam-outer.distance-good{border-color:rgba(76,175,125,.72);box-shadow:0 0 0 1px rgba(76,175,125,.18),0 0 24px rgba(76,175,125,.12);}
+  .cam-outer.distance-bad{border-color:rgba(255,90,82,.68);box-shadow:0 0 0 1px rgba(255,90,82,.12);}
   .cam-inner{width:100%;aspect-ratio:4/3;position:relative;}
   .cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;}
-  .cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none;z-index:1;}
+  .cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;}
   .cam-vignette{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at center,transparent 54%,rgba(0,0,0,.34) 100%);}
   .face-guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;filter:drop-shadow(0 0 7px rgba(76,175,125,.55));}
+  .distance-pill{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;padding:5px 9px;border-radius:999px;background:rgba(0,0,0,.54);font-size:11px;font-family:'Geist Mono',monospace;letter-spacing:.04em;text-transform:uppercase;pointer-events:none;}
+  .distance-pill.good{color:var(--accent);}
+  .distance-pill.bad{color:var(--red);}
   .cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:5;padding:28px 16px 15px;background:linear-gradient(transparent,rgba(0,0,0,.68));display:flex;flex-direction:column;align-items:center;gap:4px;}
   @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
   @keyframes lockIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
@@ -438,11 +476,11 @@ const css = `
   .q-counter{font-family:'Geist Mono',monospace;font-size:11px;color:var(--soft);letter-spacing:.06em;}
   .q-label{font-size:19px;font-weight:500;color:var(--text);letter-spacing:-.025em;line-height:1.28;margin-bottom:16px;}
   .choices{display:flex;flex-direction:column;gap:8px;}
-  .choice{min-height:48px;padding:14px 16px;border:1px solid var(--border2);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:left;font-family:'Geist',sans-serif;font-size:14px;color:var(--text);font-weight:300;line-height:1.4;width:100%;transition:border-color .12s,background .12s,color .12s,transform .12s;}
+  .choice{min-height:48px;padding:14px 16px;border:1px solid var(--border2);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:left;font-family:'Geist',sans-serif;font-size:14px;color:var(--text);font-weight:300;line-height:1.4;width:100%;transition:border-color .18s var(--ease-premium),background .18s var(--ease-premium),color .18s var(--ease-premium),transform .18s var(--ease-premium);}
   .choice:active{transform:scale(.985);}
   .choice.chosen{border-color:var(--accent);background:var(--accent-bg);color:var(--text);}
   .lens-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:22px;}
-  .lens-row{min-height:126px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);transition:border-color .12s,background .12s,transform .12s;}
+  .lens-row{min-height:126px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);transition:border-color .18s var(--ease-premium),background .18s var(--ease-premium),transform .18s var(--ease-premium);}
   .lens-row:active{transform:scale(.985);}
   .lens-row.sel{border-color:var(--accent);background:var(--accent-bg);}
   .lens-info{flex:1;}
@@ -460,7 +498,7 @@ const css = `
   .vto-note-text{font-size:11px;color:var(--dim);font-weight:300;line-height:1.5;}
   .vto-note-text strong{color:var(--text);font-weight:400;}
   .frame-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-  .frame-tile{min-height:138px;padding:16px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:center;transition:border-color .14s,background .14s,box-shadow .14s,transform .12s;position:relative;}
+  .frame-tile{min-height:138px;padding:16px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:center;transition:border-color .18s var(--ease-premium),background .18s var(--ease-premium),box-shadow .18s var(--ease-premium),transform .18s var(--ease-premium);position:relative;}
   .frame-tile:active{transform:scale(.985);}
   .frame-tile:hover{border-color:var(--border2);}
   .frame-tile.sel{border-color:var(--accent);background:var(--accent-bg);box-shadow:0 0 0 1px rgba(76,175,125,.18) inset;}
@@ -474,7 +512,7 @@ const css = `
   .receipt-head{padding:13px 16px;border-bottom:1px solid var(--border);font-size:10px;font-family:'Geist Mono',monospace;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
   .receipt-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--dim);font-weight:300;}
   .receipt-total{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;border-top:1px solid var(--border);font-size:15px;font-weight:500;color:var(--text);}
-  .field{width:100%;min-height:46px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:16px;font-family:'Geist',sans-serif;outline:none;margin-bottom:8px;font-weight:300;transition:border-color .15s;-webkit-appearance:none;}
+  .field{width:100%;min-height:46px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:16px;font-family:'Geist',sans-serif;outline:none;margin-bottom:8px;font-weight:300;transition:border-color .18s var(--ease-premium);-webkit-appearance:none;}
   .field::placeholder{color:var(--soft);}
   .field:focus{border-color:var(--dim);}
   .trust-line{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:13px;font-size:11px;color:var(--soft);font-weight:300;}
@@ -613,6 +651,10 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const faceLostRef    = useRef(0);
   const poseLostRef    = useRef(0);
   const discardRef     = useRef({});
+  const lastMotionPtsRef = useRef(null);
+  const stableWindowRef = useRef([]);
+  const lockedSampleRef = useRef(null);
+  const scanExtendedRef = useRef(false);
   const cardStableRef  = useRef(0);
   const lastCardRef    = useRef(null);
   const cardLockedRef  = useRef(false);
@@ -640,6 +682,8 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   const [validPct,     setValidPct]     = useState(0);
   const [cardStatus,   setCardStatus]   = useState({label:"Loading card detector",stablePct:0,reason:""});
   const [debugInfo,    setDebugInfo]    = useState(null);
+  const [distanceHint, setDistanceHint] = useState(null);
+  const [extraScanActive,setExtraScanActive] = useState(false);
 
   useEffect(()=>{ scanningRef.current=scanning; },[scanning]);
   useEffect(()=>{ doneRef.current=done; },[done]);
@@ -682,6 +726,8 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     facePresentFramesRef.current=0; poseValidFramesRef.current=0;
     faceLostRef.current=0; poseLostRef.current=0;
     discardRef.current={};
+    lastMotionPtsRef.current=null; stableWindowRef.current=[]; lockedSampleRef.current=null;
+    scanExtendedRef.current=false; setExtraScanActive(false);
   },[]);
 
   const abortActiveScan=useCallback((reason="Lost your face — let's restart")=>{
@@ -690,9 +736,9 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     clearScanCanvas();
     setSeqIdx(-1); setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
-    setValidPct(0); setAutoStartPct(0); setPoseHint(null); setFacePresent(false);
+    setValidPct(0); setAutoStartPct(0); setPoseHint(null); setFacePresent(false); setDistanceHint(null);
     setDebugInfo(null);
-    setCardStatus({label:cvReady?"Position card":"Loading card detector",stablePct:0,reason:"Both long sides visible, card facing the camera."});
+    setCardStatus({label:cvReady?"Position card":"Loading card detector",stablePct:0,reason:"The whole front of the card should face the camera."});
     resetSampleState();
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
     holdRef.current=0; autoStarted.current=false;
@@ -712,6 +758,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,W,H);
     setFacePresent(false);
+    setDistanceHint(null);
     setPoseHint(null);
     setAutoStartPct(0);
 
@@ -738,7 +785,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       lastCardRef.current=detection;
       const stablePct=cardStableRef.current/CARD_STABLE_FRAMES;
       drawDetectedCard(ctx,detection,stablePct);
-      const reason=!highConfidence?"Both long sides visible, card facing the camera.":!flatEnough?"Hold the card flatter.":"Hold still.";
+      const reason=!highConfidence?"The whole front of the card should face the camera.":!flatEnough?"Hold the card flatter.":"Hold still.";
       setCardStatus({label:stablePct>=1?"Scale locked":"Card detected",stablePct,reason,confidence:detection.confidence});
       if (stablePct>=1){
         cardLockedRef.current=true;
@@ -756,7 +803,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     } else {
       cardStableRef.current=0;
       lastCardRef.current=null;
-      setCardStatus({label:"Position card",stablePct:0,reason:"Both long sides visible, card facing the camera."});
+      setCardStatus({label:"Position card",stablePct:0,reason:"The whole front of the card should face the camera."});
     }
   },[canvasRef,cvReady,onCardLocked,onCardSkipped,videoRef]);
 
@@ -778,6 +825,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
 
     if (!results.multiFaceLandmarks?.length){
       holdRef.current=0; setFacePresent(false); setPoseHint(null);
+      setDistanceHint(null);
       if (!autoStarted.current) setAutoStartPct(0);
       if (scanningRef.current){
         totalRef.current++;
@@ -796,6 +844,9 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     const d=(a,b)=>Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
     const pose=validatePose(lm);
     const iris=calcIrisMetrics(pts,d);
+    const motion=calcFrameMotion(pts,lastMotionPtsRef.current);
+    lastMotionPtsRef.current=pts;
+    setDistanceHint(distanceCueFromIris(iris.avgDiam));
     const debugScale=(scaleRef.current || (iris.valid ? IRIS_MM / iris.avgDiam : null));
     setDebugInfo({
       lIrisPx:iris.lId?Number(iris.lId.toFixed(1)):null,
@@ -836,10 +887,10 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     if (scanningRef.current&&iris.valid){
       const ink="#4caf7d"; // LOCKED — must match --accent
       [[pts[468],lId],[pts[473],rId]].forEach(([c,diam])=>{
-        ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
+        ctx.beginPath(); ctx.arc(W-c.x,c.y,diam/2,0,Math.PI*2);
         ctx.strokeStyle=ink; ctx.lineWidth=1.5; ctx.stroke();
       });
-      ctx.beginPath(); ctx.moveTo(pts[468].x,pts[468].y); ctx.lineTo(pts[473].x,pts[473].y);
+      ctx.beginPath(); ctx.moveTo(W-pts[468].x,pts[468].y); ctx.lineTo(W-pts[473].x,pts[473].y);
       ctx.strokeStyle=ink; ctx.lineWidth=.75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
     }
 
@@ -847,9 +898,45 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       if (!iris.valid){
         markDiscard(iris.reason);
       } else {
+        if (motion.ratio > MOTION_REJECT_RATIO) {
+          markDiscard("motion");
+          return;
+        }
         const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef);
         if (m){
-          samplesRef.current.push({...m,scaleSource:scaleSourceRef.current});
+          const irisScore=clamp(1-(iris.irisDelta||0)/IRIS_MISMATCH_MAX,0,1);
+          const tiltScore=iris.isTilted ? .55 : 1;
+          const qualityScore=clamp(motion.score*.5+irisScore*.3+tiltScore*.2,0,1);
+          if (qualityScore < .22) {
+            markDiscard("quality");
+            return;
+          }
+          const sample={
+            ...m,
+            sampleWeight:(m.sampleWeight||1)*(.45+qualityScore*.55),
+            qualityScore:Number(qualityScore.toFixed(3)),
+            motionRatio:Number(motion.ratio.toFixed(4)),
+            scaleSource:scaleSourceRef.current,
+          };
+          samplesRef.current.push(sample);
+          if (sample.qualityScore >= .55) {
+            stableWindowRef.current=[...stableWindowRef.current,sample].slice(-LOCK_WINDOW_FRAMES);
+            if (!lockedSampleRef.current&&stableWindowRef.current.length===LOCK_WINDOW_FRAMES) {
+              const pds=stableWindowRef.current.map(x=>parseFloat(x.pd));
+              const bridges=stableWindowRef.current.map(x=>parseFloat(x.bridge));
+              const pdSpread=Math.max(...pds)-Math.min(...pds);
+              const bridgeSpread=Math.max(...bridges)-Math.min(...bridges);
+              if (pdSpread<=LOCK_PD_RANGE_MM&&bridgeSpread<=LOCK_BRIDGE_RANGE_MM) {
+                lockedSampleRef.current=stableWindowRef.current
+                  .slice()
+                  .sort((a,b)=>(b.qualityScore||0)-(a.qualityScore||0))[0];
+                fillRef.current=Math.max(fillRef.current,.92);
+                setFill(fillRef.current);
+                setQuality({label:"Clean scan",rescan:false,reason:"Stable frame locked."});
+                setSeqIdx(i=>Math.max(i,SCAN_SEQ.length-1));
+              }
+            }
+          }
           noseXRef.current.push(lm[1].x);
           validRef.current++;
         } else {
@@ -862,6 +949,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
           rIrisPx:iris.rId?Number(iris.rId.toFixed(1)):null,
           irisDelta:iris.irisDelta?Number(iris.irisDelta.toFixed(3)):null,
           tiltRatio:iris.tiltRatio?Number(iris.tiltRatio.toFixed(3)):null,
+          motion:Number(motion.ratio.toFixed(4)),
         });
       }
     }
@@ -911,23 +999,56 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
   },[done,resetSampleState,scanning]);
 
   useEffect(()=>{
-    if (seqIdx<0||seqIdx>=SCAN_SEQ.length) return;
-    const step=SCAN_SEQ[seqIdx], start=fillRef.current, end=step.fill, t0=performance.now();
+    const activeSeq=extraScanActive?EXTENDED_SCAN_SEQ:SCAN_SEQ;
+    if (seqIdx<0||seqIdx>=activeSeq.length) return;
+    const step=activeSeq[seqIdx], start=fillRef.current, end=step.fill, t0=performance.now();
     let raf;
     const animate=now=>{
       const t=Math.min((now-t0)/step.holdMs,1);
       const v=start+(end-start)*t;
       fillRef.current=v; setFill(v);
       if (t<1){ raf=requestAnimationFrame(animate); }
-      else if (seqIdx<SCAN_SEQ.length-1){ setSeqIdx(i=>i+1); }
+      else if (seqIdx<activeSeq.length-1){ setSeqIdx(i=>i+1); }
       else {
-        setDone(true);
-        clearScanCanvas();
         const s=samplesRef.current;
         const vp=totalRef.current>0?validRef.current/totalRef.current:0;
         const facePct=totalRef.current>0?facePresentFramesRef.current/totalRef.current:0;
         const posePct=totalRef.current>0?poseValidFramesRef.current/totalRef.current:0;
         setValidPct(Math.round(vp*100));
+        const keepQualitySamples=(arr)=>{
+          const keep=Math.max(MIN_VALID_SAMPLES,Math.ceil(arr.length*QUALITY_KEEP_RATIO));
+          const byQuality=[...arr].sort((a,b)=>(b.qualityScore||0)-(a.qualityScore||0)).slice(0,keep);
+          const sorted=[...byQuality].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
+          const trim=Math.floor(sorted.length*.15);
+          return trim>0&&sorted.length>(trim*2+MIN_VALID_SAMPLES-1)
+            ?sorted.slice(trim,sorted.length-trim)
+            :sorted;
+        };
+        const weightedAverage=(arr,k)=>{
+          const total=arr.reduce((sum,m)=>sum+parseFloat(m[k])*(m.sampleWeight||1),0);
+          const weights=arr.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
+          return total/weights;
+        };
+        const weightedDeviation=(arr,k)=>{
+          const mean=weightedAverage(arr,k);
+          const weights=arr.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
+          const variance=arr.reduce((sum,m)=>sum+((parseFloat(m[k])-mean)**2)*(m.sampleWeight||1),0)/weights;
+          return Math.sqrt(variance);
+        };
+        const preliminary=s.length>=MIN_VALID_SAMPLES?keepQualitySamples(s):[];
+        if (!lockedSampleRef.current&&!scanExtendedRef.current&&preliminary.length>=MIN_VALID_SAMPLES) {
+          const pdStd=weightedDeviation(preliminary,"pd");
+          const bridgeStd=weightedDeviation(preliminary,"bridge");
+          if (pdStd>HIGH_VARIANCE_PD_STD||bridgeStd>HIGH_VARIANCE_BRIDGE_STD) {
+            scanExtendedRef.current=true;
+            setExtraScanActive(true);
+            setQuality({label:"Just a moment more",rescan:false,reason:"Collecting a few steadier frames."});
+            setSeqIdx(SCAN_SEQ.length);
+            return;
+          }
+        }
+        setDone(true);
+        clearScanCanvas();
         if (s.length<MIN_VALID_SAMPLES||facePct<FACE_PRESENT_MIN_RATIO||posePct<POSE_VALID_MIN_RATIO){
           setQuality({label:"No data captured",rescan:true,reason:"Lost your face — let's restart"});
           setMeasurements(null);
@@ -938,23 +1059,10 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
             posePct:Number(posePct.toFixed(2)),
           });
         } else {
-          const sorted=[...s].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
-          const trim=Math.floor(sorted.length*.15);
-          const good=trim>0&&sorted.length>(trim*2+MIN_VALID_SAMPLES-1)
-            ?sorted.slice(trim,sorted.length-trim)
-            :sorted;
-          const weightedAvg=k=>{
-            const total=good.reduce((sum,m)=>sum+parseFloat(m[k])*(m.sampleWeight||1),0);
-            const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
-            return total/weights;
-          };
-          const weightedStd=k=>{
-            const vals=good.map(m=>parseFloat(m[k]));
-            const mean=weightedAvg(k);
-            const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
-            const variance=vals.reduce((sum,v,i)=>sum+((v-mean)**2)*(good[i].sampleWeight||1),0)/weights;
-            return Math.sqrt(variance);
-          };
+          const lockedSample=lockedSampleRef.current;
+          const good=lockedSample?[lockedSample]:keepQualitySamples(s);
+          const weightedAvg=k=>weightedAverage(good,k);
+          const weightedStd=k=>lockedSample?0:weightedDeviation(good,k);
           const pd=weightedAvg("pd"),br=weightedAvg("bridge"),face=weightedAvg("faceW");
           const lMono=weightedAvg("pdLeft"),rMono=weightedAvg("pdRight");
           const monoSum=lMono+rMono;
@@ -965,9 +1073,11 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
           const bridgeStd=weightedStd("bridge");
           const hardOutOfRange=!directPdSane&&!monoSumSane;
           const reviewRangeIssue=br<BRIDGE_MIN||br>BRIDGE_MAX||Math.abs(lMono-rMono)>MONOCULAR_SYMMETRY;
-          setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:s[0]?.scaleSource||scaleSourceRef.current});
+          setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:good[0]?.scaleSource||scaleSourceRef.current});
           const nextQuality=hardOutOfRange
             ?{label:"Out of range",rescan:false,reason:"The PD landed outside the frame-fitting range. Review before continuing."}
+            :lockedSample
+              ?{label:"Clean scan",rescan:false,reason:"Stable reference frame locked from matching frames."}
             :s.length<MIN_VALID_SAMPLES||vp<.25
               ?{label:"Double-check these",rescan:false,reason:"We captured a small sample. Double-check the numbers below."}
               :reviewRangeIssue||pdStd>4.5||bridgeStd>3
@@ -981,6 +1091,8 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
             pdStd:Number(pdStd.toFixed(2)),
             bridgeStd:Number(bridgeStd.toFixed(2)),
             sampleCount:s.length,
+            averagedSamples:good.length,
+            lockedReference:!!lockedSample,
             facePct:Number(facePct.toFixed(2)),
             posePct:Number(posePct.toFixed(2)),
             quality:nextQuality.label,
@@ -990,19 +1102,19 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     };
     raf=requestAnimationFrame(animate);
     return ()=>cancelAnimationFrame(raf);
-  },[clearScanCanvas,logScanDebug,seqIdx]);
+  },[clearScanCanvas,extraScanActive,logScanDebug,seqIdx]);
 
   const reset=useCallback(()=>{
     setSeqIdx(-1); setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
-    setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
-    setCardStatus({label:cardLoadFailedRef.current?"Continuing without card":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:""});
+    setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDistanceHint(null); setDebugInfo(null);
+    setCardStatus({label:cardLoadFailedRef.current?"Continuing without card":cvReady?"Find card outline":"Loading card detector",stablePct:0,reason:"The whole front of the card should face the camera."});
     resetSampleState();
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
     holdRef.current=0; autoStarted.current=false; abortingRef.current=false;
   },[cvReady,resetSampleState]);
 
-  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset};
+  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,distanceHint,debugInfo,reset};
 }
 
 // ─── FaceGuide ────────────────────────────────────────────────────────────────
@@ -1010,6 +1122,7 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
   const VW=400,VH=300,cx=200,cy=150,rx=78,ry=108;
   const h=((rx-ry)/(rx+ry))**2;
   const circ=Math.PI*(rx+ry)*(1+(3*h)/(10+Math.sqrt(4-3*h)));
+  const ovalPath=`M ${cx} ${cy-ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy+ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy-ry}`;
   const bo=facePresent?.62:.2;
   const activeFill=clamp(done?0:fill,0,1);
   return (
@@ -1020,12 +1133,12 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
           strokeDasharray={`${autoStartPct*circ*1.1} 9999`}
           strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>
       )}
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
-        stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" vectorEffect="non-scaling-stroke" style={{transition:"stroke .4s ease"}}/>
-      {activeFill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="#4caf7d" strokeWidth="3"
-        pathLength="1" strokeDasharray="1" strokeDashoffset={1-activeFill}
-        strokeLinecap="round" strokeOpacity="1" vectorEffect="non-scaling-stroke"
-        transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dashoffset .1s linear"}}/>}
+      <path d={ovalPath} fill="none"
+        stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" vectorEffect="non-scaling-stroke" style={{transition:"stroke .4s var(--ease-premium)"}}/>
+      {activeFill>0&&<path d={ovalPath} fill="none" stroke="#4caf7d" strokeWidth="5"
+        strokeDasharray={`${circ} ${circ}`} strokeDashoffset={circ*(1-activeFill)}
+        strokeLinecap="round" strokeOpacity="1" vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision"
+        style={{transition:"stroke-dashoffset .1s linear"}}/>}
       {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
         fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
       {!done&&showCard&&(
@@ -1043,13 +1156,14 @@ function ScanSetupDiagram(){
   return (
     <div className="setup-diagram" aria-hidden="true">
       <svg viewBox="0 0 360 195" fill="none">
-        <path d="M58 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
-        <path d="M220 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
-        <circle cx="180" cy="78" r="43" stroke="rgba(242,240,232,.72)" strokeWidth="2"/>
-        <path d="M156 86c11 9 37 9 48 0" stroke="rgba(242,240,232,.5)" strokeWidth="1.5" strokeLinecap="round"/>
-        <rect x="116" y="133" width="128" height="50" rx="7" stroke="#4caf7d" strokeWidth="2"/>
-        <path d="M180 121v12" stroke="#4caf7d" strokeWidth="2" strokeLinecap="round"/>
-        <text x="180" y="164" textAnchor="middle" fill="rgba(242,240,232,.72)" fontSize="10" fontFamily="'Geist Mono',monospace">CARD</text>
+        <rect x="28" y="26" width="304" height="143" rx="16" stroke="rgba(242,240,232,.1)"/>
+        <circle cx="180" cy="69" r="35" stroke="rgba(242,240,232,.72)" strokeWidth="2"/>
+        <path d="M163 76c8 6 26 6 34 0" stroke="rgba(242,240,232,.5)" strokeWidth="1.5" strokeLinecap="round"/>
+        <path d="M135 127c9-18 27-28 45-28s36 10 45 28" stroke="rgba(242,240,232,.34)" strokeWidth="2" strokeLinecap="round"/>
+        <rect x="106" y="122" width="148" height="58" rx="7" fill="rgba(76,175,125,.06)" stroke="#4caf7d" strokeWidth="2.4"/>
+        <path d="M121 140h118M121 153h74" stroke="rgba(76,175,125,.42)" strokeWidth="1.4" strokeLinecap="round"/>
+        <path d="M180 104v18" stroke="#4caf7d" strokeWidth="2" strokeLinecap="round"/>
+        <circle cx="180" cy="104" r="3" fill="#4caf7d"/>
       </svg>
     </div>
   );
@@ -1320,7 +1434,7 @@ export default function FramesSite(){
   },[]);
   useEffect(()=>{
     requestAnimationFrame(()=>setIntroReady(true));
-    const timer=setTimeout(()=>setIntroDone(true),720);
+    const timer=setTimeout(()=>setIntroDone(true),780);
     return ()=>clearTimeout(timer);
   },[]);
   useEffect(()=>{
@@ -1554,8 +1668,9 @@ export default function FramesSite(){
   const firstName=customerInfo.name.trim().split(" ")[0]||"there";
   const cameraActive=camReady||camRequesting;
   const showScanPrep=!scanPrepDismissed&&!scan.done&&!currentMeas&&!camErr&&!cameraActive;
+  const extendingScan=scanning&&scan.quality?.label==="Just a moment more";
   const scanTitle=scanning
-    ?"Stay still."
+    ?extendingScan?"Just a moment more.":"Stay still."
     :scanProcessing
       ?"Scan complete."
     :scanSettling
@@ -1573,7 +1688,7 @@ export default function FramesSite(){
       :!camReady
           ?"Opening camera."
           :!calibration
-            ?"Hold your card like you're about to swipe it."
+            ?"Hold a credit card flat under your chin."
             :"Ready to measure.";
   const scanCopy=scanning
     ?""
@@ -1586,13 +1701,13 @@ export default function FramesSite(){
     :scan.done
       ?"Review the scan before continuing."
       :scanRestartCopy
-        ?"Hold your card like you're about to swipe it — landscape, flat under your chin."
+        ?"The whole front of the card should face the camera."
       :showScanPrep
         ?""
       :camRequesting
         ?"Allow camera access to continue."
       :camReady&&!calibration
-          ?"Landscape, flat under your chin. Both long sides visible, card facing the camera."
+          ?"The whole front of the card should face the camera."
           :camReady
             ?calibration?.skippedCard
               ?"Continuing without card."
@@ -1632,24 +1747,19 @@ export default function FramesSite(){
 
               {showScanPrep&&(
                 <div className="cam-placeholder pre-scan-card">
-                  <div className="pre-scan-line">This scan takes about {SCAN_DURATION_SECONDS_PLACEHOLDER} seconds.</div>
-                  <div className="pre-scan-line">Have a credit or ID card ready.</div>
+                  <div className="pre-scan-line">Two things first.</div>
                   <ScanSetupDiagram/>
-                  <div className="pre-scan-support">Hold your card like you're about to swipe it — landscape, flat under your chin.</div>
-                  <div className="pre-scan-support">Both long sides visible, card facing the camera.</div>
-                  <div className="pre-scan-support">It gives the scan a much better size reference.</div>
                   <div className="setup-list">
-                    <div>Arm's length from your phone</div>
-                    <div>Good overhead light, face it directly</div>
-                    <div>Card landscape, flat, below your chin</div>
+                    <div>A credit card held under your chin.</div>
+                    <div>Good overhead light.</div>
                   </div>
                   <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready</button>
-                  <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
+                  <div className="privacy-inline"><Padlock/><span>Scan stays on this device.</span></div>
                 </div>
               )}
 
               {cameraActive&&!scan.done&&(
-                <div className="cam-outer">
+                <div className={`cam-outer ${scan.distanceHint?.tone==="good"?"distance-good":scan.distanceHint?.tone==="bad"?"distance-bad":""}`}>
                   <div className="cam-inner">
                     <video ref={videoRef} autoPlay playsInline muted/>
                     <canvas ref={canvasRef}/>
@@ -1666,6 +1776,9 @@ export default function FramesSite(){
                         <div className="settle-intro-main">Find your spot</div>
                       </div>
                     )}
+                    {scan.distanceHint&&scan.facePresent&&!cameraIntro&&(
+                      <div className={`distance-pill ${scan.distanceHint.tone}`}>{scan.distanceHint.label}</div>
+                    )}
                     {debugEnabled&&(
                       <div className="debug-overlay">
                         <div>L iris: {scan.debugInfo?.lIrisPx ?? "-"}px</div>
@@ -1679,11 +1792,11 @@ export default function FramesSite(){
                     )}
                     <div className="cam-bottom">
                       {scanning
-                        ?<div className="scan-inst">Hold steady</div>
+                        ?<div className="scan-inst">{extendingScan?"Just a moment more":"Hold steady"}</div>
                         :scanSettling
                           ?<div className="scan-inst">Find your spot</div>
                         :!calibration
-                          ?<div className="scan-inst">{scan.cardStatus?.label==="Scale locked"?"Scale locked.":scan.cardStatus?.reason||"Both long sides visible, card facing the camera."}</div>
+                          ?<div className="scan-inst">{scan.cardStatus?.label==="Scale locked"?"Scale locked.":scan.cardStatus?.reason||"The whole front of the card should face the camera."}</div>
                           :scan.poseHint
                           ?<div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
                           :scan.autoStartPct>0&&scan.autoStartPct<1
