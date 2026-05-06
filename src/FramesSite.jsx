@@ -364,14 +364,14 @@ const STYLE_QUESTIONS = [
 const DEFAULT_LENS = { id:"bluelight", label:"Blue Light", price:0 };
 
 const SCAN_SEQ = [
-  { holdMs:1500, fill:0.08 },
-  { holdMs:3000, fill:0.35 },
-  { holdMs:3000, fill:0.65 },
-  { holdMs:2500, fill:0.88 },
+  { holdMs:1000, fill:0.14 },
+  { holdMs:1500, fill:0.36 },
+  { holdMs:1500, fill:0.58 },
+  { holdMs:1500, fill:0.80 },
   { holdMs:1500, fill:1.00 },
 ];
 const EXTENDED_SCAN_SEQ = [...SCAN_SEQ, { holdMs:EXTEND_SCAN_MS, fill:1.00 }];
-const PRE_SCAN_SETTLE_MS = 1000;
+const PRE_SCAN_SETTLE_MS = 1500;
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const css = `
@@ -380,7 +380,7 @@ const css = `
     --bg:#0d0d0d;--bg2:#11110f;--surface:#161615;--surface2:#1d1d1b;--panel:#141413;
     --border:#2b2b28;--border2:#3a3a35;--text:#f2f0e8;--mid:#b0ada2;--dim:#858176;--soft:#555249;
     --accent:#4caf7d;--accent2:#73d7a0;--accent-bg:#0d2117;--red:#ff5a52;--amber:#e5a64a;--scan:#030303;
-    --ease-premium:cubic-bezier(0.32,0.72,0,1);
+    --ease-premium:cubic-bezier(0.16,1,0.3,1);
   }
   html,body{height:100%;}
   html{background:var(--bg);}
@@ -391,8 +391,8 @@ const css = `
   .app.app-ready{animation:pageFade .4s var(--ease-premium) forwards;}
   @keyframes pageFade{from{opacity:0}to{opacity:1}}
   .app.intro-active .site-header .logo{opacity:0;}
-  .intro-logo{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);pointer-events:none;animation:logoCollapse .7s var(--ease-premium) forwards;}
-  @keyframes logoCollapse{to{left:max(18px,calc(50% - 213px));top:27px;transform:none;font-size:15px;font-weight:500;letter-spacing:-.02em;}}
+  .intro-logo{position:fixed;z-index:50;left:max(18px,calc(50% - 213px));top:27px;font-size:15px;font-weight:500;letter-spacing:-.02em;line-height:1;color:var(--text);pointer-events:none;transform-origin:center center;animation:logoEnter .7s var(--ease-premium) both;}
+  @keyframes logoEnter{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
   .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:flex-start;}
   .logo{font:inherit;font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1;cursor:pointer;background:transparent;border:0;padding:0;}
   .logo:hover{color:#fff;}
@@ -408,7 +408,7 @@ const css = `
   .step-sub{font-size:13px;color:var(--dim);line-height:1.6;font-weight:300;margin-bottom:18px;letter-spacing:-.01em;}
   .privacy-inline{display:flex;align-items:flex-start;justify-content:center;gap:6px;max-width:300px;margin-top:2px;color:var(--soft);font-size:11px;font-weight:300;line-height:1.45;}
   .privacy-inline svg{flex:0 0 auto;margin-top:1px;opacity:.7;}
-  .logo-large{display:inline-block;font-size:34px;letter-spacing:-.04em;margin-bottom:18px;}
+  .logo-large{display:inline-block;font-size:34px;letter-spacing:-.04em;margin-bottom:18px;transform-origin:center center;animation:logoEnter .7s var(--ease-premium) both;}
   .about-list{border-top:1px solid var(--border);margin-top:20px;}
   .about-row{padding:15px 0;border-bottom:1px solid var(--border);}
   .about-row h2{font-size:13px;font-weight:500;color:var(--text);margin-bottom:5px;letter-spacing:-.01em;}
@@ -438,14 +438,14 @@ const css = `
   @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
   @keyframes lockIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}
-  .face-intro{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s ease both;}
+  .face-intro{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s var(--ease-premium) both;}
   .face-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;line-height:1.08;}
   .face-intro-sub{margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);font-weight:300;}
   @keyframes introFade{0%{opacity:0}12%{opacity:1}72%{opacity:1}100%{opacity:0}}
-  .settle-intro{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.1);pointer-events:none;animation:settleFade 1s ease both;}
+  .settle-intro{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.1);pointer-events:none;animation:settleFade 1.5s var(--ease-premium) both;}
   .settle-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;}
   @keyframes settleFade{0%{opacity:0}18%{opacity:1}82%{opacity:1}100%{opacity:0}}
-  .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s ease both;}
+  .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s var(--ease-premium) both;}
   .scan-note{font-size:12px;color:var(--dim);line-height:1.55;text-align:center;margin:-4px auto 16px;max-width:310px;font-weight:300;}
   .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--dim);}
   .calibration-strip strong{color:var(--accent);font-weight:500;}
@@ -530,7 +530,7 @@ const css = `
   .processing-logo{font-size:16px;font-weight:500;color:var(--text);letter-spacing:-.02em;}
   .processing-copy{font-size:13px;color:var(--dim);font-weight:300;}
   .processing-track{width:100%;height:4px;border-radius:999px;background:var(--border);overflow:hidden;}
-  .processing-fill{height:100%;width:100%;background:var(--accent);border-radius:999px;transform-origin:left center;animation:processFill 2s ease-in-out both;}
+  .processing-fill{height:100%;width:100%;background:var(--accent);border-radius:999px;transform-origin:left center;animation:processFill 2s var(--ease-premium) both;}
   @keyframes processFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   .verification-strip{width:100%;max-width:420px;margin:22px auto 0;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;color:var(--soft);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.45;text-transform:uppercase;letter-spacing:.06em;}
   .geo-footer{width:100%;max-width:420px;margin:24px auto 0;border-top:1px solid var(--border);padding-top:8px;}
@@ -930,10 +930,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
                 lockedSampleRef.current=stableWindowRef.current
                   .slice()
                   .sort((a,b)=>(b.qualityScore||0)-(a.qualityScore||0))[0];
-                fillRef.current=Math.max(fillRef.current,.92);
-                setFill(fillRef.current);
                 setQuality({label:"Clean scan",rescan:false,reason:"Stable frame locked."});
-                setSeqIdx(i=>Math.max(i,SCAN_SEQ.length-1));
               }
             }
           }
@@ -1143,7 +1140,7 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
         fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
       {!done&&showCard&&(
         <g opacity=".92">
-          <rect x="90" y="205" width="220" height="139" rx="6" fill="rgba(0,0,0,.18)" stroke="#4caf7d" strokeWidth="2" strokeDasharray="7 6" style={{animation:"cardPulse 1.4s ease-in-out infinite"}}/>
+          <rect x="90" y="205" width="220" height="139" rx="6" fill="rgba(0,0,0,.18)" stroke="#4caf7d" strokeWidth="2" strokeDasharray="7 6" style={{animation:"cardPulse 1.4s var(--ease-premium) infinite"}}/>
           <text x="200" y="274" textAnchor="middle" fill="rgba(255,255,255,.82)"
             fontSize="11" fontFamily="'Geist Mono',monospace" letterSpacing="1">CARD</text>
         </g>

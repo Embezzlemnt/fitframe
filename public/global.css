@@ -11,6 +11,7 @@
   --dim:#858176;
   --soft:#555249;
   --accent:#4caf7d;
+  --ease-premium:cubic-bezier(0.16,1,0.3,1);
 }
 
 html{

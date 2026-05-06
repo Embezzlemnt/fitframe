@@ -9,27 +9,57 @@
     <title>About FitFrame</title>
     <style>
       *{box-sizing:border-box;margin:0;padding:0;}
-      main{width:100%;max-width:462px;margin:0 auto;padding:26px 18px 48px;}
+      main{width:100%;max-width:462px;margin:0 auto;padding:30px 18px 52px;}
       a{color:inherit;text-decoration:none;}
-      .logo{font-size:34px;font-weight:600;letter-spacing:-.04em;line-height:1;margin-bottom:24px;display:inline-block;}
+      .logo{display:inline-block;font-size:36px;font-weight:600;letter-spacing:-.04em;line-height:1;margin-bottom:32px;transform-origin:center center;animation:logoEnter 700ms var(--ease-premium) both;}
       .logo span{color:var(--accent);}
-      .section{padding:24px 18px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));}
-      h1{font-size:26px;line-height:1.1;letter-spacing:-.035em;margin-bottom:16px;}
-      p{font-size:15px;color:var(--dim);line-height:1.68;font-weight:300;margin-bottom:16px;}
-      p:last-of-type{margin-bottom:0;}
-      .footer-line{margin-top:22px;font:11px 'Geist Mono',ui-monospace,monospace;color:var(--soft);letter-spacing:.04em;text-align:center;}
+      @keyframes logoEnter{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+      .section{padding:28px 20px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));animation:sectionEnter 400ms var(--ease-premium) both;}
+      @keyframes sectionEnter{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+      h1{font-size:30px;line-height:1.08;letter-spacing:-.04em;font-weight:600;margin-bottom:32px;max-width:320px;}
+      p{font-size:15px;color:var(--dim);line-height:1.65;font-weight:300;}
+      .intro{margin-bottom:32px;}
+      .pillars{display:grid;gap:18px;margin:32px 0;}
+      .pillar h2{font-size:16px;font-weight:500;line-height:1.2;color:var(--accent);letter-spacing:-.015em;margin-bottom:6px;}
+      .pillar p{font-size:13px;line-height:1.55;color:var(--dim);font-weight:300;}
+      .closing{color:var(--text);margin-top:32px;}
+      .footer-line{margin-top:26px;font:11px 'Geist Mono',ui-monospace,monospace;color:var(--soft);letter-spacing:.04em;text-align:center;}
+      @media (min-width:520px){
+        .pillars{grid-template-columns:1fr 1fr;gap:20px 22px;}
+      }
     </style>
   </head>
   <body>
     <main>
       <a class="logo" href="https://fitframe.store">fitframe<span>.</span></a>
       <section class="section">
-        <h1>About FitFrame</h1>
-        <p>FitFrame started with a single question &mdash; why does finding glasses that actually fit feel impossible?</p>
-        <p>Every pair is built to your face. No retail markup, no overstock, no average sizing. Just frames made for one face at a time.</p>
-        <p>Made to order means zero unsold inventory and no tooling waste. Each frame is printed when you order it.</p>
+        <h1>Frames built for one face at a time.</h1>
+        <p class="intro">FitFrame started with a single question &mdash; why does finding glasses that actually fit feel impossible? Most eyewear is built around an average that doesn&rsquo;t exist. We build around faces that do.</p>
+
+        <p>Four things every pair has in common.</p>
+
+        <div class="pillars">
+          <div class="pillar">
+            <h2>Made Here</h2>
+            <p>Every frame is printed and finished by the founder.</p>
+          </div>
+          <div class="pillar">
+            <h2>Zero Inventory</h2>
+            <p>Nothing exists until someone orders it.</p>
+          </div>
+          <div class="pillar">
+            <h2>No Branding</h2>
+            <p>The frames carry no logo. They&rsquo;re yours, not ours.</p>
+          </div>
+          <div class="pillar">
+            <h2>Zero Waste</h2>
+            <p>3D printing means no tooling, no overstock, no landfill.</p>
+          </div>
+        </div>
+
+        <p class="closing">Frames made by one person, for one face, on one printer. That&rsquo;s the entire business.</p>
       </section>
-      <div class="footer-line">hello@fitframe.store &middot; fitframe.store</div>
+      <div class="footer-line">hello@fitframe.store</div>
     </main>
   </body>
 </html>
