@@ -93,7 +93,7 @@ const MEASUREMENT_RANGES = {
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real eyewear operation based in the US. We scan, fit, and fulfill through the official domain fitframe.store."],
   ["Why is FitFrame so cheap?","We cut out retail, opticians, and inventory. You pay for the frame and the fit, not the overhead. $89 is the honest price for what this is."],
-  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. We build an adult custom-fit workflow for non-Rx frames, direct through our made-to-order process."],
+  ["How is FitFrame different from Frames Direct or Fitz Frames?","FitFrame is not an online retailer and not a children's eyewear brand. FitFrame makes custom 3D printed frames built to your exact face measurements using a browser-based scan. No standard sizing. No off-the-shelf inventory. Every pair is different."],
   ["Who is behind FitFrame?","FitFrame is built by the team behind the scan, frame design, and fulfillment. We keep the operation focused so every pair gets real attention."],
   ["How accurate is the FitFrame scan?","We use MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
   ["What if my FitFrame frames don't fit?","We include one free reprint if the first pair does not fit."],
@@ -1215,6 +1215,7 @@ function useFitFrameJsonLd(){
         "@type":"Product",
         name:"FitFrame Custom Eyewear",
         description:"Browser-based face scan measuring PD, bridge, lens height, temple, and face width in millimeters. Frames 3D printed in PA12 nylon to exact measurements. Ships 7-10 days.",
+        keywords:"custom glasses, 3D printed glasses, custom eyewear, face scan glasses, fitframe",
         brand:{ "@type":"Brand", name:"FitFrame" },
         url:DOMAIN_URL,
         audience:{
@@ -1243,6 +1244,7 @@ function useFitFrameJsonLd(){
         "@context":"https://schema.org",
         "@type":"Organization",
         name:"FitFrame",
+        alternateName:"FitFrame Eyewear",
         founder:{
           "@type":"Person",
           name:"Lorenzo",
@@ -1269,6 +1271,16 @@ function useFitFrameJsonLd(){
             text,
           },
         })),
+      },
+      {
+        "@context":"https://schema.org",
+        "@type":"BreadcrumbList",
+        itemListElement:[{
+          "@type":"ListItem",
+          position:1,
+          name:"FitFrame",
+          item:DOMAIN_URL,
+        }],
       },
     ]);
     document.head.appendChild(script);
@@ -1466,8 +1478,17 @@ export default function FramesSite(){
   },[]);
   useEffect(()=>{
     if (!scan.done) return;
-    const ctx=canvasRef.current?.getContext("2d");
-    if (ctx) ctx.clearRect(0,0,canvasRef.current.width,canvasRef.current.height);
+    let raf;
+    const clear=()=>{
+      const canvas=canvasRef.current;
+      if (canvas) {
+        const ctx=canvas.getContext("2d");
+        ctx?.clearRect(0,0,canvas.width,canvas.height);
+      }
+      raf=requestAnimationFrame(clear);
+    };
+    raf=requestAnimationFrame(clear);
+    return ()=>cancelAnimationFrame(raf);
   },[scan.done]);
   useEffect(()=>{
     if (!camReady||!cameraIntro) return;
