@@ -3,6 +3,22 @@
   "name": "fitframe",
   "compatibility_date": "2026-05-08",
   "main": "./worker/index.js",
+  "routes": [
+    {
+      "pattern": "fitframe.store",
+      "zone_name": "fitframe.store",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.fitframe.store",
+      "zone_name": "fitframe.store",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "RESEND_FROM_EMAIL": "FitFrame <hello@fitframe.store>",
+    "FITFRAME_ORDER_EMAIL": "hello@fitframe.store"
+  },
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": [
