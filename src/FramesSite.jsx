@@ -6,10 +6,8 @@ const DOMAIN_URL = "https://fitframe.store"; // LOCKED
 const DOMAIN_HOST = "fitframe.store"; // LOCKED
 const BASE_PRICE  = 89;
 const DEV_MODE = false;
-const SUBMIT_ORDER_ENDPOINT = "/api/submit-order";
 const DEFAULT_CUSTOMER_INFO = {
   name:"",
-  email:"",
   street:"",
   city:"",
   state:"",
@@ -315,14 +313,15 @@ function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) 
 
 function genOrderId() { return "FF-"+Math.random().toString(36).substring(2,8).toUpperCase(); }
 function getETA()     { const d=new Date(); d.setDate(d.getDate()+10); return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}); }
-function normalizeCustomerInfo(info={}) { return {...DEFAULT_CUSTOMER_INFO,...info}; }
-function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value||"").trim()); }
+function normalizeCustomerInfo(info={}) {
+  return Object.fromEntries(Object.keys(DEFAULT_CUSTOMER_INFO).map(key=>[key,info?.[key]??DEFAULT_CUSTOMER_INFO[key]]));
+}
 function trimCustomerInfo(info) {
   return Object.fromEntries(Object.entries(normalizeCustomerInfo(info)).map(([k,v])=>[k,String(v||"").trim()]));
 }
 function customerInfoComplete(info) {
   const c=trimCustomerInfo(info);
-  return !!(c.name&&validEmail(c.email)&&c.street&&c.city&&c.state&&c.zip);
+  return !!(c.name&&c.street&&c.city&&c.state&&c.zip);
 }
 
 // ─── Frame SVGs ───────────────────────────────────────────────────────────────
@@ -1625,19 +1624,24 @@ export default function FramesSite(){
     setCustomerInfo(prev=>({...prev,[key]:value}));
   }
 
-  function buildMakerSpec(payload,{includeProductionNotes=true}={}){
+  function buildMakerSpec(payload,{includeProductionNotes=true,includeShipping=true}={}){
     const lines=[
       "FITFRAME MAKER SPEC",
       "",
       `Order ID: ${payload.order_id}`,
       `Customer: ${payload.customer_name}`,
-      `Customer email: ${payload.customer_email}`,
       `Created: ${payload.timestamp}`,
-      "",
-      "SHIP_TO",
-      payload.shipping_name,
-      payload.shipping_street,
-      `${payload.shipping_city}, ${payload.shipping_state} ${payload.shipping_zip}`,
+    ];
+    if (includeShipping) {
+      lines.push(
+        "",
+        "SHIP_TO",
+        payload.shipping_name,
+        payload.shipping_street,
+        `${payload.shipping_city}, ${payload.shipping_state} ${payload.shipping_zip}`,
+      );
+    }
+    lines.push(
       "",
       "FRAME",
       `Style: ${payload.frame}`,
@@ -1666,7 +1670,7 @@ export default function FramesSite(){
       `Visual instinct: ${payload.style_vibe}`,
       `Use case: ${payload.style_use}`,
       `Priority: ${payload.style_priority}`,
-    ];
+    );
     if (includeProductionNotes) {
       lines.push(
         "",
@@ -1677,10 +1681,21 @@ export default function FramesSite(){
     return lines.join("\n");
   }
 
-  async function submitOrder(){
+  function buildOrderEmailBody(payload,spec){
+    return [
+      "SHIPPING_ADDRESS",
+      payload.shipping_name,
+      payload.shipping_street,
+      `${payload.shipping_city}, ${payload.shipping_state} ${payload.shipping_zip}`,
+      "",
+      spec,
+    ].join("\n");
+  }
+
+  function submitOrder(){
     const cleanInfo=trimCustomerInfo(customerInfo);
     if (!customerInfoComplete(cleanInfo)){
-      setSubmitError("Add your name, email, and full shipping address.");
+      setSubmitError("Add your full shipping address.");
       return;
     }
     if (!currentMeas){
@@ -1694,7 +1709,6 @@ export default function FramesSite(){
       _subject:`FitFrame Order ${orderId}`,
       order_id:orderId,
       customer_name:cleanInfo.name,
-      customer_email:cleanInfo.email,
       shipping_name:cleanInfo.name,
       shipping_street:cleanInfo.street,
       shipping_city:cleanInfo.city,
@@ -1724,21 +1738,15 @@ export default function FramesSite(){
       valid_frames_pct:m?.validPct??(scan.validPct||"-"),
       user_agent:navigator.userAgent,
     };
-    let spec="";
     try {
-      spec=buildMakerSpec(payload);
-      const response=await fetch(SUBMIT_ORDER_ENDPOINT,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({order:payload,spec}),
-      });
-      const data=await response.json().catch(()=>({error:"Order submission failed."}));
-      if (!response.ok) throw new Error(data.error||"Order submission failed.");
+      const spec=buildMakerSpec(payload,{includeProductionNotes:false,includeShipping:false});
+      const body=buildOrderEmailBody(payload,spec);
+      const href=`mailto:${MAKER_EMAIL}?subject=${encodeURIComponent("My FitFrame Order")}&body=${encodeURIComponent(body)}`;
+      window.location.assign(href);
       clearSession();
       setSent(true);
     } catch (err) {
-      if (spec) await navigator.clipboard?.writeText(spec).catch(()=>{});
-      setSubmitError(`${err?.message||"Order submission failed."} We copied your frame spec. Email ${MAKER_EMAIL} if this keeps happening.`);
+      setSubmitError(`${err?.message||"Order email could not open."} Email ${MAKER_EMAIL} if this keeps happening.`);
     }
     finally { setSubmitting(false); }
   }
@@ -2084,7 +2092,7 @@ export default function FramesSite(){
             <div className="section">
               <div className="eyebrow">Order</div>
               <div className="step-head">Complete your order.</div>
-              <p className="step-sub">We have your scan and frame choice. Add shipping details and we'll send confirmation here.</p>
+              <p className="step-sub">We have your scan and frame choice. Add shipping details and we'll open a pre-filled order email.</p>
               <div className="receipt">
                 <div className="receipt-head">Order summary - {orderId}</div>
                 <div className="receipt-row"><span>Custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
@@ -2092,30 +2100,28 @@ export default function FramesSite(){
                 <div className="receipt-total"><span>Total</span><span>${totalPrice}</span></div>
               </div>
               <form onSubmit={e=>{e.preventDefault();submitOrder();}}>
-                <input className="field" placeholder="Full name" autoComplete="name"
+                <input className="field" name="name" placeholder="Full name" autoComplete="shipping name" required
                   value={customerInfo.name} onChange={e=>updateCustomerInfo("name",e.target.value)}/>
-                <input className="field" placeholder="Email address" type="email" autoComplete="email"
-                  value={customerInfo.email} onChange={e=>updateCustomerInfo("email",e.target.value)}/>
-                <input className="field" placeholder="Street address" autoComplete="shipping street-address"
+                <input className="field" name="address-line1" placeholder="Street address" autoComplete="shipping address-line1" required
                   value={customerInfo.street} onChange={e=>updateCustomerInfo("street",e.target.value)}/>
                 <div className="field-grid">
-                  <input className="field field-full" placeholder="City" autoComplete="shipping address-level2"
+                  <input className="field field-full" name="address-level2" placeholder="City" autoComplete="shipping address-level2" required
                     value={customerInfo.city} onChange={e=>updateCustomerInfo("city",e.target.value)}/>
-                  <input className="field" placeholder="State" autoComplete="shipping address-level1"
+                  <input className="field" name="address-level1" placeholder="State" autoComplete="shipping address-level1" required
                     value={customerInfo.state} onChange={e=>updateCustomerInfo("state",e.target.value)}/>
-                  <input className="field" placeholder="ZIP" inputMode="numeric" autoComplete="shipping postal-code"
+                  <input className="field" name="postal-code" placeholder="ZIP" inputMode="numeric" autoComplete="shipping postal-code" required
                     value={customerInfo.zip} onChange={e=>updateCustomerInfo("zip",e.target.value)}/>
                 </div>
                 {submitError&&<div className="form-error" role="alert">{submitError}</div>}
                 <div className="btn-row" style={{marginTop:10}}>
                   <button className="btn btn-accent" type="submit"
                     disabled={!customerInfoComplete(customerInfo)||submitting}>
-                    {submitting?"Submitting...":"Place order"}
+                    {submitting?"Opening...":"Send order"}
                   </button>
                   <button className="btn btn-ghost" type="button" onClick={()=>setStep(3)}>Back</button>
                 </div>
               </form>
-              <div className="trust-line"><Padlock/><span>No images are sent. We receive scan measurements and shipping details only.</span></div>
+              <div className="trust-line"><Padlock/><span>No images are sent. Your email includes measurements and shipping details only.</span></div>
             </div>
           )}
 
@@ -2123,13 +2129,13 @@ export default function FramesSite(){
           {sent&&(
             <div className="section">
               <div className="confirm-id">{orderId}</div>
-              <div className="confirm-greeting">Order received,<br/>{firstName}.</div>
+              <div className="confirm-greeting">Email draft opened,<br/>{firstName}.</div>
               <p className="confirm-body">
-                We received your frame spec and sent a confirmation to <strong>{customerInfo.email}</strong>.
+                Send the pre-filled email to <strong>{MAKER_EMAIL}</strong> to finish your order.
               </p>
               <div className="next-steps">
                 {[
-                  ["01","Confirmation sent","We emailed a copy of the order details to you."],
+                  ["01","Send the email","Tap send in your mail app to deliver the order spec."],
                   ["02","We review the scan","We confirm the frame choice and shipping details before production."],
                   ["03","We make your frames",`Estimated delivery target: ${getETA()}.`],
                 ].map(([n,label,desc])=>(

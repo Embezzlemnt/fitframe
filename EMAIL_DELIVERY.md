@@ -1,10 +1,29 @@
-# Email Delivery Setup
+# Email Delivery Notes
 
-FitFrame stays on Cloudflare. The app posts orders to `/api/submit-order`, which is handled by a Cloudflare Worker route and the Cloudflare Pages-compatible function at `functions/api/submit-order.js`.
+FitFrame stays on Cloudflare. The current launch order flow does not require a backend email service.
 
-## Cloudflare Environment Variables
+## Current Launch Flow
 
-Add these in Cloudflare Pages or Workers settings for both Production and Preview:
+The React app opens a native `mailto:` draft addressed to `hello@fitframe.store`.
+
+The draft includes:
+
+- shipping address
+- order ID
+- selected frame
+- lens selection
+- material recommendation
+- scan measurements
+- scan quality metadata
+- style answers
+
+No API key, SMTP service, or third-party order endpoint is required for the customer flow.
+
+## Optional Future Outbound (Resend)
+
+The Cloudflare function at `functions/api/submit-order.js` remains in the repo as an optional future transactional email path, but the frontend does not depend on it for launch.
+
+If FitFrame returns to automated outbound email later, add these in Cloudflare Workers settings for both Production and Preview:
 
 ```txt
 RESEND_API_KEY=re_...
@@ -12,9 +31,9 @@ RESEND_FROM_EMAIL=FitFrame <hello@fitframe.store>
 FITFRAME_ORDER_EMAIL=hello@fitframe.store
 ```
 
-`RESEND_API_KEY` must never be exposed client-side. The React app only calls `/api/submit-order`.
+`RESEND_API_KEY` must never be exposed client-side.
 
-## Outbound (Resend)
+Resend setup steps:
 
 1. Sign up at `resend.com`.
 2. Add domain: `fitframe.store`.
@@ -22,9 +41,7 @@ FITFRAME_ORDER_EMAIL=hello@fitframe.store
 4. Verify the domain in the Resend dashboard.
 5. Generate a Resend API key.
 6. Add the API key and email env vars in Cloudflare.
-7. Place a test order through `fitframe.store` and confirm both emails send:
-   - spec email to `hello@fitframe.store`
-   - confirmation email to the customer address
+7. Switch the frontend order flow back to `/api/submit-order` only after live send and receipt tests pass.
 
 The blank DNS TXT record currently visible at `resend._domainkey.fitframe.store` is not usable. Replace it with the full DKIM value Resend gives Lorenzo.
 
@@ -130,7 +147,8 @@ Proxy: DNS only
 5. Send a test email from a personal account to `hello@fitframe.store`.
 6. Confirm receipt within 60 seconds.
 7. Place a test order on `fitframe.store`.
-8. Confirm Lorenzo receives the spec email and the customer receives the confirmation email.
+8. Confirm the native mail draft opens with the full order spec.
+9. Send the draft and confirm Lorenzo receives it.
 
 ## Deprecation Path
 
