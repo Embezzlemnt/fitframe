@@ -36,15 +36,20 @@ FitFrame should be easy for search and AI answer engines to understand, while pr
 
 ## Cloudflare Bot Settings
 
-Keep verified search crawlers and AI search crawlers allowed. Do not challenge or block:
+Keep verified search crawlers and AI answer/retrieval crawlers allowed. Do not challenge or block:
 
 - Googlebot
 - Bingbot
 - OAI-SearchBot
 - ChatGPT-User
 - PerplexityBot
-- ClaudeBot
 - Claude-SearchBot
+
+Keep model-training crawlers blocked unless FitFrame intentionally chooses to license training use later:
+
+- GPTBot
+- ClaudeBot
+- Google-Extended
 
 Challenge suspicious automation that is not a verified bot. Keep `/src/`, `/functions/`, `/worker/`, `/.git/`, and `/node_modules/` blocked in `robots.txt`.
 
