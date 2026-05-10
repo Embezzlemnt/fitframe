@@ -1150,6 +1150,22 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
   const ovalPath=`M ${cx} ${cy-ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy+ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy-ry}`;
   const bo=facePresent?.62:.2;
   const activeFill=clamp(done?0:fill,0,1);
+  const fillSidePath=(side,progress)=>{
+    const p=clamp(progress,0,1);
+    if (p<=0) return "";
+    const steps=Math.max(2,Math.ceil(72*p));
+    const pts=[];
+    for (let i=0;i<=steps;i++){
+      const t=(i/steps)*p;
+      const theta=side==="right"
+        ?Math.PI/2-t*Math.PI
+        :Math.PI/2+t*Math.PI;
+      const x=cx+rx*Math.cos(theta);
+      const y=cy+ry*Math.sin(theta);
+      pts.push(`${i===0?"M":"L"} ${x.toFixed(2)} ${y.toFixed(2)}`);
+    }
+    return pts.join(" ");
+  };
   return (
     <svg className="face-guide" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       {!done&&autoStartPct>0&&autoStartPct<1&&(
@@ -1160,10 +1176,14 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
       )}
       <path d={ovalPath} fill="none"
         stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" vectorEffect="non-scaling-stroke" style={{transition:"stroke .4s var(--ease-premium)"}}/>
-      {activeFill>0&&<path d={ovalPath} fill="none" stroke="#4caf7d" strokeWidth="5"
-        strokeDasharray={`${circ} ${circ}`} strokeDashoffset={circ*(1-activeFill)}
-        strokeLinecap="round" strokeOpacity="1" vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision"
-        style={{transition:"stroke-dashoffset .1s linear"}}/>}
+      {activeFill>0&&(
+        <>
+          <path d={fillSidePath("left",activeFill)} fill="none" stroke="#4caf7d" strokeWidth="5"
+            strokeLinecap="round" strokeLinejoin="round" strokeOpacity="1" vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision"/>
+          <path d={fillSidePath("right",activeFill)} fill="none" stroke="#4caf7d" strokeWidth="5"
+            strokeLinecap="round" strokeLinejoin="round" strokeOpacity="1" vectorEffect="non-scaling-stroke" shapeRendering="geometricPrecision"/>
+        </>
+      )}
       {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
         fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
       {!done&&showCard&&(
