@@ -22,7 +22,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['functions/**/*.js', 'worker/**/*.js'],
+    files: ['worker/**/*.js'],
     languageOptions: {
       globals: {
         ...globals.browser,

@@ -91,7 +91,10 @@ const MEASUREMENT_RANGES = {
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real eyewear operation based in the US. We scan, fit, and fulfill through the official domain fitframe.store."],
   ["Why is FitFrame so cheap?","We cut out retail, opticians, and inventory. You pay for the frame and the fit, not the overhead. $89 is the honest price for what this is."],
+  ["Can I get custom 3D printed glasses under $100?","Yes. FitFrame starts at $89 for custom 3D printed PA12 nylon frames with blue light lenses included."],
+  ["Do I need an app or FaceID?","No. FitFrame runs in a mobile browser, so there is no app download and no FaceID-only requirement."],
   ["How is FitFrame different from Frames Direct or Fitz Frames?","FitFrame is not an online retailer and not a children's eyewear brand. FitFrame makes custom 3D printed frames built to your exact face measurements using a browser-based scan. No standard sizing. No off-the-shelf inventory. Every pair is different."],
+  ["Where does face data go?","No face images are stored or transmitted. The order email includes scan measurements, frame choice, style answers, and shipping address."],
   ["Who is behind FitFrame?","FitFrame is built by the team behind the scan, frame design, and fulfillment. We keep the operation focused so every pair gets real attention."],
   ["How accurate is the FitFrame scan?","We use MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
   ["What if my FitFrame frames don't fit?","We include one free reprint if the first pair does not fit."],
@@ -537,6 +540,9 @@ const css = `
   .field-grid .field{margin-bottom:8px;}
   .field-full{grid-column:1/-1;}
   .form-error{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--amber);}
+  .form-note{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--accent);}
+  .order-micro{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-2px 0 10px;font-family:'Geist Mono',monospace;font-size:10px;line-height:1.4;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;}
+  .order-micro span{display:inline-flex;align-items:center;gap:5px;}
   .trust-line{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:13px;font-size:11px;color:var(--soft);font-weight:300;line-height:1.45;text-align:center;}
   .trust-line svg{opacity:.75;flex:0 0 auto;}
   .debug-panel{margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);}
@@ -571,6 +577,7 @@ const css = `
   .geo-content p{margin-bottom:9px;}
   .geo-content p:last-child{margin-bottom:0;}
   .geo-content strong{color:var(--text);font-weight:400;}
+  .geo-links{display:flex;justify-content:center;gap:16px;margin-top:14px;font-family:'Geist Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--soft);}
   .debug-overlay{position:absolute;top:9px;left:9px;z-index:7;padding:8px 9px;border-radius:7px;background:rgba(0,0,0,.68);color:rgba(255,255,255,.78);font-family:'Geist Mono',monospace;font-size:9px;line-height:1.45;text-align:left;pointer-events:none;}
   @media (max-width:390px){
     .site-header{padding-left:14px;padding-right:14px;}
@@ -1315,6 +1322,7 @@ function VerificationStrip(){
   return (
     <section className="verification-strip" aria-label="Verification">
       <span>American made</span>
+      <span>No app required</span>
       <span>Zero-waste to order</span>
       <span>One-time reprint guarantee</span>
     </section>
@@ -1338,6 +1346,10 @@ function GeoFooter(){
           <p>FitFrame started as a frustration with glasses that never fit right. We measure from your actual face, build to those measurements, and ship directly to you. No middleman, no standard sizing, no compromise. We believe fit should not be a luxury.</p>
         </div>
       </details>
+      <nav className="geo-links" aria-label="Site links">
+        <a href="/privacy">Privacy</a>
+        <a href="/return-policy">Return policy</a>
+      </nav>
     </footer>
   );
 }
@@ -1366,6 +1378,7 @@ export default function FramesSite(){
   const [scanProcessing,setScanProcessing] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [submitError,   setSubmitError]   = useState("");
+  const [submitNotice,  setSubmitNotice]  = useState("");
   const [sent,          setSent]          = useState(false);
   const [orderId]                         = useState(()=>saved.orderId??genOrderId());
   const [debugEnabled]                     = useState(()=>DEV_MODE&&new URLSearchParams(window.location.search).get("debug")==="1");
@@ -1641,7 +1654,13 @@ export default function FramesSite(){
 
   function updateCustomerInfo(key,value){
     setSubmitError("");
-    setCustomerInfo(prev=>({...prev,[key]:value}));
+    setSubmitNotice("");
+    const nextValue=key==="state"
+      ?value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,2)
+      :key==="zip"
+        ?value.replace(/[^\d-]/g,"").slice(0,10)
+        :value;
+    setCustomerInfo(prev=>({...prev,[key]:nextValue}));
   }
 
   function buildMakerSpec(payload,{includeProductionNotes=true,includeShipping=true}={}){
@@ -1712,20 +1731,8 @@ export default function FramesSite(){
     ].join("\n");
   }
 
-  function submitOrder(){
-    const cleanInfo=trimCustomerInfo(customerInfo);
-    if (!customerInfoComplete(cleanInfo)){
-      setSubmitError("Add your full shipping address.");
-      return;
-    }
-    if (!currentMeas){
-      setSubmitError("Complete the fit scan before submitting.");
-      return;
-    }
-    setSubmitting(true);
-    setSubmitError("");
-    const m=currentMeas;
-    const payload={
+  function createOrderPayload(cleanInfo,m){
+    return {
       _subject:`FitFrame Order ${orderId}`,
       order_id:orderId,
       customer_name:cleanInfo.name,
@@ -1758,9 +1765,49 @@ export default function FramesSite(){
       valid_frames_pct:m?.validPct??(scan.validPct||"-"),
       user_agent:navigator.userAgent,
     };
+  }
+
+  function createOrderEmailBody(cleanInfo,m){
+    const payload=createOrderPayload(cleanInfo,m);
+    const spec=buildMakerSpec(payload,{includeProductionNotes:false,includeShipping:false});
+    return buildOrderEmailBody(payload,spec);
+  }
+
+  async function copyOrderSpec(){
+    const cleanInfo=trimCustomerInfo(customerInfo);
+    if (!customerInfoComplete(cleanInfo)){
+      setSubmitError("Add your full shipping address first.");
+      return;
+    }
+    if (!currentMeas){
+      setSubmitError("Complete the fit scan before copying.");
+      return;
+    }
     try {
-      const spec=buildMakerSpec(payload,{includeProductionNotes:false,includeShipping:false});
-      const body=buildOrderEmailBody(payload,spec);
+      await navigator.clipboard.writeText(createOrderEmailBody(cleanInfo,currentMeas));
+      setSubmitError("");
+      setSubmitNotice("Order spec copied.");
+    } catch {
+      setSubmitError("Copy failed. Open the email draft instead.");
+    }
+  }
+
+  function submitOrder(){
+    const cleanInfo=trimCustomerInfo(customerInfo);
+    if (!customerInfoComplete(cleanInfo)){
+      setSubmitError("Add your full shipping address.");
+      return;
+    }
+    if (!currentMeas){
+      setSubmitError("Complete the fit scan before submitting.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError("");
+    setSubmitNotice("");
+    const m=currentMeas;
+    try {
+      const body=createOrderEmailBody(cleanInfo,m);
       const href=`mailto:${MAKER_EMAIL}?subject=${encodeURIComponent("My FitFrame Order")}&body=${encodeURIComponent(body)}`;
       window.location.assign(href);
       clearSession();
@@ -2112,36 +2159,44 @@ export default function FramesSite(){
             <div className="section">
               <div className="eyebrow">Order</div>
               <div className="step-head">Complete your order.</div>
-              <p className="step-sub">We have your scan and frame choice. Add shipping details and we'll open a pre-filled order email.</p>
+              <p className="step-sub">We have your scan and frame choice. Autofill your shipping address and open the order email.</p>
               <div className="receipt">
                 <div className="receipt-head">Order summary - {orderId}</div>
                 <div className="receipt-row"><span>Custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
                 {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price===0?"Included":`+$${lensData.price}`}</span></div>}
                 <div className="receipt-total"><span>Total</span><span>${totalPrice}</span></div>
               </div>
-              <form onSubmit={e=>{e.preventDefault();submitOrder();}}>
-                <input className="field" name="name" placeholder="Full name" autoComplete="shipping name" required
+              <form autoComplete="on" onSubmit={e=>{e.preventDefault();submitOrder();}}>
+                <div className="order-micro">
+                  <span><Padlock/> No images sent</span>
+                  <span>Autofill ready</span>
+                </div>
+                <input className="field" name="name" placeholder="Full name" autoComplete="shipping name" enterKeyHint="next" autoCapitalize="words" required
                   value={customerInfo.name} onChange={e=>updateCustomerInfo("name",e.target.value)}/>
-                <input className="field" name="address-line1" placeholder="Street address" autoComplete="shipping address-line1" required
+                <input className="field" name="address-line1" placeholder="Street address" autoComplete="shipping address-line1" enterKeyHint="next" autoCapitalize="words" required
                   value={customerInfo.street} onChange={e=>updateCustomerInfo("street",e.target.value)}/>
                 <div className="field-grid">
-                  <input className="field field-full" name="address-level2" placeholder="City" autoComplete="shipping address-level2" required
+                  <input className="field field-full" name="address-level2" placeholder="City" autoComplete="shipping address-level2" enterKeyHint="next" autoCapitalize="words" required
                     value={customerInfo.city} onChange={e=>updateCustomerInfo("city",e.target.value)}/>
-                  <input className="field" name="address-level1" placeholder="State" autoComplete="shipping address-level1" required
+                  <input className="field" name="address-level1" placeholder="State" autoComplete="shipping address-level1" enterKeyHint="next" autoCapitalize="characters" required
                     value={customerInfo.state} onChange={e=>updateCustomerInfo("state",e.target.value)}/>
-                  <input className="field" name="postal-code" placeholder="ZIP" inputMode="numeric" autoComplete="shipping postal-code" required
+                  <input className="field" name="postal-code" placeholder="ZIP" inputMode="numeric" autoComplete="shipping postal-code" enterKeyHint="send" required
                     value={customerInfo.zip} onChange={e=>updateCustomerInfo("zip",e.target.value)}/>
                 </div>
                 {submitError&&<div className="form-error" role="alert">{submitError}</div>}
+                {submitNotice&&<div className="form-note" role="status">{submitNotice}</div>}
                 <div className="btn-row" style={{marginTop:10}}>
                   <button className="btn btn-accent" type="submit"
                     disabled={!customerInfoComplete(customerInfo)||submitting}>
-                    {submitting?"Opening...":"Send order"}
+                    {submitting?"Opening...":"Open email draft"}
                   </button>
+                  <button className="btn btn-ghost" type="button"
+                    disabled={!customerInfoComplete(customerInfo)}
+                    onClick={copyOrderSpec}>Copy spec</button>
                   <button className="btn btn-ghost" type="button" onClick={()=>setStep(3)}>Back</button>
                 </div>
               </form>
-              <div className="trust-line"><Padlock/><span>No images are sent. Your email includes measurements and shipping details only.</span></div>
+              <div className="trust-line"><span>Your email includes measurements and shipping details only.</span></div>
             </div>
           )}
 

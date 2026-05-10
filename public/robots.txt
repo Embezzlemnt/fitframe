@@ -1,6 +1,32 @@
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
 User-agent: *
 Disallow: /src/
 Disallow: /netlify/
+Disallow: /functions/
+Disallow: /worker/
 Disallow: /.git/
 Disallow: /node_modules/
 Allow: /

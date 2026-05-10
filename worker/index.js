@@ -1,20 +1,10 @@
-import { handleSubmitOrder } from "../functions/api/submit-order.js";
-
 export default {
-  async fetch(request, env) {
+  async fetch(request) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/api/submit-order") {
-      if (request.method === "POST") return handleSubmitOrder({ request, env });
-      if (request.method === "OPTIONS") return new Response(null, {
-        status:204,
-        headers:{
-          "Content-Type":"application/json",
-          "X-Content-Type-Options":"nosniff",
-        },
-      });
-      return new Response(JSON.stringify({ error:"Method not allowed." }), {
-        status:405,
+    if (url.pathname.startsWith("/api/")) {
+      return new Response(JSON.stringify({ error:"Not found." }), {
+        status:404,
         headers:{
           "Content-Type":"application/json",
           "X-Content-Type-Options":"nosniff",

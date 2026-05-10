@@ -21,9 +21,9 @@ No API key, SMTP service, or third-party order endpoint is required for the cust
 
 ## Optional Future Outbound (Resend)
 
-The Cloudflare function at `functions/api/submit-order.js` remains in the repo as an optional future transactional email path, but the frontend does not depend on it for launch.
+There is no active public order API in the launch flow. `/api/*` returns `404` from the Worker. If FitFrame returns to automated outbound email later, add a new authenticated or rate-limited Cloudflare endpoint and test it before switching the frontend away from `mailto:`.
 
-If FitFrame returns to automated outbound email later, add these in Cloudflare Workers settings for both Production and Preview:
+For a future Resend path, add these in Cloudflare Workers settings for both Production and Preview:
 
 ```txt
 RESEND_API_KEY=re_...
@@ -41,7 +41,7 @@ Resend setup steps:
 4. Verify the domain in the Resend dashboard.
 5. Generate a Resend API key.
 6. Add the API key and email env vars in Cloudflare.
-7. Switch the frontend order flow back to `/api/submit-order` only after live send and receipt tests pass.
+7. Add a new Cloudflare email endpoint only after live send and receipt tests pass.
 
 The blank DNS TXT record currently visible at `resend._domainkey.fitframe.store` is not usable. Replace it with the full DKIM value Resend gives Lorenzo.
 
