@@ -22,6 +22,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
   const autoStarted = useRef(false);
   const fillRef = useRef(0);
   const frameCountRef = useRef(0);
+  const facePresentRef = useRef(false);
 
   const [seqIdx, setSeqIdx] = useState(-1);
   const [fill, setFill] = useState(0);
@@ -34,6 +35,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
   const [validPct, setValidPct] = useState(0);
   const [faceSpan, setFaceSpan] = useState(0);
   const [lightWarning, setLightWarning] = useState(null);
+  const [pauseWarning, setPauseWarning] = useState(false);
+  const [scanLost, setScanLost] = useState(false);
 
   useEffect(() => { scanningRef.current = scanning; }, [scanning]);
 
@@ -81,6 +84,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
 
     if (!results.multiFaceLandmarks?.length) {
       holdRef.current = 0;
+      facePresentRef.current = false;
       if (shouldUpdateUI) {
         setFacePresent(false);
         setPoseHint(null);
@@ -107,6 +111,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     ctx.clearRect(0, 0, W, H);
     const lightHint = luma < 40 ? "Better lighting needed" : luma > 220 ? "Move from direct light" : null;
     const currentHint = lightHint || (pose.valid ? null : pose.reason);
+    facePresentRef.current = pose.valid && !lightHint;
 
     if (shouldUpdateUI) {
       setFacePresent(true);
@@ -170,6 +175,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
 
   useEffect(() => {
     if (scanning && !done) {
+      setScanLost(false);
+      setPauseWarning(false);
       samplesRef.current = [];
       noseXRef.current = [];
       validRef.current = 0;
@@ -180,9 +187,46 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
 
   useEffect(() => {
     if (seqIdx < 0 || seqIdx >= SCAN_SEQ.length) return;
-    const step = SCAN_SEQ[seqIdx], start = fillRef.current, end = step.fill, t0 = performance.now();
+    const step = SCAN_SEQ[seqIdx], end = step.fill;
+    let start = fillRef.current;
+    let t0 = performance.now();
+    let wasPaused = false;
+    let lostSince = null;
     let raf;
     const animate = now => {
+      if (!facePresentRef.current) {
+        if (!lostSince) lostSince = now;
+        setFill(fillRef.current);
+        setPauseWarning(true);
+        if (now - lostSince > 4000) {
+          setSeqIdx(-1);
+          setFill(0);
+          fillRef.current = 0;
+          setDone(false);
+          setMeasurements(null);
+          setQuality(null);
+          setAutoStartPct(0);
+          setPauseWarning(false);
+          setScanLost(true);
+          samplesRef.current = [];
+          noseXRef.current = [];
+          validRef.current = 0;
+          totalRef.current = 0;
+          holdRef.current = 0;
+          autoStarted.current = false;
+          return;
+        }
+        wasPaused = true;
+        raf = requestAnimationFrame(animate);
+        return;
+      }
+      if (wasPaused) {
+        start = fillRef.current;
+        t0 = now;
+        wasPaused = false;
+        lostSince = null;
+      }
+      setPauseWarning(false);
       const t = Math.min((now - t0) / step.holdMs, 1);
       const v = start + (end - start) * t;
       fillRef.current = v;
@@ -226,7 +270,10 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     setFacePresent(false);
     setPoseHint(null);
     setLightWarning(null);
+    setPauseWarning(false);
+    setScanLost(false);
     setFaceSpan(0);
+    facePresentRef.current = false;
     samplesRef.current = [];
     noseXRef.current = [];
     validRef.current = 0;
@@ -235,5 +282,5 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     autoStarted.current = false;
   }, []);
 
-  return { seqIdx, fill, done, measurements, mpReady, mpLoadError, autoStartPct, facePresent, faceSpan, poseHint, lightWarning, quality, validPct, reset };
+  return { seqIdx, fill, done, measurements, mpReady, mpLoadError, autoStartPct, facePresent, faceSpan, poseHint, lightWarning, pauseWarning, scanLost, quality, validPct, reset };
 }

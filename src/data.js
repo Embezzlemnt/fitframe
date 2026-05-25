@@ -37,7 +37,7 @@ export const STYLE_QUESTIONS = [
 ];
 
 export const DEFAULT_LENS = [
-  { id:"bluelight",    label:"Blue Light",   price:0,  desc:"Filters screen glare. Everyday clarity." },
+  { id:"bluelight",    label:"Blue Light",   price:0,  desc:"Filters screen glare. Everyday clarity.", spec:"Blocks 40% of high-energy blue light (415-455nm). Clear tint." },
   { id:"sunglass",     label:"Sunglass",     price:25, desc:"UV400 tint. Built for outside." },
   { id:"transition",   label:"Transitions",  price:45, desc:"Adapts to light. One pair, everywhere." },
   { id:"prescription", label:"Prescription", price:65, desc:"Your exact Rx. Requires prescription details." },
