@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ACCENT, HOLD_FRAMES, SCAN_SEQ, calcMeasurements, loadScript, validatePose } from "../utils.js";
+import { ACCENT, HOLD_FRAMES, SCAN_SEQ, calcMeasurements, isIOSSafari, loadScript, validatePose } from "../utils.js";
+
+const MP_FACE_MESH_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619";
+const IOS_SAFARI_FRAME_TIMEOUT_MS = 2500;
+const IOS_SAFARI_RESULT_TIMEOUT_MS = 6500;
 
 const MP_SCRIPTS = [
   "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.4.1633559619/camera_utils.js",
@@ -9,6 +13,7 @@ const MP_SCRIPTS = [
 
 export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart }) {
   const fmRef = useRef(null);
+  const iosSafariRef = useRef(isIOSSafari());
   const [mpReady, setMpReady] = useState(false);
   const [mpLoadError, setMpLoadError] = useState(false);
   const samplesRef = useRef([]);
@@ -23,6 +28,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
   const fillRef = useRef(0);
   const frameCountRef = useRef(0);
   const facePresentRef = useRef(false);
+  const lastResultAtRef = useRef(0);
 
   const [seqIdx, setSeqIdx] = useState(-1);
   const [fill, setFill] = useState(0);
@@ -37,6 +43,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
   const [lightWarning, setLightWarning] = useState(null);
   const [pauseWarning, setPauseWarning] = useState(false);
   const [scanLost, setScanLost] = useState(false);
+  const [scanError, setScanError] = useState(null);
 
   useEffect(() => { scanningRef.current = scanning; }, [scanning]);
 
@@ -48,8 +55,13 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
       try {
         await Promise.all(MP_SCRIPTS.map(loadScript));
         if (!window.FaceMesh) throw new Error("FaceMesh unavailable");
-        const fm = new window.FaceMesh({ locateFile:f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}` });
-        fm.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5 });
+        const fm = new window.FaceMesh({
+          locateFile:f => {
+            const file = iosSafariRef.current && f.includes("_simd_") ? f.replace("_simd_", "_") : f;
+            return `${MP_FACE_MESH_BASE}/${file}`;
+          }
+        });
+        fm.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5, ...(iosSafariRef.current ? { useCpuInference:true } : {}) });
         fm.onResults(handleResults);
         await fm.initialize();
         if (!cancelled) {
@@ -72,6 +84,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
   }, []);
 
   function handleResults(results) {
+    lastResultAtRef.current = performance.now();
+    setScanError(null);
     frameCountRef.current++;
     const shouldUpdateUI = frameCountRef.current % 3 === 0;
     const video = videoRef.current, canvas = canvasRef.current;
@@ -130,18 +144,21 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
       }
     }
 
-    const lId = (d(468,469)+d(468,470)+d(468,471)+d(468,472))/4*2;
-    const rId = (d(473,474)+d(473,475)+d(473,476)+d(473,477))/4*2;
-    const ink = pose.valid && !lightHint ? ACCENT : "rgba(255,255,255,.22)";
-    [[pts[468],lId],[pts[473],rId]].forEach(([c,diam]) => {
-      ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
-      ctx.strokeStyle = ink; ctx.lineWidth = 1.5; ctx.stroke();
-    });
-    ctx.beginPath(); ctx.moveTo(pts[468].x,pts[468].y); ctx.lineTo(pts[473].x,pts[473].y);
-    ctx.strokeStyle = ink; ctx.lineWidth = .75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
+    const hasIris = [468,469,470,471,472,473,474,475,476,477].every(i => lm[i]);
+    const lId = hasIris ? (d(468,469)+d(468,470)+d(468,471)+d(468,472))/4*2 : 0;
+    const rId = hasIris ? (d(473,474)+d(473,475)+d(473,476)+d(473,477))/4*2 : 0;
+    if (hasIris) {
+      const ink = pose.valid && !lightHint ? ACCENT : "rgba(255,255,255,.22)";
+      [[pts[468],lId],[pts[473],rId]].forEach(([c,diam]) => {
+        ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
+        ctx.strokeStyle = ink; ctx.lineWidth = 1.5; ctx.stroke();
+      });
+      ctx.beginPath(); ctx.moveTo(pts[468].x,pts[468].y); ctx.lineTo(pts[473].x,pts[473].y);
+      ctx.strokeStyle = ink; ctx.lineWidth = .75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
 
     if (scanningRef.current) totalRef.current++;
-    if (scanningRef.current && pose.valid && !lightHint) {
+    if (scanningRef.current && pose.valid && !lightHint && hasIris) {
       if (lId < 4 || rId < 4) return;
       const ratio = Math.min(lId, rId) / Math.max(lId, rId);
       if (ratio < 0.70) return;
@@ -164,7 +181,31 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
       const v = videoRef.current;
       if (fmRef.current && v && v.readyState >= 2 && !procRef.current) {
         procRef.current = true;
-        try { await fmRef.current.send({ image:v }); } catch {}
+        if (iosSafariRef.current) {
+          let timer;
+          try {
+            await Promise.race([
+              fmRef.current.send({ image:v }),
+              new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new Error("Face scanner frame timed out.")), IOS_SAFARI_FRAME_TIMEOUT_MS);
+              })
+            ]);
+          } catch {
+            try { await fmRef.current?.reset?.(); } catch { /* best-effort MediaPipe recovery */ }
+            if (scanningRef.current && performance.now() - lastResultAtRef.current > IOS_SAFARI_RESULT_TIMEOUT_MS) {
+              setSeqIdx(-1);
+              setFill(0);
+              fillRef.current = 0;
+              setPauseWarning(false);
+              setScanLost(false);
+              setScanError("Face scanning stalled in Safari. Tap retry and keep your face centered in good light.");
+            }
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
+        } else {
+          try { await fmRef.current.send({ image:v }); } catch { /* preserve existing silent desktop retry behavior */ }
+        }
         procRef.current = false;
       }
       loopRef.current = requestAnimationFrame(loop);
@@ -175,6 +216,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
 
   useEffect(() => {
     if (scanning && !done) {
+      lastResultAtRef.current = performance.now();
+      setScanError(null);
       setScanLost(false);
       setPauseWarning(false);
       samplesRef.current = [];
@@ -272,6 +315,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     setLightWarning(null);
     setPauseWarning(false);
     setScanLost(false);
+    setScanError(null);
     setFaceSpan(0);
     facePresentRef.current = false;
     samplesRef.current = [];
@@ -282,5 +326,5 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     autoStarted.current = false;
   }, []);
 
-  return { seqIdx, fill, done, measurements, mpReady, mpLoadError, autoStartPct, facePresent, faceSpan, poseHint, lightWarning, pauseWarning, scanLost, quality, validPct, reset };
+  return { seqIdx, fill, done, measurements, mpReady, mpLoadError, autoStartPct, facePresent, faceSpan, poseHint, lightWarning, pauseWarning, scanLost, scanError, quality, validPct, reset };
 }

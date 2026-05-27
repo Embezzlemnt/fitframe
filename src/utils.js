@@ -50,6 +50,12 @@ export function loadScript(src) {
   });
 }
 
+export function isIOSSafari() {
+  const ua = navigator.userAgent;
+  const iOS = /iPad|iPhone|iPod/.test(navigator.platform) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return iOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|Chrome|Chromium|Android/.test(ua);
+}
+
 export function validatePose(lm) {
   const nx = lm[1].x, ny = lm[1].y;
   if (nx < 0.10 || nx > 0.90) return { valid:false, reason:"Center your face" };
@@ -58,6 +64,7 @@ export function validatePose(lm) {
 }
 
 export function calcMeasurements(lm, W, H) {
+  if (![468,469,470,471,472,473,474,475,476,477].every(i => lm[i])) return null;
   const pts = lm.map(p => ({ x:p.x*W, y:p.y*H }));
   const d   = (a,b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
   const lId = (d(468,469)+d(468,470)+d(468,471)+d(468,472))/4*2;
