@@ -29,3 +29,8 @@
     "enabled": true
   }
 }
+[[kv_namespaces]]
+binding = "FITFRAME_KV"
+id = "792e2a9294074693835db0ca56f6b2bc"
+ }
+}
