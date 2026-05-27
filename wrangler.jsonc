@@ -19,6 +19,12 @@
     "RESEND_FROM_EMAIL": "FitFrame <orders@fitframe.store>",
     "FITFRAME_ORDER_EMAIL": "Lorenzo.Laws@outlook.com"
   },
+  "kv_namespaces": [
+    {
+      "binding": "FITFRAME_KV",
+      "id": "792e2a9294074693835db0ca56f6b2bc"
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
@@ -29,9 +35,4 @@
   "observability": {
     "enabled": true
   }
-}
-[[kv_namespaces]]
-binding = "FITFRAME_KV"
-id = "792e2a9294074693835db0ca56f6b2bc"
- }
 }
