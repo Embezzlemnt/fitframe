@@ -1,5 +1,9 @@
 const ORDER_PRICE_CENTS = 8900;
 const ORDER_EMAIL = "Lorenzo.Laws@outlook.com";
+const SCAN_COUNT_KEY = "faces_scanned_count";
+const SCAN_COUNT_SEED = 47;
+
+let fallbackScanCount = SCAN_COUNT_SEED;
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -248,6 +252,31 @@ async function stripeWebhook(request, env) {
   return json({ ok:true });
 }
 
+async function readScanCount(env) {
+  if (!env.FITFRAME_KV) return fallbackScanCount;
+  const stored = await env.FITFRAME_KV.get(SCAN_COUNT_KEY);
+  const count = Number.parseInt(stored || "", 10);
+  if (Number.isFinite(count)) return count;
+  await env.FITFRAME_KV.put(SCAN_COUNT_KEY, String(SCAN_COUNT_SEED));
+  return SCAN_COUNT_SEED;
+}
+
+async function scanCount(request, env) {
+  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405);
+  return json({ ok:true, count:await readScanCount(env) });
+}
+
+async function scanComplete(request, env) {
+  if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405);
+  if (!env.FITFRAME_KV) {
+    fallbackScanCount += 1;
+    return json({ ok:true, count:fallbackScanCount, storage:"worker-memory" });
+  }
+  const next = (await readScanCount(env)) + 1;
+  await env.FITFRAME_KV.put(SCAN_COUNT_KEY, String(next));
+  return json({ ok:true, count:next, storage:"kv" });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -256,6 +285,8 @@ export default {
     if (url.pathname === "/api/create-checkout-session" && request.method === "POST") return createCheckoutSession(request, env);
     if (url.pathname === "/api/checkout-session" && request.method === "GET") return getCheckoutSession(request, env);
     if (url.pathname === "/api/stripe-webhook" && request.method === "POST") return stripeWebhook(request, env);
+    if (url.pathname === "/api/scan-count") return scanCount(request, env);
+    if (url.pathname === "/api/scan-complete") return scanComplete(request, env);
 
     if (url.pathname.startsWith("/api/")) return json({ error:"Not found." }, 404);
     return new Response(null, { status:404 });

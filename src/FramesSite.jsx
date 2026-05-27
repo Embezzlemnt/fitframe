@@ -164,6 +164,7 @@ export default function FramesSite(){
   const [sent, setSent] = useState(saved.sent??false);
   const [pendingOrder, setPendingOrder] = useState(saved.pendingOrder??null);
   const [paymentDetails, setPaymentDetails] = useState(saved.paymentDetails??null);
+  const [scanCount, setScanCount] = useState(47);
   const [cardCalibrating, setCardCalibrating] = useState(false);
   const [cardCaptured, setCardCaptured] = useState(saved.cardCaptured??false);
   const [calDwell, setCalDwell] = useState(0);
@@ -172,6 +173,7 @@ export default function FramesSite(){
   const [orderId] = useState(()=>saved.orderId??genOrderId());
 
   const canvasRef=useRef(null);
+  const scanCountedRef=useRef(false);
   const cam=useCamera();
   const scan=useFaceScan({videoRef:cam.videoRef,scanning,canvasRef,onAutoStart:()=>cardCaptured&&setScanning(true)});
   const currentMeas=confirmedMeas||scan.measurements;
@@ -183,6 +185,13 @@ export default function FramesSite(){
   const totalPrice=BASE_PRICE;
   const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
   const chosenColorway=COLORWAYS.find(c=>c.id===selectedColorway)||COLORWAYS[0];
+
+  useEffect(()=>{
+    fetch("/api/scan-count")
+      .then(res=>res.ok?res.json():null)
+      .then(data=>{ if (data?.count) setScanCount(data.count); })
+      .catch(()=>{});
+  },[]);
 
   useEffect(()=>{
     const params = new URLSearchParams(window.location.search);
@@ -219,6 +228,7 @@ export default function FramesSite(){
   useEffect(()=>{ setTapped(null); },[styleQIdx]);
   useEffect(()=>{
     if (scan.measurements&&!scan.quality?.rescan){
+      recordScanComplete();
       const t=setTimeout(()=>{ setConfirmedMeas(scan.measurements); setStep(2); },1400);
       return ()=>clearTimeout(t);
     }
@@ -268,6 +278,18 @@ export default function FramesSite(){
       });
     } catch {
       setPaymentDetails(p=>p||{session_id:sessionId,payment_status:"paid"});
+    }
+  }
+
+  async function recordScanComplete() {
+    if (scanCountedRef.current) return;
+    scanCountedRef.current = true;
+    try {
+      const res = await fetch("/api/scan-complete", { method:"POST" });
+      const data = await res.json();
+      if (res.ok && data?.count) setScanCount(data.count);
+    } catch {
+      scanCountedRef.current = false;
     }
   }
 
@@ -381,6 +403,7 @@ export default function FramesSite(){
         {step===0&&<div className="section">
           <div className="eyebrow">Made-to-measure eyewear</div><div className="display">Frames built<br/>for <em>your</em> face.</div>
           <p className="body-lg">Scan your face. Answer four questions. Checkout securely with Stripe for custom 3D-printed frames built to your exact measurements.</p>
+          <div className="scan-count">Join {scanCount.toLocaleString()} people who've already scanned their face</div>
           <div className="proof-strip"><span className="proof-item"><ProofIcon type="flag"/>Made in America</span><span className="proof-item"><ProofIcon type="box"/>Ships in ~10 days</span><span className="proof-item"><ProofIcon type="refresh"/>One-time reprint guarantee</span><span className="proof-item"><ProofIcon type="lock"/>No images stored</span></div>
           <div className="price-block"><div className="price-main">${BASE_PRICE}</div><div className="price-sub">Blue light lenses included · Secure Stripe checkout</div></div>
           <div className="features">{[["01",<><strong>Browser-based face scan.</strong> No app, no store, no optician.</>],["02",<><strong>Every measurement captured.</strong> PD, bridge, temple, face width, and face height.</>],["03",<><strong>3D printed to your spec.</strong> PA12 nylon. Lightweight, precise, durable.</>],["04",<><strong>$89 fixed price.</strong> Pay securely after your frame spec is ready.</>]].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}</div>

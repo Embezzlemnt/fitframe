@@ -52,3 +52,9 @@ npm run build
 ```
 
 Use `wrangler dev` with the secrets above to exercise the Worker endpoints locally.
+
+## Scan Counter
+
+The landing page reads `/api/scan-count` and increments `/api/scan-complete` only after a successful face measurement. The Worker seeds the counter at `47`.
+
+For production persistence, bind a Cloudflare KV namespace as `FITFRAME_KV`. Without that binding, local/dev traffic uses an in-memory Worker counter so the frontend flow still works without localStorage.
