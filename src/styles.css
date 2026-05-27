@@ -13,8 +13,11 @@ html,body{height:100%;}
 body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior:none;}
 .app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;background:radial-gradient(circle at 50% -10%,rgba(76,175,125,.14),transparent 34%),var(--bg);}
 .site-header{width:100%;max-width:480px;padding:28px 24px 0;display:flex;align-items:center;justify-content:space-between;}
-.logo{font-size:21px;font-weight:500;color:var(--text);letter-spacing:-0.03em;}
+.logo{font-size:21px;font-weight:500;color:var(--text);letter-spacing:-0.03em;text-decoration:none;}
 .logo-dot{color:var(--accent);}
+.header-nav{display:flex;align-items:center;gap:12px;}
+.header-link{font-size:11px;color:var(--mid);text-decoration:none;font-weight:400;}
+.header-link:hover{color:var(--text);}
 .header-tag{font-size:10px;color:var(--soft);font-family:'Geist Mono',monospace;letter-spacing:0.05em;}
 .prog-strip{width:100%;max-width:480px;padding:22px 24px 0;display:flex;gap:5px;}
 .prog-dot{height:2px;flex:1;background:var(--border);border-radius:2px;transition:background .45s ease;}
@@ -161,6 +164,14 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .next-step-label{font-size:13px;font-weight:400;color:var(--text);margin-bottom:2px;}
 .next-step-desc{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;}
 .confirm-footer{margin-top:28px;font-size:11px;color:var(--soft);text-align:center;font-family:'Geist Mono',monospace;letter-spacing:.04em;}
+.faq-list{display:flex;flex-direction:column;gap:10px;}
+.faq-item{border:1px solid var(--border);border-radius:14px;background:var(--surface);overflow:hidden;}
+.faq-item summary{cursor:pointer;list-style:none;padding:17px 18px;font-size:15px;color:var(--text);font-weight:400;line-height:1.35;}
+.faq-item summary::-webkit-details-marker{display:none;}
+.faq-item summary::after{content:"+";float:right;color:var(--accent);font-family:'Geist Mono',monospace;}
+.faq-item[open] summary{border-bottom:1px solid var(--border);}
+.faq-item[open] summary::after{content:"–";}
+.faq-item p{padding:15px 18px 18px;font-size:13px;line-height:1.65;color:var(--dim);font-weight:300;}
 .site-footer{width:100%;max-width:462px;padding:18px 18px 10px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;color:var(--soft);font-weight:300;flex-wrap:wrap;}
 .footer-dot{color:var(--border2);}
 .footer-link{color:var(--dim);text-decoration:none;}

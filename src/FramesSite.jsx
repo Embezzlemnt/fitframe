@@ -12,6 +12,19 @@ const LENS_OPTIONS = DEFAULT_LENS;
 
 const EMPTY_CUSTOMER = { name:"", email:"", address:"", city:"", zip:"" };
 
+const FAQS = [
+  { q:"How does the face scan work and is it private?", a:"The scan runs in your browser using your camera and face landmarks. It measures proportions like PD, bridge width, temple width, and face height. FitFrame does not upload or store camera images; only the measurement values move forward into checkout." },
+  { q:"What are the glasses made from?", a:"Frames are made from PA12 nylon, a lightweight material commonly used for durable 3D printed parts. It has enough flex for daily wear while holding the custom shape we generate from your scan." },
+  { q:"Do you offer prescription lenses?", a:"Not yet. The launch pair uses clear blue light lenses. Prescription support is planned, but we do not want to offer it until the verification and fulfillment process is as reliable as the frame fit." },
+  { q:"How long does shipping take?", a:"Most orders are expected to ship in about 7 to 10 days after payment and spec review. You will hear from us within 2 business days if anything in the scan needs a quick confirmation before printing." },
+  { q:"What if my frames don't fit?", a:"FitFrame includes a one-time reprint guarantee. If the frame fit is meaningfully off, contact us with the issue and we will use the scan data and your feedback to make it right." },
+  { q:"Are these glasses durable?", a:"Yes. PA12 is chosen because it is light, resilient, and well suited to daily-use objects. Like any eyewear, the frames should still be kept out of extreme heat and protected from crushing force." },
+  { q:"How do I care for my frames?", a:"Rinse dust away before wiping lenses, use a microfiber cloth, and store the frames in a case when they are not on your face. Avoid alcohol wipes on the frame surface because they can dull the finish over time." },
+  { q:"What is your return policy?", a:"Because each pair is made to your measurements, returns are handled as fit issues rather than resale returns. If something is wrong with the fit or production quality, we will review it and prioritize a correction or reprint." },
+  { q:"Can I choose my lens type?", a:"At launch, checkout is fixed at $89 for clear blue light lenses. The interface shows the lens direction we are building toward, but paid orders today are fulfilled as the included blue light pair." },
+  { q:"Why $89 — what am I actually paying for?", a:"You are paying for a made-to-measure frame workflow: browser scan, custom frame geometry, PA12 3D printing, finishing, lenses, packing, and shipping. The goal is a price that feels closer to normal eyewear while solving the fit problem custom frames usually make expensive." },
+];
+
 const FrameSVG = ({ id, size=56, color="currentColor" }) => {
   const p = { fill:"none", stroke:color, strokeLinecap:"round", strokeLinejoin:"round" };
   const s = {
@@ -90,7 +103,49 @@ function sanitizeText(value, max=160) {
   return value.trim().replace(/[<>"'&]/g, "").slice(0, max);
 }
 
+function FAQPage() {
+  useEffect(()=>{
+    document.title = "FAQ | FitFrame";
+    const existing = document.getElementById("fitframe-faq-schema");
+    if (existing) existing.remove();
+    const script = document.createElement("script");
+    script.id = "fitframe-faq-schema";
+    script.type = "application/ld+json";
+    script.textContent = JSON.stringify({
+      "@context":"https://schema.org",
+      "@type":"FAQPage",
+      mainEntity:FAQS.map(item=>({
+        "@type":"Question",
+        name:item.q,
+        acceptedAnswer:{ "@type":"Answer", text:item.a }
+      }))
+    });
+    document.head.appendChild(script);
+    return ()=>script.remove();
+  },[]);
+
+  return (
+    <div className="app" style={{"--accent":ACCENT_COLOR}}>
+      <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/">Scan</a><div className="header-tag">FAQ</div></div></header>
+      <main className="container">
+        <section className="section faq-page">
+          <div className="eyebrow">Buyer questions</div>
+          <h1 className="step-head">FitFrame FAQ.</h1>
+          <p className="step-sub">Straight answers about the scan, materials, shipping, fit guarantee, and what the $89 pair includes.</p>
+          <div className="faq-list">
+            {FAQS.map((item,index)=><details className="faq-item" key={item.q} open={index===0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
+          </div>
+          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">Scan your face</a></div>
+        </section>
+      </main>
+      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a></div>
+    </div>
+  );
+}
+
 export default function FramesSite(){
+  if (window.location.pathname === "/faq") return <FAQPage/>;
+
   const saved=loadSession()||{};
   const [step, setStep] = useState(saved.step??0);
   const [confirmedMeas, setConfirmedMeas] = useState(saved.confirmedMeas??null);
@@ -320,7 +375,7 @@ export default function FramesSite(){
 
   return (
     <div className="app" style={{"--accent":ACCENT_COLOR}}>
-      <header className="site-header"><div className="logo">FitFrame<span className="logo-dot">.</span></div><div className="header-tag">{DOMAIN}</div></header>
+      <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/faq">FAQ</a><div className="header-tag">{DOMAIN}</div></div></header>
       {step>0&&!sent&&<div className="prog-strip">{dots.map((d,i)=><div key={i} className={`prog-dot ${d.done?"done":d.active?"active":""}`}/>)}</div>}
       <div className="container">
         {step===0&&<div className="section">
@@ -362,7 +417,7 @@ export default function FramesSite(){
 
         {sent&&<div className="section"><div className="confirm-actions"><div className="order-badge">{orderId}</div></div><div className="confirm-greeting">You're all set,<br/>{firstName}.</div><p className="confirm-body">Your payment is confirmed and your FitFrame order is in. We'll be in touch within <strong>2 business days</strong> with the next update.</p><div className="receipt"><div className="receipt-head">Paid order summary</div><div className="receipt-row"><span>Stripe confirmation</span><span>{stripeConfirmationId}</span></div><div className="receipt-row"><span>Frame</span><span>{confirmationOrder.frame}</span></div><div className="receipt-row"><span>Colorway</span><span>{confirmationOrder.colorway}</span></div><div className="receipt-row"><span>Ship to</span><span>{confirmationOrder.shipping_city || customerInfo.city}</span></div><div className="receipt-total"><span>Total paid</span><span>${BASE_PRICE}</span></div></div><div className="next-steps">{[["01","We review your scan","Your measurements and payment confirmation are sent to the production inbox automatically."],["02","We print your frames","Print time is 2–3 days once the spec is approved."],["03","Shipped to your door",`Estimated delivery: ${getETA()}. We'll send tracking once your order ships.`],["04","Fit guarantee","If your frames don't fit, we reprint them once, free."]].map(([n,label,desc])=><div className="next-step" key={n}><span className="next-step-num">{n}</span><div><div className="next-step-label">{label}</div><div className="next-step-desc">{desc}</div></div></div>)}</div><div className="btn-row" style={{marginTop:24}}><a className="btn btn-ghost" href="/faq">Read FAQ</a><button className="btn btn-ghost" onClick={()=>{clearSession();setSent(false);setStep(0);}}>Start another scan</button></div><div className="confirm-footer">{orderId} · {DOMAIN}</div></div>}
       </div>
-      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/returns" className="footer-link">Returns</a></div>
+      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/faq" className="footer-link">FAQ</a><span className="footer-dot">·</span><a href="/returns" className="footer-link">Returns</a></div>
     </div>
   );
 }
