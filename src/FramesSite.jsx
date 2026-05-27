@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "./styles.css";
-import { DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
+import { COLORWAYS, DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
 import useCamera from "./hooks/useCamera.js";
 import useFaceScan from "./hooks/useFaceScan.js";
 import { SCAN_SEQ, clearSession, genOrderId, getETA, loadSession, saveSession } from "./utils.js";
@@ -26,6 +26,22 @@ const FrameSVG = ({ id, size=56, color="currentColor" }) => {
   };
   return s[id] || s.rectangle;
 };
+
+function ColorwaySVG({ colorway, size=88 }) {
+  const gradId = `tortoise-${colorway.id}`;
+  const fill = colorway.fill === "tortoise" ? `url(#${gradId})` : colorway.fill;
+  return (
+    <svg width={size} height={size*.5} viewBox="0 0 96 48" fill="none" aria-hidden="true">
+      {colorway.fill === "tortoise"&&<defs><linearGradient id={gradId} x1="0" y1="0" x2="96" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="var(--colorway-tortoise-1)"/><stop offset="0.38" stopColor="var(--colorway-tortoise-2)"/><stop offset="0.62" stopColor="var(--colorway-tortoise-3)"/><stop offset="1" stopColor="var(--colorway-tortoise-2)"/></linearGradient></defs>}
+      <rect x="6" y="10" width="34" height="26" rx="8" fill={fill} stroke="rgba(255,255,255,.18)" strokeWidth="2"/>
+      <rect x="56" y="10" width="34" height="26" rx="8" fill={fill} stroke="rgba(255,255,255,.18)" strokeWidth="2"/>
+      <path d="M40 23.5 C44 20.5 52 20.5 56 23.5" stroke={fill} strokeWidth="5" strokeLinecap="round"/>
+      <path d="M6 22 L0 18 M90 22 L96 18" stroke={fill} strokeWidth="5" strokeLinecap="round"/>
+      <circle cx="20" cy="22" r="2.5" fill="rgba(255,255,255,.2)"/>
+      <circle cx="70" cy="22" r="2.5" fill="rgba(255,255,255,.2)"/>
+    </svg>
+  );
+}
 
 function ProofIcon({ type }) {
   if (type === "flag") return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 4v16"/><path d="M4 5h14l-2 4 2 4H4"/><path d="M7 8h5"/></svg>;
@@ -84,6 +100,7 @@ export default function FramesSite(){
   const [lensChoice, setLensChoice] = useState(saved.lensChoice??null);
   const [rxForm, setRxForm] = useState(saved.rxForm??{odSphere:"",odCyl:"",odAxis:"",osSphere:"",osCyl:"",osAxis:""});
   const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
+  const [selectedColorway, setSelectedColorway] = useState(saved.selectedColorway??"matte-black");
   const [customerInfo, setCustomerInfo] = useState({...EMPTY_CUSTOMER,...(saved.customerInfo||{})});
   const [focusedField, setFocusedField] = useState(null);
   const [submitError, setSubmitError] = useState(null);
@@ -110,6 +127,7 @@ export default function FramesSite(){
   const lensData=LENS_OPTIONS.find(l=>l.id===lensChoice);
   const totalPrice=BASE_PRICE;
   const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
+  const chosenColorway=COLORWAYS.find(c=>c.id===selectedColorway)||COLORWAYS[0];
 
   useEffect(()=>{
     const params = new URLSearchParams(window.location.search);
@@ -118,12 +136,12 @@ export default function FramesSite(){
       const sessionId = params.get("session_id") || "";
       setPaymentDetails(p=>({...p,session_id:sessionId,payment_status:"paid"}));
       setSent(true);
-      setStep(5);
+      setStep(6);
       if (sessionId) hydrateCheckoutSession(sessionId);
       window.history.replaceState({}, "", window.location.pathname);
     }
     if (checkout === "cancelled") {
-      setStep(5);
+      setStep(6);
       setSubmitError("Checkout was cancelled. Your order has not been charged.");
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -131,8 +149,8 @@ export default function FramesSite(){
 
   useEffect(()=>{
     if (step===0&&!sent) return;
-    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,customerInfo,orderId,cardCaptured,sent,pendingOrder,paymentDetails});
-  },[step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,customerInfo,orderId,cardCaptured,sent,pendingOrder,paymentDetails]);
+    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,customerInfo,orderId,cardCaptured,sent,pendingOrder,paymentDetails});
+  },[step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,customerInfo,orderId,cardCaptured,sent,pendingOrder,paymentDetails]);
 
   useEffect(()=>{ if(step!==1) cam.stop(); },[step,cam.stop]);
   useEffect(()=>{
@@ -227,8 +245,8 @@ export default function FramesSite(){
       timestamp:new Date().toISOString(),
       frame_id:chosenFrame?.id||"-",
       frame:chosenFrame?.label||"-",
-      colorway_id:"pending",
-      colorway:"Pending selection",
+      colorway_id:chosenColorway.id,
+      colorway:chosenColorway.label,
       lens:lensData?.label||"Blue Light",
       lens_spec:lensData?.spec||"Clear blue light lenses",
       lens_price:0,
@@ -272,7 +290,7 @@ export default function FramesSite(){
 
     const payload=buildOrderPayload(safeName,safeEmail,{...customerInfo,address:safeAddress,city:safeCity,zip:safeZip});
     setPendingOrder(payload);
-    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,customerInfo:{...customerInfo,name:safeName,email:safeEmail,address:safeAddress,city:safeCity,zip:safeZip},orderId,cardCaptured,pendingOrder:payload});
+    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,customerInfo:{...customerInfo,name:safeName,email:safeEmail,address:safeAddress,city:safeCity,zip:safeZip},orderId,cardCaptured,pendingOrder:payload});
 
     try {
       const res=await fetch("/api/create-checkout-session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
@@ -293,7 +311,7 @@ export default function FramesSite(){
     return {label:"READY",tone:""};
   }
 
-  const dots=[1,2,3,4,5].map(i=>({done:step>i,active:step===i}));
+  const dots=[1,2,3,4,5,6].map(i=>({done:step>i,active:step===i}));
   const firstName=customerInfo.name.trim().split(" ")[0]||"there";
   const activeMeasure=MEASURE_FIELDS.find(f=>f.key===focusedField);
   const badge=scanBadge();
@@ -315,7 +333,7 @@ export default function FramesSite(){
         </div>}
 
         {step===1&&<div className="section">
-          <div className="eyebrow">Step 1 of 5 — Face scan</div><div className="step-head">{scanning?"Stay still.":scan.done?"Scan complete.":"Position your face."}</div>
+          <div className="eyebrow">Step 1 of 6 — Face scan</div><div className="step-head">{scanning?"Stay still.":scan.done?"Scan complete.":"Position your face."}</div>
           <p className="step-sub">{cardCalibrating?"Hold the card flat below your chin — keep still":scanning?"We're capturing your measurements.":scan.done?"Processing your measurements.":"Center your face inside the oval and hold still. The scan starts automatically."}</p>
           <p className="privacy-note">Your camera is used only for measurement. No images are stored or transmitted.</p>
           {cam.ready&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>Preparing face scanner…</div></div>}
@@ -332,13 +350,15 @@ export default function FramesSite(){
           {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">Measurements captured. Moving forward…</div>}
         </div>}
 
-        {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">Step 2 of 5 — Style</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← Back</button></div>}</div>; })()}
+        {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">Step 2 of 6 — Style</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← Back</button></div>}</div>; })()}
 
-        {step===3&&<div className="section"><div className="eyebrow">Step 3 of 5 — Lenses</div><div className="step-head">Choose your lens.</div><p className="step-sub">Blue light lenses are included in the fixed ${BASE_PRICE} checkout price.</p><div className="lens-list">{LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">Included</div></div>)}</div><div className="lens-disclaimer">Prescription support is in development. Checkout today is fixed at ${BASE_PRICE} for clear blue light lenses.</div><div className="btn-row"><button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>Choose your frame →</button><button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button></div></div>}
+        {step===3&&<div className="section"><div className="eyebrow">Step 3 of 6 — Lenses</div><div className="step-head">Choose your lens.</div><p className="step-sub">Blue light lenses are included in the fixed ${BASE_PRICE} checkout price.</p><div className="lens-list">{LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">Included</div></div>)}</div><div className="lens-disclaimer">Prescription support is in development. Checkout today is fixed at ${BASE_PRICE} for clear blue light lenses.</div><div className="btn-row"><button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>Choose your frame →</button><button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button></div></div>}
 
-        {step===4&&<div className="section"><div className="eyebrow">Step 4 of 5 — Frame</div><div className="step-head">Pick your shape.</div><p className="step-sub">Your top match is highlighted based on your answers. Choose the one that feels right.</p><div className="vto-note"><div className="vto-note-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div className="vto-note-text"><strong>Virtual try-on coming soon.</strong> Select the shape that matches your style for now.</div></div><div className="frame-grid">{topFrames.map((f,i)=><div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`} onClick={()=>setSelectedFrame(f.id)}>{i===0&&<div className="best-badge">best match</div>}<div className="frame-tile-icon"><FrameSVG id={f.id} size={52} color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/></div><div className="frame-tile-name">{f.label}</div><div className="frame-tile-desc">{f.desc}</div>{f.score>0&&<div className="frame-tile-bar" style={{width:`${Math.round((f.score/maxScore)*100)}%`}}/>}</div>)}</div><div className="btn-row" style={{marginTop:8}}><button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(5);}}>Shipping + checkout →</button><button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button></div></div>}
+        {step===4&&<div className="section"><div className="eyebrow">Step 4 of 6 — Frame</div><div className="step-head">Pick your shape.</div><p className="step-sub">Your top match is highlighted based on your answers. Choose the one that feels right.</p><div className="vto-note"><div className="vto-note-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div className="vto-note-text"><strong>Virtual try-on coming soon.</strong> Select the shape that matches your style for now.</div></div><div className="frame-grid">{topFrames.map((f,i)=><div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`} onClick={()=>setSelectedFrame(f.id)}>{i===0&&<div className="best-badge">best match</div>}<div className="frame-tile-icon"><FrameSVG id={f.id} size={52} color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/></div><div className="frame-tile-name">{f.label}</div><div className="frame-tile-desc">{f.desc}</div>{f.score>0&&<div className="frame-tile-bar" style={{width:`${Math.round((f.score/maxScore)*100)}%`}}/>}</div>)}</div><div className="btn-row" style={{marginTop:8}}><button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(5);}}>Choose colorway →</button><button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button></div></div>}
 
-        {step===5&&!sent&&<div className="section"><div className="eyebrow">Step 5 of 5 — Secure checkout</div><div className="step-head">Ship your pair.</div><p className="step-sub">Review the measurements, enter shipping, then checkout through Stripe. Nothing is charged until Stripe confirms payment.</p><div className="measure-grid">{MEASURE_FIELDS.map(field=>{ const value=field.key==="faceH"?(currentMeas?.faceH||currentMeas?.lensH||""):currentMeas?.[field.key]||""; const sane=isSane(value,field); return <div className="measure-field" key={field.key}><label>{field.label}</label><input className="measure-input" inputMode="decimal" value={value} onFocus={()=>setFocusedField(field.key)} onBlur={()=>setFocusedField(null)} onChange={e=>setConfirmedMeas(p=>({...currentMeas,...p,[field.key]:e.target.value}))}/>{sane!==null&&<span className={`measure-dot ${sane?"ok":""}`}/>}</div>; })}</div>{activeMeasure&&<div className="measure-tooltip">{activeMeasure.hint}</div>}<div className="receipt"><div className="receipt-head">Order summary · {orderId}</div><div className="receipt-row"><span>Custom frame — {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div><div className="receipt-row"><span>{lensData?.label||"Blue Light"} lenses</span><span>Included</span></div><div className="receipt-total"><span>Total due today</span><span>${totalPrice}</span></div></div><div className="trust-line"><ProofIcon type="refresh"/><span>One-time reprint guarantee if the fit is off. No questions asked.</span></div><div className="payment-note"><span>Payment is processed by Stripe Checkout.</span><span>We never store card details on FitFrame servers.</span></div><input className="field" placeholder="Full name" autoComplete="name" value={customerInfo.name} onChange={e=>updateCustomer("name",e.target.value)}/><input className="field" placeholder="Email address" type="email" autoComplete="email" value={customerInfo.email} onChange={e=>updateCustomer("email",e.target.value)}/><input className="field" placeholder="Street address" autoComplete="street-address" value={customerInfo.address} onChange={e=>updateCustomer("address",e.target.value)}/><input className="field" placeholder="City" autoComplete="address-level2" value={customerInfo.city} onChange={e=>updateCustomer("city",e.target.value)}/><input className="field" placeholder="ZIP code" inputMode="numeric" autoComplete="postal-code" value={customerInfo.zip} onChange={e=>updateCustomer("zip",e.target.value)}/>{submitError&&<div className="submit-error">{submitError}</div>}<div className="btn-row"><button className="btn btn-primary checkout-submit" disabled={submitting} onClick={submitOrder}>{submitting?"Starting Stripe…":`Checkout securely · $${BASE_PRICE}`}</button><button className="btn btn-ghost" onClick={()=>setStep(4)}>Back</button></div></div>}
+        {step===5&&!sent&&<div className="section"><div className="eyebrow">Step 5 of 6 — Colorway</div><div className="step-head">Choose the finish.</div><p className="step-sub">One decision, three finishes. Matte Black is the default recommendation for most face shapes.</p><div className="colorway-grid">{COLORWAYS.map(c=><button key={c.id} className={`colorway-card ${selectedColorway===c.id?"sel":""}`} onClick={()=>setSelectedColorway(c.id)}>{c.recommended&&<span className="colorway-badge">Recommended for your face shape</span>}<div className="colorway-preview"><ColorwaySVG colorway={c}/></div><div><div className="colorway-name">{c.label}</div><div className="colorway-desc">{c.desc}</div></div></button>)}</div><div className="btn-row"><button className="btn btn-primary checkout-submit" onClick={()=>setStep(6)}>Continue to shipping →</button><button className="btn btn-ghost" onClick={()=>setStep(4)}>Back</button></div></div>}
+
+        {step===6&&!sent&&<div className="section"><div className="eyebrow">Step 6 of 6 — Secure checkout</div><div className="step-head">Ship your pair.</div><p className="step-sub">Review the measurements, enter shipping, then checkout through Stripe. Nothing is charged until Stripe confirms payment.</p><div className="measure-grid">{MEASURE_FIELDS.map(field=>{ const value=field.key==="faceH"?(currentMeas?.faceH||currentMeas?.lensH||""):currentMeas?.[field.key]||""; const sane=isSane(value,field); return <div className="measure-field" key={field.key}><label>{field.label}</label><input className="measure-input" inputMode="decimal" value={value} onFocus={()=>setFocusedField(field.key)} onBlur={()=>setFocusedField(null)} onChange={e=>setConfirmedMeas(p=>({...currentMeas,...p,[field.key]:e.target.value}))}/>{sane!==null&&<span className={`measure-dot ${sane?"ok":""}`}/>}</div>; })}</div>{activeMeasure&&<div className="measure-tooltip">{activeMeasure.hint}</div>}<div className="receipt"><div className="receipt-head">Order summary · {orderId}</div><div className="receipt-row"><span>Custom frame — {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div><div className="receipt-row"><span>Colorway — {chosenColorway.label}</span><span>Included</span></div><div className="receipt-row"><span>{lensData?.label||"Blue Light"} lenses</span><span>Included</span></div><div className="receipt-total"><span>Total due today</span><span>${totalPrice}</span></div></div><div className="trust-line"><ProofIcon type="refresh"/><span>One-time reprint guarantee if the fit is off. No questions asked.</span></div><div className="payment-note"><span>Payment is processed by Stripe Checkout.</span><span>We never store card details on FitFrame servers.</span></div><input className="field" placeholder="Full name" autoComplete="name" value={customerInfo.name} onChange={e=>updateCustomer("name",e.target.value)}/><input className="field" placeholder="Email address" type="email" autoComplete="email" value={customerInfo.email} onChange={e=>updateCustomer("email",e.target.value)}/><input className="field" placeholder="Street address" autoComplete="street-address" value={customerInfo.address} onChange={e=>updateCustomer("address",e.target.value)}/><input className="field" placeholder="City" autoComplete="address-level2" value={customerInfo.city} onChange={e=>updateCustomer("city",e.target.value)}/><input className="field" placeholder="ZIP code" inputMode="numeric" autoComplete="postal-code" value={customerInfo.zip} onChange={e=>updateCustomer("zip",e.target.value)}/>{submitError&&<div className="submit-error">{submitError}</div>}<div className="btn-row"><button className="btn btn-primary checkout-submit" disabled={submitting} onClick={submitOrder}>{submitting?"Starting Stripe…":`Checkout securely · $${BASE_PRICE}`}</button><button className="btn btn-ghost" onClick={()=>setStep(5)}>Back</button></div></div>}
 
         {sent&&<div className="section"><div className="confirm-actions"><div className="order-badge">{orderId}</div></div><div className="confirm-greeting">You're all set,<br/>{firstName}.</div><p className="confirm-body">Your payment is confirmed and your FitFrame order is in. We'll be in touch within <strong>2 business days</strong> with the next update.</p><div className="receipt"><div className="receipt-head">Paid order summary</div><div className="receipt-row"><span>Stripe confirmation</span><span>{stripeConfirmationId}</span></div><div className="receipt-row"><span>Frame</span><span>{confirmationOrder.frame}</span></div><div className="receipt-row"><span>Colorway</span><span>{confirmationOrder.colorway}</span></div><div className="receipt-row"><span>Ship to</span><span>{confirmationOrder.shipping_city || customerInfo.city}</span></div><div className="receipt-total"><span>Total paid</span><span>${BASE_PRICE}</span></div></div><div className="next-steps">{[["01","We review your scan","Your measurements and payment confirmation are sent to the production inbox automatically."],["02","We print your frames","Print time is 2–3 days once the spec is approved."],["03","Shipped to your door",`Estimated delivery: ${getETA()}. We'll send tracking once your order ships.`],["04","Fit guarantee","If your frames don't fit, we reprint them once, free."]].map(([n,label,desc])=><div className="next-step" key={n}><span className="next-step-num">{n}</span><div><div className="next-step-label">{label}</div><div className="next-step-desc">{desc}</div></div></div>)}</div><div className="btn-row" style={{marginTop:24}}><a className="btn btn-ghost" href="/faq">Read FAQ</a><button className="btn btn-ghost" onClick={()=>{clearSession();setSent(false);setStep(0);}}>Start another scan</button></div><div className="confirm-footer">{orderId} · {DOMAIN}</div></div>}
       </div>

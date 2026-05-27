@@ -42,3 +42,9 @@ export const DEFAULT_LENS = [
   { id:"transition",   label:"Transitions",  price:45, desc:"Adapts to light. One pair, everywhere." },
   { id:"prescription", label:"Prescription", price:65, desc:"Your exact Rx. Requires prescription details." },
 ];
+
+export const COLORWAYS = [
+  { id:"matte-black", label:"Matte Black", desc:"A precise, understated black that works with every frame shape.", fill:"var(--colorway-matte-black)", recommended:true },
+  { id:"tortoise", label:"Tortoise", desc:"Warm amber and brown depth, simulated in layered PA12 finish.", fill:"tortoise" },
+  { id:"natural-pa12", label:"Natural PA12", desc:"Warm off-white nylon with a softer studio-object feel.", fill:"var(--colorway-natural-pa12)" },
+];
