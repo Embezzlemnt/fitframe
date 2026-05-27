@@ -64,10 +64,6 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .feature-num{font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);padding-top:2px;min-width:18px;}
 .feature-text{font-size:13px;color:var(--mid);line-height:1.5;font-weight:300;}
 .feature-text strong{color:var(--text);font-weight:400;}
-.founder-card{display:flex;gap:14px;align-items:flex-start;padding:18px;margin:-12px 0 26px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(135deg,var(--surface),var(--panel));}
-.founder-avatar{width:44px;height:44px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border2);color:var(--accent);font-family:'Geist Mono',monospace;font-size:13px;letter-spacing:.08em;}
-.founder-label{font-size:10px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;}
-.founder-card p{font-size:13px;color:var(--mid);line-height:1.65;font-weight:300;margin-bottom:14px;}
 .cam-outer{width:100%;border-radius:16px;overflow:hidden;background:var(--scan);position:relative;margin-bottom:20px;}
 .cam-inner{width:100%;aspect-ratio:4/3;position:relative;}
 .cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
@@ -89,6 +85,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .cam-label{font-size:14px;color:var(--text);font-weight:400;}
 .cam-sub{font-size:12px;color:var(--dim);line-height:1.6;max-width:260px;font-weight:300;}
 .mp-spinner{width:22px;height:22px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+.cam-loading-overlay{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(8,8,8,.68);padding:24px;}
 .err-box{padding:11px 15px;background:rgba(229,166,74,.1);border:1px solid rgba(229,166,74,.35);border-radius:8px;font-size:12px;color:var(--amber);line-height:1.65;max-width:280px;}
 .scan-ok{font-size:12px;color:var(--accent);text-align:center;margin-top:10px;font-weight:300;}
 .q-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
@@ -182,6 +179,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .faq-item[open] summary{border-bottom:1px solid var(--border);}
 .faq-item[open] summary::after{content:"–";}
 .faq-item p{padding:15px 18px 18px;font-size:13px;line-height:1.65;color:var(--dim);font-weight:300;}
+.returns-copy{display:flex;flex-direction:column;gap:16px;color:var(--dim);font-size:15px;line-height:1.68;font-weight:300;}
 .site-footer{width:100%;max-width:462px;padding:18px 18px 10px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;color:var(--soft);font-weight:300;flex-wrap:wrap;}
 .footer-dot{color:var(--border2);}
 .footer-link{color:var(--dim);text-decoration:none;}

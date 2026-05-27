@@ -47,42 +47,6 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
 
   useEffect(() => { scanningRef.current = scanning; }, [scanning]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const delays = [800, 2000, 5000];
-
-    async function init(attempt = 0) {
-      try {
-        await Promise.all(MP_SCRIPTS.map(loadScript));
-        if (!window.FaceMesh) throw new Error("FaceMesh unavailable");
-        const fm = new window.FaceMesh({
-          locateFile:f => {
-            const file = iosSafariRef.current && f.includes("_simd_") ? f.replace("_simd_", "_") : f;
-            return `${MP_FACE_MESH_BASE}/${file}`;
-          }
-        });
-        fm.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5, ...(iosSafariRef.current ? { useCpuInference:true } : {}) });
-        fm.onResults(handleResults);
-        await fm.initialize();
-        if (!cancelled) {
-          fmRef.current = fm;
-          setMpReady(true);
-        }
-      } catch (e) {
-        if (cancelled) return;
-        if (attempt < delays.length) {
-          setTimeout(() => init(attempt + 1), delays[attempt]);
-        } else {
-          console.error("MediaPipe:", e);
-          setMpLoadError(true);
-        }
-      }
-    }
-
-    init();
-    return () => { cancelled = true; };
-  }, []);
-
   function handleResults(results) {
     lastResultAtRef.current = performance.now();
     setScanError(null);
@@ -175,6 +139,42 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
       }
     }
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    const delays = [800, 2000, 5000];
+
+    async function init(attempt = 0) {
+      try {
+        await Promise.all(MP_SCRIPTS.map(loadScript));
+        if (!window.FaceMesh) throw new Error("FaceMesh unavailable");
+        const fm = new window.FaceMesh({
+          locateFile:f => {
+            const file = iosSafariRef.current && f.includes("_simd_") ? f.replace("_simd_", "_") : f;
+            return `${MP_FACE_MESH_BASE}/${file}`;
+          }
+        });
+        fm.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5, ...(iosSafariRef.current ? { useCpuInference:true } : {}) });
+        fm.onResults(handleResults);
+        await fm.initialize();
+        if (!cancelled) {
+          fmRef.current = fm;
+          setMpReady(true);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        if (attempt < delays.length) {
+          setTimeout(() => init(attempt + 1), delays[attempt]);
+        } else {
+          console.error("MediaPipe:", e);
+          setMpLoadError(true);
+        }
+      }
+    }
+
+    init();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const loop = async () => {

@@ -25,5 +25,8 @@ FitFrame started as a frustration with glasses that never fit right. FitFrame me
 ## Fit Guarantee
 FitFrame includes one free reprint if the first pair does not fit. FitFrame frames are 3D printed in PA12 nylon.
 
+## Returns & Reprints
+FitFrame frames are made to order from each customer's scan. FitFrame does not accept returns for fit preference because each pair is printed to custom measurements. FitFrame reprints and reships frames at no cost if a pair arrives with a manufacturing defect. FitFrame reviews scan measurement issues when a frame is unwearable and accepts one reprint request per order within 30 days of delivery.
+
 ## Where to Verify
-The official FitFrame domain is https://fitframe.store. The privacy page is https://fitframe.store/privacy. The public GitHub repository is https://github.com/Embezzlemnt/fitframe. The FitFrame contact email is hello@fitframe.store.
+The official FitFrame domain is https://fitframe.store. The returns and reprints page is https://fitframe.store/returns. The privacy page is https://fitframe.store/privacy. The public GitHub repository is https://github.com/Embezzlemnt/fitframe. The FitFrame contact email is hello@fitframe.store.

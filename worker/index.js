@@ -1,5 +1,5 @@
 const ORDER_PRICE_CENTS = 8900;
-const ORDER_EMAIL = "Lorenzo.Laws@outlook.com";
+const ORDER_EMAIL = "hello@fitframe.store";
 const SCAN_COUNT_KEY = "faces_scanned_count";
 const SCAN_COUNT_SEED = 47;
 
@@ -32,6 +32,7 @@ function orderMetadata(order) {
     shipping_name: order.shipping_name || order.customer_name,
     shipping_address: order.shipping_address,
     shipping_city: order.shipping_city,
+    shipping_state: order.shipping_state,
     shipping_zip: order.shipping_zip,
     frame_id: order.frame_id,
     frame: order.frame,
@@ -63,6 +64,7 @@ function requiredOrderFields(order) {
     "customer_email",
     "shipping_address",
     "shipping_city",
+    "shipping_state",
     "shipping_zip",
     "frame_id",
     "pd_binocular",
@@ -191,6 +193,7 @@ function paidOrderSpec(session) {
     `Name: ${m.shipping_name || m.customer_name || "-"}`,
     `Address: ${m.shipping_address || "-"}`,
     `City: ${m.shipping_city || "-"}`,
+    `State: ${m.shipping_state || "-"}`,
     `ZIP: ${m.shipping_zip || "-"}`,
     "",
     "Frame",
@@ -298,7 +301,7 @@ async function waitlist(request, env) {
   if (!validEmail(email)) return json({ ok:false, error:"Enter a valid email address." }, 400);
 
   const key = `waitlist:${email}`;
-  let duplicate = false;
+  let duplicate;
   if (env.FITFRAME_KV) {
     duplicate = Boolean(await env.FITFRAME_KV.get(key));
     if (!duplicate) await env.FITFRAME_KV.put(key, JSON.stringify({ email, created_at:new Date().toISOString() }));

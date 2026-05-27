@@ -19,7 +19,7 @@ Required Worker vars in `wrangler.jsonc`:
 ```json
 {
   "RESEND_FROM_EMAIL": "FitFrame <orders@fitframe.store>",
-  "FITFRAME_ORDER_EMAIL": "Lorenzo.Laws@outlook.com"
+  "FITFRAME_ORDER_EMAIL": "hello@fitframe.store"
 }
 ```
 
@@ -41,7 +41,7 @@ Checkout flow:
 2. The Worker creates a Stripe hosted Checkout Session for `$89.00 USD`.
 3. Stripe redirects back to `/?checkout=success&session_id=...` after payment.
 4. Stripe sends `checkout.session.completed` to `/api/stripe-webhook`.
-5. The webhook verifies the Stripe signature and emails the structured order spec to `Lorenzo.Laws@outlook.com` through Resend.
+5. The webhook verifies the Stripe signature and emails the structured order spec to `hello@fitframe.store` through Resend.
 
 The order spec is carried in Stripe metadata so FitFrame does not store customer data server-side beyond webhook execution.
 

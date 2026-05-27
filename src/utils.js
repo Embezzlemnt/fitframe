@@ -18,7 +18,9 @@ export const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 export function saveSession(data) {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({ ...data, version: 1 }));
-  } catch {}
+  } catch {
+    // Ignore storage failures; the scan flow still works without persistence.
+  }
 }
 
 export function loadSession() {
@@ -35,7 +37,9 @@ export function loadSession() {
 export function clearSession() {
   try {
     localStorage.removeItem(STORE_KEY);
-  } catch {}
+  } catch {
+    // Ignore storage failures; clearing session is best effort.
+  }
 }
 
 export function loadScript(src) {
@@ -128,6 +132,7 @@ export function buildMakerSpec(payload) {
     `Name: ${payload.shipping_name || payload.customer_name}`,
     `Address: ${payload.shipping_address || "—"}`,
     `City: ${payload.shipping_city || "—"}`,
+    `State: ${payload.shipping_state || "—"}`,
     `ZIP: ${payload.shipping_zip || "—"}`,
     "",
     "Style answers",

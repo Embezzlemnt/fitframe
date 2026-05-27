@@ -7,7 +7,7 @@ FitFrame order email is now sent from the Cloudflare Worker after Stripe confirm
 1. The customer completes Stripe Checkout.
 2. Stripe sends `checkout.session.completed` to `/api/stripe-webhook`.
 3. The Worker verifies `STRIPE_WEBHOOK_SECRET`.
-4. The Worker sends the paid order spec through Resend to `Lorenzo.Laws@outlook.com`.
+4. The Worker sends the paid order spec through Resend to `hello@fitframe.store`.
 
 Required Cloudflare secrets:
 
@@ -21,7 +21,7 @@ Required vars:
 
 ```txt
 RESEND_FROM_EMAIL=FitFrame <orders@fitframe.store>
-FITFRAME_ORDER_EMAIL=Lorenzo.Laws@outlook.com
+FITFRAME_ORDER_EMAIL=hello@fitframe.store
 ```
 
 The order email includes shipping address, Stripe payment confirmation ID, selected frame, colorway, lens, scan measurements, scan quality, and customer email.
@@ -86,7 +86,7 @@ ImprovMX remains useful for inbound forwarding to `hello@fitframe.store` unless 
 Confirm the ImprovMX account has this forward:
 
 ```txt
-hello@fitframe.store -> Lorenzo's mailbox
+hello@fitframe.store -> business inbox
 ```
 
 Then keep these Cloudflare DNS records. All are DNS only.
@@ -125,4 +125,4 @@ Proxy: DNS only
 2. Complete payment with Stripe test card `4242 4242 4242 4242`.
 3. Confirm the customer returns to the FitFrame confirmation screen.
 4. Confirm Stripe emits `checkout.session.completed`.
-5. Confirm Lorenzo receives the structured order spec.
+5. Confirm the business inbox receives the structured order spec.

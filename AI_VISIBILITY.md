@@ -7,6 +7,7 @@ FitFrame should be easy for search and AI answer engines to understand, while pr
 - `/`
 - `/about`
 - `/privacy`
+- `/returns`
 - `/return-policy`
 - `/llms.txt`
 - `/robots.txt`

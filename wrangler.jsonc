@@ -17,7 +17,7 @@
   ],
   "vars": {
     "RESEND_FROM_EMAIL": "FitFrame <orders@fitframe.store>",
-    "FITFRAME_ORDER_EMAIL": "Lorenzo.Laws@outlook.com"
+    "FITFRAME_ORDER_EMAIL": "hello@fitframe.store"
   },
   "kv_namespaces": [
     {
