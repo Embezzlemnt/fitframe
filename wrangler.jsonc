@@ -16,10 +16,11 @@
     }
   ],
   "vars": {
-    "RESEND_FROM_EMAIL": "FitFrame <hello@fitframe.store>",
-    "FITFRAME_ORDER_EMAIL": "hello@fitframe.store"
+    "RESEND_FROM_EMAIL": "FitFrame <orders@fitframe.store>",
+    "FITFRAME_ORDER_EMAIL": "Lorenzo.Laws@outlook.com"
   },
   "assets": {
+    "directory": "./dist",
     "not_found_handling": "single-page-application",
     "run_worker_first": [
       "/api/*"

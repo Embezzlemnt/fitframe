@@ -1,89 +1,30 @@
 # Email Delivery Notes
 
-FitFrame stays on Cloudflare. The current launch order flow does not require a backend email service.
+FitFrame order email is now sent from the Cloudflare Worker after Stripe confirms payment.
 
-## Current Launch Flow
+## Current Checkout Email Flow
 
-The React app opens a native `mailto:` draft addressed to `hello@fitframe.store`.
+1. The customer completes Stripe Checkout.
+2. Stripe sends `checkout.session.completed` to `/api/stripe-webhook`.
+3. The Worker verifies `STRIPE_WEBHOOK_SECRET`.
+4. The Worker sends the paid order spec through Resend to `Lorenzo.Laws@outlook.com`.
 
-The draft includes:
-
-- shipping address
-- order ID
-- selected frame
-- lens selection
-- material recommendation
-- scan measurements
-- scan quality metadata
-- style answers
-
-No API key, SMTP service, or third-party order endpoint is required for the customer flow.
-
-## Optional Future Outbound (Resend)
-
-There is no active public order API in the launch flow. `/api/*` returns `404` from the Worker. If FitFrame returns to automated outbound email later, add a new authenticated or rate-limited Cloudflare endpoint and test it before switching the frontend away from `mailto:`.
-
-For a future Resend path, add these in Cloudflare Workers settings for both Production and Preview:
+Required Cloudflare secrets:
 
 ```txt
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=FitFrame <hello@fitframe.store>
-FITFRAME_ORDER_EMAIL=hello@fitframe.store
 ```
 
-`RESEND_API_KEY` must never be exposed client-side.
-
-Resend setup steps:
-
-1. Sign up at `resend.com`.
-2. Add domain: `fitframe.store`.
-3. Resend provides DKIM TXT records. Add them in Cloudflare DNS.
-4. Verify the domain in the Resend dashboard.
-5. Generate a Resend API key.
-6. Add the API key and email env vars in Cloudflare.
-7. Add a new Cloudflare email endpoint only after live send and receipt tests pass.
-
-The blank DNS TXT record currently visible at `resend._domainkey.fitframe.store` is not usable. Replace it with the full DKIM value Resend gives Lorenzo.
-
-## Inbound (ImprovMX)
-
-Current DNS finding: `fitframe.store` has no public MX records. The SPF TXT record exists, but inbound mail to `hello@fitframe.store` will not reliably route until MX is restored.
-
-Confirm the ImprovMX account has this forward:
+Required vars:
 
 ```txt
-hello@fitframe.store -> Lorenzo's mailbox
+RESEND_FROM_EMAIL=FitFrame <orders@fitframe.store>
+FITFRAME_ORDER_EMAIL=Lorenzo.Laws@outlook.com
 ```
 
-Then add these Cloudflare DNS records. All are DNS only.
-
-```txt
-Type: MX
-Name: @
-Mail server: mx1.improvmx.com
-Priority: 10
-TTL: Auto
-Proxy: DNS only
-```
-
-```txt
-Type: MX
-Name: @
-Mail server: mx2.improvmx.com
-Priority: 20
-TTL: Auto
-Proxy: DNS only
-```
-
-Keep the existing SPF TXT if it already exists. Do not create a duplicate.
-
-```txt
-Type: TXT
-Name: @
-Content: v=spf1 include:spf.improvmx.com ~all
-TTL: Auto
-Proxy: DNS only
-```
+The order email includes shipping address, Stripe payment confirmation ID, selected frame, colorway, lens, scan measurements, scan quality, and customer email.
 
 ## Resend DNS Notes
 
@@ -100,7 +41,7 @@ Never publish two separate SPF TXT records at the same host.
 Preferred path if Resend allows it:
 
 ```txt
-From: FitFrame <hello@fitframe.store>
+From: FitFrame <orders@fitframe.store>
 Reply-To: hello@fitframe.store
 ```
 
@@ -138,20 +79,50 @@ TTL: Auto
 Proxy: DNS only
 ```
 
+## Inbound Mail
+
+ImprovMX remains useful for inbound forwarding to `hello@fitframe.store` unless FitFrame moves that inbox to a mailbox provider.
+
+Confirm the ImprovMX account has this forward:
+
+```txt
+hello@fitframe.store -> Lorenzo's mailbox
+```
+
+Then keep these Cloudflare DNS records. All are DNS only.
+
+```txt
+Type: MX
+Name: @
+Mail server: mx1.improvmx.com
+Priority: 10
+TTL: Auto
+Proxy: DNS only
+```
+
+```txt
+Type: MX
+Name: @
+Mail server: mx2.improvmx.com
+Priority: 20
+TTL: Auto
+Proxy: DNS only
+```
+
+Keep the existing SPF TXT if it already exists. Do not create a duplicate.
+
+```txt
+Type: TXT
+Name: @
+Content: v=spf1 include:spf.improvmx.com ~all
+TTL: Auto
+Proxy: DNS only
+```
+
 ## Verification
 
-1. Open `mxtoolbox.com/SuperTool.aspx`.
-2. Enter `fitframe.store`.
-3. Run MX Lookup.
-4. Confirm both ImprovMX MX records appear with priorities 10 and 20.
-5. Send a test email from a personal account to `hello@fitframe.store`.
-6. Confirm receipt within 60 seconds.
-7. Place a test order on `fitframe.store`.
-8. Confirm the native mail draft opens with the full order spec.
-9. Send the draft and confirm Lorenzo receives it.
-
-## Deprecation Path
-
-Resend replaces only outbound transactional email. It does not replace ImprovMX inbound forwarding by default.
-
-ImprovMX becomes redundant only if FitFrame moves `hello@fitframe.store` to a real mailbox provider or to an inbound email workflow. Configure and test the replacement inbox before removing ImprovMX MX records.
+1. Create a Stripe test Checkout Session from the live app or `wrangler dev`.
+2. Complete payment with Stripe test card `4242 4242 4242 4242`.
+3. Confirm the customer returns to the FitFrame confirmation screen.
+4. Confirm Stripe emits `checkout.session.completed`.
+5. Confirm Lorenzo receives the structured order spec.

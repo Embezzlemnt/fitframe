@@ -48,6 +48,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .btn-ghost:hover{border-color:var(--mid);color:var(--text);}
 .btn:disabled{opacity:.2;cursor:not-allowed;transform:none!important;}
 .btn-row{display:flex;gap:10px;flex-wrap:wrap;}
+.checkout-submit{width:100%;}
 .features{border-top:1px solid var(--border);margin-bottom:34px;}
 .feature-row{display:flex;align-items:flex-start;gap:16px;padding:13px 0;border-bottom:1px solid var(--border);}
 .feature-num{font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);padding-top:2px;min-width:18px;}

@@ -1,16 +1,54 @@
-# React + Vite
+# FitFrame
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+FitFrame is a browser-based custom eyewear flow: face scan, style selection, frame selection, shipping details, and Stripe Checkout for a fixed $89 order.
 
-Currently, two official plugins are available:
+## Stripe Checkout Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Task 1 is scaffolded to run through Cloudflare Workers with no new npm packages.
 
-## React Compiler
+Required Cloudflare secrets:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+wrangler secret put STRIPE_SECRET_KEY
+wrangler secret put STRIPE_WEBHOOK_SECRET
+wrangler secret put RESEND_API_KEY
+```
 
-## Expanding the ESLint configuration
+Required Worker vars in `wrangler.jsonc`:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```json
+{
+  "RESEND_FROM_EMAIL": "FitFrame <orders@fitframe.store>",
+  "FITFRAME_ORDER_EMAIL": "Lorenzo.Laws@outlook.com"
+}
+```
+
+Stripe webhook endpoint:
+
+```text
+https://fitframe.store/api/stripe-webhook
+```
+
+Subscribe the endpoint to:
+
+```text
+checkout.session.completed
+```
+
+Checkout flow:
+
+1. The app posts the order payload to `/api/create-checkout-session`.
+2. The Worker creates a Stripe hosted Checkout Session for `$89.00 USD`.
+3. Stripe redirects back to `/?checkout=success&session_id=...` after payment.
+4. Stripe sends `checkout.session.completed` to `/api/stripe-webhook`.
+5. The webhook verifies the Stripe signature and emails the structured order spec to `Lorenzo.Laws@outlook.com` through Resend.
+
+The order spec is carried in Stripe metadata so FitFrame does not store customer data server-side beyond webhook execution.
+
+## Local Checks
+
+```bash
+npm run build
+```
+
+Use `wrangler dev` with the secrets above to exercise the Worker endpoints locally.
