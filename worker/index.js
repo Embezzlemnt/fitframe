@@ -4,6 +4,7 @@ const SCAN_COUNT_KEY = "faces_scanned_count";
 const SCAN_COUNT_SEED = 47;
 
 let fallbackScanCount = SCAN_COUNT_SEED;
+const fallbackWaitlist = new Set();
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -277,6 +278,49 @@ async function scanComplete(request, env) {
   return json({ ok:true, count:next, storage:"kv" });
 }
 
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase().slice(0, 254);
+}
+
+function validEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function waitlist(request, env) {
+  if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405);
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ ok:false, error:"Invalid waitlist payload." }, 400);
+  }
+  const email = normalizeEmail(payload.email);
+  if (!validEmail(email)) return json({ ok:false, error:"Enter a valid email address." }, 400);
+
+  const key = `waitlist:${email}`;
+  let duplicate = false;
+  if (env.FITFRAME_KV) {
+    duplicate = Boolean(await env.FITFRAME_KV.get(key));
+    if (!duplicate) await env.FITFRAME_KV.put(key, JSON.stringify({ email, created_at:new Date().toISOString() }));
+  } else {
+    duplicate = fallbackWaitlist.has(email);
+    fallbackWaitlist.add(email);
+  }
+
+  let emailSent = false;
+  if (!duplicate && env.RESEND_API_KEY) {
+    await sendResendEmail({
+      env,
+      to:email,
+      subject:"You're on the FitFrame early access list",
+      text:"You're on the list — we'll reach out when your pair is ready.\n\nThanks for following FitFrame while we bring made-to-measure eyewear online.",
+    });
+    emailSent = true;
+  }
+
+  return json({ ok:true, duplicate, email_sent:emailSent });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -287,6 +331,7 @@ export default {
     if (url.pathname === "/api/stripe-webhook" && request.method === "POST") return stripeWebhook(request, env);
     if (url.pathname === "/api/scan-count") return scanCount(request, env);
     if (url.pathname === "/api/scan-complete") return scanComplete(request, env);
+    if (url.pathname === "/api/waitlist") return waitlist(request, env);
 
     if (url.pathname.startsWith("/api/")) return json({ error:"Not found." }, 404);
     return new Response(null, { status:404 });

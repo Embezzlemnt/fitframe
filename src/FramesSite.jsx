@@ -165,6 +165,10 @@ export default function FramesSite(){
   const [pendingOrder, setPendingOrder] = useState(saved.pendingOrder??null);
   const [paymentDetails, setPaymentDetails] = useState(saved.paymentDetails??null);
   const [scanCount, setScanCount] = useState(47);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistStatus, setWaitlistStatus] = useState(null);
+  const [waitlistError, setWaitlistError] = useState(null);
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [cardCalibrating, setCardCalibrating] = useState(false);
   const [cardCaptured, setCardCaptured] = useState(saved.cardCaptured??false);
   const [calDwell, setCalDwell] = useState(0);
@@ -293,6 +297,29 @@ export default function FramesSite(){
     }
   }
 
+  async function submitWaitlist(event) {
+    event.preventDefault();
+    const email = waitlistEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setWaitlistError("Enter a valid email address.");
+      setWaitlistStatus(null);
+      return;
+    }
+    setWaitlistSubmitting(true);
+    setWaitlistError(null);
+    try {
+      const res = await fetch("/api/waitlist", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Could not join the list.");
+      setWaitlistStatus(data.duplicate ? "You're already on the list — we'll reach out when your pair is ready." : "You're on the list — we'll reach out when your pair is ready.");
+      setWaitlistEmail(email);
+    } catch (err) {
+      setWaitlistError(err.message || "Could not join the list.");
+    } finally {
+      setWaitlistSubmitting(false);
+    }
+  }
+
   function selectOption(opt){
     setTapped(opt.label);
     const qId=STYLE_QUESTIONS[styleQIdx].id;
@@ -404,6 +431,11 @@ export default function FramesSite(){
           <div className="eyebrow">Made-to-measure eyewear</div><div className="display">Frames built<br/>for <em>your</em> face.</div>
           <p className="body-lg">Scan your face. Answer four questions. Checkout securely with Stripe for custom 3D-printed frames built to your exact measurements.</p>
           <div className="scan-count">Join {scanCount.toLocaleString()} people who've already scanned their face</div>
+          <form className="waitlist-form" onSubmit={submitWaitlist} noValidate>
+            <div className="waitlist-row"><input className="waitlist-input" placeholder="Email for early access" type="email" autoComplete="email" value={waitlistEmail} onChange={e=>{setWaitlistEmail(e.target.value);setWaitlistError(null);}}/><button className="btn btn-accent" disabled={waitlistSubmitting}>{waitlistSubmitting?"Joining…":"Join early access"}</button></div>
+            {waitlistError&&<div className="submit-error">{waitlistError}</div>}
+            {waitlistStatus&&<div className="waitlist-success">{waitlistStatus}</div>}
+          </form>
           <div className="proof-strip"><span className="proof-item"><ProofIcon type="flag"/>Made in America</span><span className="proof-item"><ProofIcon type="box"/>Ships in ~10 days</span><span className="proof-item"><ProofIcon type="refresh"/>One-time reprint guarantee</span><span className="proof-item"><ProofIcon type="lock"/>No images stored</span></div>
           <div className="price-block"><div className="price-main">${BASE_PRICE}</div><div className="price-sub">Blue light lenses included · Secure Stripe checkout</div></div>
           <div className="features">{[["01",<><strong>Browser-based face scan.</strong> No app, no store, no optician.</>],["02",<><strong>Every measurement captured.</strong> PD, bridge, temple, face width, and face height.</>],["03",<><strong>3D printed to your spec.</strong> PA12 nylon. Lightweight, precise, durable.</>],["04",<><strong>$89 fixed price.</strong> Pay securely after your frame spec is ready.</>]].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}</div>

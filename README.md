@@ -58,3 +58,12 @@ Use `wrangler dev` with the secrets above to exercise the Worker endpoints local
 The landing page reads `/api/scan-count` and increments `/api/scan-complete` only after a successful face measurement. The Worker seeds the counter at `47`.
 
 For production persistence, bind a Cloudflare KV namespace as `FITFRAME_KV`. Without that binding, local/dev traffic uses an in-memory Worker counter so the frontend flow still works without localStorage.
+
+## Email Waitlist
+
+The landing page posts early-access emails to `/api/waitlist`.
+
+- With `FITFRAME_KV`, emails are stored as simple KV entries keyed by normalized email.
+- Without `FITFRAME_KV`, local/dev traffic uses an in-memory duplicate set.
+- With `RESEND_API_KEY`, new subscribers receive a confirmation email.
+- Without `RESEND_API_KEY`, the API still accepts the signup and returns `email_sent:false` so configuration gaps are visible.

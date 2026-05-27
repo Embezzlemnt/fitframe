@@ -42,6 +42,11 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .step-head{font-size:34px;font-weight:500;color:var(--text);letter-spacing:-.045em;line-height:1.1;margin-bottom:8px;}
 .body-lg{font-size:15px;color:var(--mid);line-height:1.68;font-weight:300;margin-bottom:30px;}
 .scan-count{display:inline-flex;align-items:center;margin:-12px 0 24px;padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:12px;color:var(--mid);font-weight:300;}
+.waitlist-form{margin:-8px 0 26px;}
+.waitlist-row{display:flex;gap:8px;align-items:stretch;}
+.waitlist-input{min-width:0;flex:1;padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-radius:999px;color:var(--text);font-size:15px;font-family:'Geist',sans-serif;outline:none;font-weight:300;-webkit-appearance:none;}
+.waitlist-input:focus{border-color:var(--accent);}
+.waitlist-success{font-size:11px;color:var(--accent);margin:8px 0 0;font-weight:300;line-height:1.45;}
 .step-sub{font-size:13px;color:var(--dim);line-height:1.65;font-weight:300;margin-bottom:24px;}
 .privacy-note{font-size:11px;color:var(--soft);font-weight:300;margin-bottom:16px;line-height:1.5;}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:13px 26px;font-family:'Geist',sans-serif;font-size:14px;font-weight:400;cursor:pointer;border:none;border-radius:100px;transition:all .16s;-webkit-tap-highlight-color:transparent;white-space:nowrap;}
