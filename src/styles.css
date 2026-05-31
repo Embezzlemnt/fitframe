@@ -31,8 +31,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 @keyframes pulse{0%,100%{opacity:.55;}50%{opacity:1;}}
 .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;}
 .display{font-size:48px;font-weight:500;color:var(--text);letter-spacing:-.06em;line-height:1;margin-bottom:18px;}
-.display em{font-style:normal;color:var(--accent);position:relative;isolation:isolate;}
-.display em::before{content:"";position:absolute;inset:.08em -.08em .02em;background:linear-gradient(90deg,transparent,rgba(76,175,125,.28),transparent);background-size:200% 100%;border-radius:12px;animation:shimmer 4s linear infinite;z-index:-1;}
+.display em{font-style:normal;color:var(--accent);}
 .proof-strip{font-size:11px;color:var(--dim);display:flex;gap:18px;flex-wrap:wrap;margin:-14px 0 26px;}
 .proof-item{display:flex;align-items:center;gap:5px;white-space:nowrap;}
 .proof-item svg{width:14px;height:14px;color:var(--accent);opacity:.8;}
@@ -191,12 +190,11 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .hero-faq-link:hover{color:var(--text);}
 
 /* Why section */
-.why-section{width:100%;max-width:480px;padding:32px 24px;border-top:1px solid var(--border);margin-top:8px;}
+.why-section{width:100%;max-width:480px;padding:32px 24px 24px;}
 .why-inner{}
-.why-p{font-size:15px;color:var(--mid);line-height:1.75;font-weight:300;margin-bottom:18px;}
-.why-p:last-of-type{margin-bottom:22px;}
-.why-accent{color:var(--accent);font-weight:400;}
-.why-cta{margin-top:4px;}
+.why-lead{font-size:22px;font-weight:500;letter-spacing:-.03em;color:var(--text);line-height:1.2;margin-bottom:16px;}
+.why-body{font-size:14px;font-weight:300;color:var(--mid);line-height:1.7;margin-bottom:0;}
+.why-emph{color:var(--text);font-weight:400;}
 
 /* Brand pillars */
 .pillars-section{width:100%;max-width:480px;padding:28px 24px;border-top:1px solid var(--border);}

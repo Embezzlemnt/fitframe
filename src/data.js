@@ -10,29 +10,29 @@ export const FRAMES = [
 ];
 
 export const STYLE_QUESTIONS = [
-  { id:"fit",      q:"How do glasses usually feel on you?", options:[
-    { label:"Too tight at my temples",           tags:["slim","minimal","soft"] },
-    { label:"They slide down constantly",        tags:["adjustable","sporty","practical"] },
-    { label:"I've never found a pair that fits", tags:["adjustable","bold","sporty"] },
-    { label:"Fine mostly, just never perfect",   tags:["classic","clean","modern"] },
+  { id:"fit",      q:"how do glasses usually feel on you?", options:[
+    { label:"too tight at my temples",           tags:["slim","minimal","soft"] },
+    { label:"they slide down constantly",        tags:["adjustable","sporty","practical"] },
+    { label:"i've never found a pair that fits", tags:["adjustable","bold","sporty"] },
+    { label:"fine mostly, just never perfect",   tags:["classic","clean","modern"] },
   ]},
-  { id:"vibe",     q:"What's your visual instinct?", options:[
-    { label:"Quiet. Clean lines, nothing extra",    tags:["minimal","clean","soft"] },
-    { label:"Present. Something people notice",     tags:["bold","statement","confident"] },
-    { label:"Timeless. Classic shapes, no trends",  tags:["retro","classic","vintage"] },
-    { label:"Relaxed. Comfortable over everything", tags:["sporty","practical","soft"] },
+  { id:"vibe",     q:"what's your visual instinct?", options:[
+    { label:"quiet. clean lines, nothing extra",    tags:["minimal","clean","soft"] },
+    { label:"present. something people notice",     tags:["bold","statement","confident"] },
+    { label:"timeless. classic shapes, no trends",  tags:["retro","classic","vintage"] },
+    { label:"relaxed. comfortable over everything", tags:["sporty","practical","soft"] },
   ]},
-  { id:"use",      q:"Where will you wear them most?", options:[
-    { label:"At a desk, most of the day",        tags:["minimal","sleek","clean"] },
-    { label:"Out and about, always on",          tags:["sporty","practical","bold"] },
-    { label:"Both — they need to do everything", tags:["clean","modern","classic"] },
-    { label:"Special occasions only",            tags:["bold","expressive","statement"] },
+  { id:"use",      q:"where will you wear them most?", options:[
+    { label:"at a desk, most of the day",        tags:["minimal","sleek","clean"] },
+    { label:"out and about, always on",          tags:["sporty","practical","bold"] },
+    { label:"both — they need to do everything", tags:["clean","modern","classic"] },
+    { label:"special occasions only",            tags:["bold","expressive","statement"] },
   ]},
-  { id:"priority", q:"What matters most in a frame?", options:[
-    { label:"It disappears on my face",       tags:["minimal","soft","clean"] },
-    { label:"It says something about me",     tags:["bold","statement","editorial"] },
-    { label:"It holds up to daily use",       tags:["sporty","practical","modern"] },
-    { label:"It fits without any adjustment", tags:["classic","adjustable","clean"] },
+  { id:"priority", q:"what matters most in a frame?", options:[
+    { label:"it disappears on my face",       tags:["minimal","soft","clean"] },
+    { label:"it says something about me",     tags:["bold","statement","editorial"] },
+    { label:"it holds up to daily use",       tags:["sporty","practical","modern"] },
+    { label:"it fits without any adjustment", tags:["classic","adjustable","clean"] },
   ]},
 ];
 

@@ -7,9 +7,9 @@ export const STORE_KEY = "fitframe_session_v1";
 
 export const SCAN_SEQ = [
   { instruction:"",                   holdMs:1500, fill:0.08 },
-  { instruction:"Keep eyes forward.", holdMs:3000, fill:0.35 },
-  { instruction:"Almost there.",      holdMs:3000, fill:0.65 },
-  { instruction:"Nearly done.",       holdMs:2500, fill:0.88 },
+  { instruction:"keep eyes forward.", holdMs:3000, fill:0.35 },
+  { instruction:"almost there.",      holdMs:3000, fill:0.65 },
+  { instruction:"nearly done.",       holdMs:2500, fill:0.88 },
   { instruction:"",                   holdMs:1500, fill:1.00 },
 ];
 
@@ -100,15 +100,15 @@ export function getETA() {
 export function classifyCamError(err) {
   const n = err?.name||"";
   const local = location.hostname==="localhost"||location.hostname==="127.0.0.1";
-  if (!local&&location.protocol!=="https:") return {type:"https",headline:"HTTPS required",detail:"Camera requires a secure connection.",fix:null};
-  if (n==="NotFoundError"||n==="DevicesNotFoundError") return {type:"nohardware",headline:"No camera found",detail:"No camera detected on this device.",fix:null};
-  if (n==="NotReadableError"||n==="TrackStartError")   return {type:"inuse",headline:"Camera in use",detail:"Another app is using the camera. Close it and try again.",fix:"retry"};
+  if (!local&&location.protocol!=="https:") return {type:"https",headline:"https required",detail:"camera requires a secure connection.",fix:null};
+  if (n==="NotFoundError"||n==="DevicesNotFoundError") return {type:"nohardware",headline:"no camera found",detail:"no camera detected on this device.",fix:null};
+  if (n==="NotReadableError"||n==="TrackStartError")   return {type:"inuse",headline:"camera in use",detail:"another app is using the camera. close it and try again.",fix:"retry"};
   if (n==="NotAllowedError"||n==="PermissionDeniedError") {
     const safari=/Safari/.test(navigator.userAgent)&&!/Chrome/.test(navigator.userAgent);
-    return {type:"denied",headline:"Camera access blocked",fix:"reload",
-      detail:safari?"Safari → Settings for this Website → Camera → Allow → reload.":"Tap the camera icon in your address bar → Allow → reload."};
+    return {type:"denied",headline:"camera access blocked",fix:"reload",
+      detail:safari?"Safari → settings for this website → camera → allow → reload.":"tap the camera icon in your address bar → allow → reload."};
   }
-  return {type:"unknown",headline:"Camera unavailable",detail:`${err?.message||"Unknown error"}. Try reloading.`,fix:"reload"};
+  return {type:"unknown",headline:"camera unavailable",detail:`${err?.message||"unknown error"}. try reloading.`,fix:"reload"};
 }
 
 export function buildMakerSpec(payload) {

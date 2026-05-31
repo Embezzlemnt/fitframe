@@ -7,7 +7,7 @@ import { SCAN_SEQ, clearSession, genOrderId, getETA, loadSession, saveSession } 
 
 const DOMAIN = "fitframe.store";
 const ACCENT_COLOR = "#4caf7d";
-const BASE_PRICE = 89;
+const BASE_PRICE = 119;
 const LENS_OPTIONS = DEFAULT_LENS;
 
 const EMPTY_CUSTOMER = { name:"", email:"", address:"", city:"", state:"", zip:"" };
@@ -100,19 +100,11 @@ function sanitizeText(value, max=160) {
 }
 
 // --- Why Section ---
-function WhySection({ onScan }) {
+function WhySection() {
   return (
     <section className="why-section">
-      <div className="why-inner">
-        <div className="eyebrow">Why this exists</div>
-        <p className="why-p">
-          I built FitFrame because my girlfriend and I both stopped wearing glasses. Not because we didn't need them — because nothing fit. Too tight at the temples. Sliding down after an hour. Sitting crooked no matter how many times we adjusted. We're not unusual sizes. We just don't match the average face shape that every frame on the market is designed around, and we're far from alone in that.
-        </p>
-        <p className="why-p">
-          The problem isn't your face. It's that <span className="why-accent">the frame is built for a statistical average, not for you.</span> FitFrame reverses that. Your scan drives the geometry. The frame is shaped to your face — not the other way around.
-        </p>
-        <button className="btn btn-ghost why-cta" onClick={onScan}>Start your scan →</button>
-      </div>
+      <p className="why-lead">glasses are built for an average face. most of us aren't average.</p>
+      <p className="why-body">FitFrame exists for the person who gave up without realizing it. one browser-based scan maps your face to real millimeter measurements. a carbon fiber nylon frame gets printed to those numbers — zero inventory, zero waste, built to your geometry. <span className="why-emph">not adjusted. not approximated. yours.</span></p>
     </section>
   );
 }
@@ -120,10 +112,10 @@ function WhySection({ onScan }) {
 // --- Brand Pillars ---
 function PillarsSection() {
   const pillars = [
-    { label:"Made Here", desc:"Printed and finished in the US. Not outsourced, not warehoused overseas." },
-    { label:"Zero Inventory", desc:"Each pair is made after your scan. Nothing sits in a box waiting." },
-    { label:"No Branding", desc:"No logo on the frame. The fit is the statement." },
-    { label:"Zero Waste", desc:"Printed to order. No overstock, no landfill cycle." },
+    { label:"made here", desc:"printed and finished in the US. not outsourced, not warehoused overseas." },
+    { label:"zero inventory", desc:"each pair is made after your scan. nothing sits in a box waiting." },
+    { label:"no branding", desc:"no logo on the frame. the fit is the statement." },
+    { label:"zero waste", desc:"printed to order. no overstock, no landfill cycle." },
   ];
   return (
     <section className="pillars-section">
@@ -142,13 +134,13 @@ function PillarsSection() {
 // --- Process Photography Slots ---
 function ProcessSection() {
   const slots = [
-    { label:"Raw PA12 material", caption:"The powder before it becomes your frame." },
-    { label:"Printer mid-job", caption:"Layer by layer, shaped to your scan." },
-    { label:"Work in progress", caption:"Finishing before it ships." },
+    { label:"raw PA12 material", caption:"the powder before it becomes your frame." },
+    { label:"printer mid-job", caption:"layer by layer, shaped to your scan." },
+    { label:"work in progress", caption:"finishing before it ships." },
   ];
   return (
     <section className="process-section">
-      <div className="eyebrow">How it's made</div>
+      <div className="eyebrow">how it's made</div>
       <div className="process-grid">
         {slots.map(s => (
           <div className="process-slot" key={s.label}>
@@ -190,13 +182,13 @@ function FAQPage() {
       <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/">Scan</a><div className="header-tag">FAQ</div></div></header>
       <main className="container">
         <section className="section faq-page">
-          <div className="eyebrow">Common questions</div>
-          <h1 className="step-head">FitFrame FAQ.</h1>
-          <p className="step-sub">Straight answers about materials, lenses, the scan, and how orders work.</p>
+          <div className="eyebrow">common questions</div>
+          <h1 className="step-head">FitFrame faq.</h1>
+          <p className="step-sub">straight answers about materials, lenses, the scan, and how orders work.</p>
           <div className="faq-list">
             {FAQS.map((item,index)=><details className="faq-item" key={item.q} open={index===0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
           </div>
-          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">Scan your face</a></div>
+          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">scan your face</a></div>
         </section>
       </main>
       <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a></div>
@@ -278,8 +270,8 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
           <div className="wg-check">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={ACCENT_COLOR} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
-          <div className="wg-confirmed-head">You're in.</div>
-          <p className="wg-confirmed-body">We'll reach out when your batch opens. Your frame spec is saved — we have everything we need.</p>
+          <div className="wg-confirmed-head">you're in.</div>
+          <p className="wg-confirmed-body">we'll reach out when your batch opens. your frame spec is saved — we have everything we need.</p>
           {position && <div className="wg-position">#{position} on the list</div>}
           {liveCount > 0 && <div className="wg-count">{liveCount.toLocaleString()} faces scanned so far</div>}
         </div>
@@ -289,24 +281,24 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
 
   return (
     <div className="waitlist-gate">
-      <div className="wg-head">Orders open in limited batches.</div>
-      <p className="wg-sub">Be first. Drop your email and we'll reach out when your batch is ready. Your scan result and frame selection are saved.</p>
+      <div className="wg-head">orders open in limited batches.</div>
+      <p className="wg-sub">be first. drop your email and we'll reach out when your batch is ready. your scan result and frame selection are saved.</p>
       {liveCount > 0 && <div className="wg-count">{liveCount.toLocaleString()} faces scanned</div>}
       <form className="wg-form" onSubmit={handleSubmit} noValidate>
         <input
           className="wg-input"
           type="email"
-          placeholder="Your email address"
+          placeholder="your email"
           autoComplete="email"
           value={email}
           onChange={e => { setEmail(e.target.value); setError(null); }}
         />
         <button className="btn btn-primary wg-submit" disabled={submitting}>
-          {submitting ? "Saving…" : "Join the founding list"}
+          {submitting ? "saving…" : "join the list →"}
         </button>
       </form>
       {error && <div className="submit-error wg-error">{error}</div>}
-      <p className="wg-note">No spam. One email when your batch opens.</p>
+      <p className="wg-note">no spam. one email when your batch opens.</p>
     </div>
   );
 }
@@ -518,29 +510,25 @@ function FitFrameApp(){
         {/* STEP 0 — HERO + WHY + PROCESS + PILLARS + FAQ PREVIEW */}
         {step===0&&<>
           <div className="section">
-            <div className="eyebrow">Made-to-measure eyewear</div>
-            <div className="display">Frames built<br/>for <em>your</em> face.</div>
-            <p className="body-lg">Scan your face. Pick your shape. We print a frame to your exact measurements — not to an average.</p>
+            <div className="eyebrow">made-to-measure eyewear</div>
+            <div className="display">frames built<br/>for <em>your</em> face.</div>
+            <p className="body-lg">scan your face. answer four questions. get frames built to your exact measurements.</p>
             <div className="hero-meta">
               <div className="scan-count">{scanCount.toLocaleString()} faces scanned</div>
-              <a className="hero-faq-link" href="/faq">Questions? →</a>
-            </div>
-            <div className="price-block">
-              <div className="price-main">${BASE_PRICE}</div>
-              <div className="price-sub">PA12 nylon · blue light lenses included · US-made</div>
+              <a className="hero-faq-link" href="/faq">questions? →</a>
             </div>
             <div className="btn-row" style={{marginBottom:8}}>
-              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>Scan your face →</button>
+              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>scan your face →</button>
             </div>
             <div className="proof-strip">
-              <span className="proof-item"><ProofIcon type="flag"/>Made in America</span>
-              <span className="proof-item"><ProofIcon type="box"/>Ships in ~10 days</span>
-              <span className="proof-item"><ProofIcon type="refresh"/>Fit guarantee</span>
-              <span className="proof-item"><ProofIcon type="lock"/>No images stored</span>
+              <span className="proof-item"><ProofIcon type="flag"/>made in america</span>
+              <span className="proof-item"><ProofIcon type="box"/>ships in ~10 days</span>
+              <span className="proof-item"><ProofIcon type="refresh"/>fit guarantee</span>
+              <span className="proof-item"><ProofIcon type="lock"/>no images stored</span>
             </div>
           </div>
 
-          <WhySection onScan={()=>setStep(1)}/>
+          <WhySection/>
 
           <ProcessSection/>
 
@@ -549,33 +537,34 @@ function FitFrameApp(){
           <div className="section" style={{paddingTop:8}}>
             <div className="features">
               {[
-                ["01",<><strong>Browser scan, no app.</strong> Your camera measures PD, bridge, temple, and face height in under two minutes.</>],
-                ["02",<><strong>Custom geometry, not adjustments.</strong> The frame spec is generated from your measurements, not bent to fit afterward.</>],
-                ["03",<><strong>PA12 nylon, 3D printed.</strong> Lightweight, precise, and durable. A material built for this kind of work.</>],
-                ["04",<><strong>$89 fixed price.</strong> Join the waitlist now. Orders open in limited batches.</>],
+                ["01",<><strong>browser scan, no app.</strong> your camera maps pd, bridge, temple, and face height in under two minutes.</>],
+                ["02",<><strong>custom geometry, not adjustments.</strong> the frame spec is generated from your measurements, not bent to fit afterward.</>],
+                ["03",<><strong>pa12 nylon, 3d printed.</strong> lightweight, precise, and durable. a material built for this kind of work.</>],
+                ["04",<><strong>founding batch.</strong> join the list — orders open soon.</>],
               ].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}
             </div>
           </div>
 
           <div className="section faq-preview" style={{paddingTop:0}}>
-            <div className="eyebrow">Common questions</div>
+            <div className="eyebrow">common questions</div>
             <div className="faq-list">
               {FAQS.slice(0,3).map((item,i)=><details className="faq-item" key={item.q} open={i===0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
             </div>
             <div className="btn-row" style={{marginTop:14}}>
-              <a className="btn btn-ghost" href="/faq">All questions →</a>
-              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>Scan your face →</button>
+              <a className="btn btn-ghost" href="/faq">all questions →</a>
+              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>scan your face →</button>
             </div>
           </div>
         </>}
 
         {/* STEP 1 — SCAN */}
         {step===1&&<div className="section">
-          <div className="eyebrow">Step 1 of 6 — Face scan</div>
-          <div className="step-head">{scanning?"Stay still.":scan.done?"Scan complete.":"Position your face."}</div>
-          <p className="step-sub">{cardCalibrating?"Hold the card flat below your chin — keep still":scanning?"We're capturing your measurements.":scan.done?"Processing your measurements.":"Center your face inside the oval and hold still. The scan starts automatically."}</p>
-          <p className="privacy-note">Your camera is used only for measurement. No images are stored or transmitted.</p>
-          {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>Face scan couldn't load.</div><div className="cam-sub">Check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>Reload page</button></div>}
+          <div className="eyebrow">step 1 of 6 — face scan</div>
+          <div className="step-head">{scanning?"stay still.":scan.done?"scan complete.":"position your face."}</div>
+          <p className="step-sub">{cardCalibrating?"hold the card flat below your chin — keep still":scanning?"we're capturing your measurements.":scan.done?"processing your measurements.":"center your face inside the oval and hold still. the scan starts automatically."}</p>
+          <p className="privacy-note">your camera is used only for measurement. no images are stored or transmitted.</p>
+          {cam.ready&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
+          {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
           {cam.ready&&scan.mpReady&&!scan.done&&<>
             <div className="cam-outer">
               <div className="cam-inner">
@@ -589,83 +578,83 @@ function FitFrameApp(){
                 </div>
                 <div className="cam-bottom">
                   {scan.pauseWarning&&<div className="pause-warning">Hold still — scan paused</div>}
-                  {scanning&&scan.seqIdx>=0?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>:scan.poseHint?<div className="scan-inst" style={{color:"var(--amber)"}}>{scan.poseHint}</div>:scan.autoStartPct>0&&scan.autoStartPct<1?<div className="scan-inst">Hold still…</div>:<div className="scan-inst">Look directly at the camera.</div>}
+                  {scanning&&scan.seqIdx>=0?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>:scan.poseHint?<div className="scan-inst" style={{color:"var(--amber)"}}>{scan.poseHint}</div>:scan.autoStartPct>0&&scan.autoStartPct<1?<div className="scan-inst">hold still…</div>:<div className="scan-inst">look directly at the camera.</div>}
                   {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
                 </div>
               </div>
             </div>
             {cardCalibrating&&!cardCaptured&&<>
-              <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"Moved — hold steady to recapture":"Hold the card flat below your chin — keep still"}</div>
+              <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold the card flat below your chin — keep still"}</div>
               <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
             </>}
-            {calCapturedFlash&&<div className="cal-status good">✓ Card captured</div>}
+            {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
           </>}
           {step===1&&cam.ready&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
-          {!cam.ready&&!cam.camErr&&!currentMeas&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">Camera access needed</div><div className="cam-sub">FitFrame uses your front camera to measure your face. Nothing leaves your device.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={cam.start}>Allow camera</button></div>}
-          {cam.camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{cam.camErr.headline}</div>{cam.camErr.type==="denied"?<div className="err-box">{cam.camErr.detail}</div>:<div className="cam-sub">{cam.camErr.detail}</div>}{cam.camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={cam.start}>Try again</button>}{cam.camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>Reload page</button>}</div>}
-          {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>Scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>Retry scan</button></div>}
-          {scan.scanLost&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--amber)"}}>Scan lost.</div><div className="cam-sub">Position your face and tap Start again.</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>Try again</button></div>}
-          {camReady&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>Calibrate with card</button>:<button className="btn btn-primary" onClick={()=>setScanning(true)}>Start scan</button>}</div>}
-          {scan.done&&!currentMeas&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"Let's try that again.":"No face data captured."}</div><div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div><button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>Try again</button></div>}
-          {currentMeas&&scan.quality?.rescan&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label">Let's try that again.</div><div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div><button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>Rescan</button></div>}
-          {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">Measurements captured. Moving forward…</div>}
+          {!cam.ready&&!cam.camErr&&!currentMeas&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">camera access needed</div><div className="cam-sub">FitFrame uses your front camera to measure your face. nothing leaves your device.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={cam.start}>allow camera</button></div>}
+          {cam.camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{cam.camErr.headline}</div>{cam.camErr.type==="denied"?<div className="err-box">{cam.camErr.detail}</div>:<div className="cam-sub">{cam.camErr.detail}</div>}{cam.camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={cam.start}>try again</button>}{cam.camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
+          {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>retry scan</button></div>}
+          {scan.scanLost&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--amber)"}}>scan lost.</div><div className="cam-sub">position your face and tap start again.</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>try again</button></div>}
+          {cam.ready&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>calibrate with card</button>:<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
+          {scan.done&&!currentMeas&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"let's try that again.":"no face data captured."}</div><div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div><button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>try again</button></div>}
+          {currentMeas&&scan.quality?.rescan&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label">let's try that again.</div><div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div><button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>rescan</button></div>}
+          {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">measurements captured. moving forward…</div>}
         </div>}
 
         {/* STEP 2 — STYLE */}
-        {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">Step 2 of 6 — Style</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← Back</button></div>}</div>; })()}
+        {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">step 2 of 6 — style</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← back</button></div>}</div>; })()}
 
         {/* STEP 3 — LENSES */}
         {step===3&&<div className="section">
-          <div className="eyebrow">Step 3 of 6 — Lenses</div>
-          <div className="step-head">Choose your lens.</div>
-          <p className="step-sub">Blue light lenses are included in the fixed ${BASE_PRICE} price. No medical claims — comfort and screen use.</p>
+          <div className="eyebrow">step 3 of 6 — lenses</div>
+          <div className="step-head">choose your lens.</div>
+          <p className="step-sub">blue light lenses are included in the founding pair. no medical claims — comfort and screen use.</p>
           <div className="lens-list">
-            {LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">Included</div></div>)}
+            {LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">included</div></div>)}
           </div>
-          <div className="lens-disclaimer">Prescription support is in development. Orders today ship with clear blue light lenses.</div>
+          <div className="lens-disclaimer">prescription support is in development. the founding pair ships with clear blue light lenses.</div>
           <div className="btn-row">
-            <button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>Choose your frame →</button>
-            <button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button>
+            <button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>choose your frame →</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(2)}>back</button>
           </div>
         </div>}
 
         {/* STEP 4 — FRAMES */}
         {step===4&&<div className="section">
-          <div className="eyebrow">Step 4 of 6 — Frame</div>
-          <div className="step-head">Pick your shape.</div>
-          <p className="step-sub">Your top match is highlighted based on your answers. Choose the one that feels right.</p>
+          <div className="eyebrow">step 4 of 6 — frame</div>
+          <div className="step-head">pick your shape.</div>
+          <p className="step-sub">your top match is highlighted based on your answers. choose the one that feels right.</p>
           <div className="frame-grid">
             {topFrames.map((f,i)=><div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`} onClick={()=>setSelectedFrame(f.id)}>{i===0&&<div className="best-badge">best match</div>}<div className="frame-tile-icon"><FrameSVG id={f.id} size={52} color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/></div><div className="frame-tile-name">{f.label}</div><div className="frame-tile-desc">{f.desc}</div>{f.score>0&&<div className="frame-tile-bar" style={{width:`${Math.round((f.score/maxScore)*100)}%`}}/>}</div>)}
           </div>
           <div className="btn-row" style={{marginTop:8}}>
-            <button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(5);}}>Choose colorway →</button>
-            <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
+            <button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(5);}}>choose colorway →</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(3)}>back</button>
           </div>
         </div>}
 
         {/* STEP 5 — COLORWAY */}
         {step===5&&<div className="section">
-          <div className="eyebrow">Step 5 of 6 — Colorway</div>
-          <div className="step-head">Choose the finish.</div>
-          <p className="step-sub">One decision, three finishes. Matte Black is the default recommendation for most face shapes.</p>
+          <div className="eyebrow">step 5 of 6 — colorway</div>
+          <div className="step-head">choose the finish.</div>
+          <p className="step-sub">one decision, three finishes. matte black is the default recommendation for most face shapes.</p>
           <div className="colorway-grid">
-            {COLORWAYS.map(c=><button key={c.id} className={`colorway-card ${selectedColorway===c.id?"sel":""}`} onClick={()=>setSelectedColorway(c.id)}>{c.recommended&&<span className="colorway-badge">Recommended for your face shape</span>}<div className="colorway-preview"><ColorwaySVG colorway={c}/></div><div><div className="colorway-name">{c.label}</div><div className="colorway-desc">{c.desc}</div></div></button>)}
+            {COLORWAYS.map(c=><button key={c.id} className={`colorway-card ${selectedColorway===c.id?"sel":""}`} onClick={()=>setSelectedColorway(c.id)}>{c.recommended&&<span className="colorway-badge">recommended for your face shape</span>}<div className="colorway-preview"><ColorwaySVG colorway={c}/></div><div><div className="colorway-name">{c.label}</div><div className="colorway-desc">{c.desc}</div></div></button>)}
           </div>
           <div className="btn-row">
-            <button className="btn btn-primary checkout-submit" onClick={()=>setStep(6)}>See your result →</button>
-            <button className="btn btn-ghost" onClick={()=>setStep(4)}>Back</button>
+            <button className="btn btn-primary checkout-submit" onClick={()=>setStep(6)}>see your result →</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(4)}>back</button>
           </div>
         </div>}
 
         {/* STEP 6 — RESULT + WAITLIST GATE */}
         {step===6&&<div className="section">
-          <div className="eyebrow">Your frame — designed by your face</div>
-          <div className="step-head">Your spec is ready.</div>
-          <p className="step-sub">Here's what we captured. Join the founding list and we'll reach out when your batch opens.</p>
+          <div className="eyebrow">your frame — designed by your face</div>
+          <div className="step-head">your spec is ready.</div>
+          <p className="step-sub">here's what we captured. join the founding list and we'll reach out when your batch opens.</p>
 
           {/* Measurements summary */}
           <div className="result-spec">
-            <div className="result-spec-head">Face measurements</div>
+            <div className="result-spec-head">face measurements</div>
             <div className="measure-grid">
               {MEASURE_FIELDS.map(field=>{
                 const value=field.key==="faceH"?(currentMeas?.faceH||currentMeas?.lensH||""):currentMeas?.[field.key]||"";
@@ -692,15 +681,15 @@ function FitFrameApp(){
           {/* Frame summary */}
           <div className="result-frame-summary">
             <div className="rfs-row">
-              <span className="rfs-label">Frame</span>
+              <span className="rfs-label">frame</span>
               <span className="rfs-value">{chosenFrame?.label || "—"}</span>
             </div>
             <div className="rfs-row">
-              <span className="rfs-label">Colorway</span>
+              <span className="rfs-label">colorway</span>
               <span className="rfs-value">{chosenColorway?.label || "—"}</span>
             </div>
             <div className="rfs-row">
-              <span className="rfs-label">Lenses</span>
+              <span className="rfs-label">lenses</span>
               <span className="rfs-value">Blue Light (included)</span>
             </div>
           </div>
@@ -714,8 +703,8 @@ function FitFrameApp(){
           />
 
           <div className="btn-row" style={{marginTop:20}}>
-            <button className="btn btn-ghost" onClick={()=>setStep(5)}>Back</button>
-            <a className="btn btn-ghost" href="/faq">FAQ →</a>
+            <button className="btn btn-ghost" onClick={()=>setStep(5)}>back</button>
+            <a className="btn btn-ghost" href="/faq">faq →</a>
           </div>
         </div>}
 

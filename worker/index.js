@@ -1,5 +1,5 @@
-const ORDER_PRICE_CENTS = 8900;
-const ORDER_EMAIL = "hello@fitframe.store";
+const ORDER_PRICE_CENTS = 11900;
+const ORDER_EMAIL = "Lorenzo.Laws@outlook.com";
 const SCAN_COUNT_KEY = "faces_scanned_count";
 const SCAN_COUNT_SEED = 47;
 const WAITLIST_COUNT_KEY = "waitlist_count";
