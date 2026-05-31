@@ -453,7 +453,7 @@ function FitFrameApp(){
     };
     raf=requestAnimationFrame(tick);
     return ()=>cancelAnimationFrame(raf);
-  },[cardCalibrating,cam.ready,scan.mpReady,scan.facePresent,scan.poseHint,cardCaptured]);
+  },[cardCalibrating,camReady,scan.mpReady,scan.facePresent,scan.poseHint,cardCaptured]);
 
   async function recordScanComplete() {
     if (scanCountedRef.current) return;
@@ -563,12 +563,12 @@ function FitFrameApp(){
           <div className="step-head">{scanning?"stay still.":scan.done?"scan complete.":"position your face."}</div>
           <p className="step-sub">{cardCalibrating?"hold the card flat below your chin — keep still":scanning?"we're capturing your measurements.":scan.done?"processing your measurements.":"center your face inside the oval and hold still. the scan starts automatically."}</p>
           <p className="privacy-note">your camera is used only for measurement. no images are stored or transmitted.</p>
-          {cam.ready&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
+          {camReady&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
           {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
-          {cam.ready&&scan.mpReady&&!scan.done&&<>
+          {camReady&&scan.mpReady&&!scan.done&&<>
             <div className="cam-outer">
               <div className="cam-inner">
-                <video ref={cam.videoRef} autoPlay playsInline muted/>
+                <video ref={videoRef} autoPlay playsInline muted/>
                 <canvas ref={canvasRef}/>
                 <div className="cam-vignette"/>
                 <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={cardCalibrating&&!cardCaptured}/>
@@ -589,12 +589,12 @@ function FitFrameApp(){
             </>}
             {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
           </>}
-          {step===1&&cam.ready&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
-          {!cam.ready&&!cam.camErr&&!currentMeas&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">camera access needed</div><div className="cam-sub">FitFrame uses your front camera to measure your face. nothing leaves your device.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={cam.start}>allow camera</button></div>}
-          {cam.camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{cam.camErr.headline}</div>{cam.camErr.type==="denied"?<div className="err-box">{cam.camErr.detail}</div>:<div className="cam-sub">{cam.camErr.detail}</div>}{cam.camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={cam.start}>try again</button>}{cam.camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
+          {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
+          {!camReady&&!camErr&&!currentMeas&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">camera access needed</div><div className="cam-sub">FitFrame uses your front camera to measure your face. nothing leaves your device.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera</button></div>}
+          {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
           {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>retry scan</button></div>}
           {scan.scanLost&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--amber)"}}>scan lost.</div><div className="cam-sub">position your face and tap start again.</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>try again</button></div>}
-          {cam.ready&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>calibrate with card</button>:<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
+          {camReady&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>calibrate with card</button>:<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
           {scan.done&&!currentMeas&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"let's try that again.":"no face data captured."}</div><div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div><button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>try again</button></div>}
           {currentMeas&&scan.quality?.rescan&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label">let's try that again.</div><div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div><button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>rescan</button></div>}
           {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">measurements captured. moving forward…</div>}
