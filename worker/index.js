@@ -2,8 +2,11 @@ const ORDER_PRICE_CENTS = 8900;
 const ORDER_EMAIL = "hello@fitframe.store";
 const SCAN_COUNT_KEY = "faces_scanned_count";
 const SCAN_COUNT_SEED = 47;
+const WAITLIST_COUNT_KEY = "waitlist_count";
+const WAITLIST_COUNT_SEED = 0;
 
 let fallbackScanCount = SCAN_COUNT_SEED;
+let fallbackWaitlistCount = WAITLIST_COUNT_SEED;
 const fallbackWaitlist = new Set();
 
 const jsonHeaders = {
@@ -289,6 +292,59 @@ function validEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+async function readWaitlistCount(env) {
+  if (!env.FITFRAME_KV) return fallbackWaitlistCount;
+  const stored = await env.FITFRAME_KV.get(WAITLIST_COUNT_KEY);
+  const count = Number.parseInt(stored || "", 10);
+  if (Number.isFinite(count)) return count;
+  await env.FITFRAME_KV.put(WAITLIST_COUNT_KEY, String(WAITLIST_COUNT_SEED));
+  return WAITLIST_COUNT_SEED;
+}
+
+async function waitlistCount(request, env) {
+  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405);
+  return json({ ok:true, count:await readWaitlistCount(env) });
+}
+
+function buildWaitlistEmailText(email, measurements, frameId, position) {
+  const m = measurements || {};
+  return [
+    "You're on the FitFrame founding member list.",
+    "",
+    `Position: #${position}`,
+    "",
+    "We'll reach out when your batch opens. Here's what we have on file:",
+    "",
+    "Frame: " + (frameId || "Not selected"),
+    "PD: " + (m.pd || "-"),
+    "Bridge: " + (m.bridge || "-") + " mm",
+    "Temple: " + (m.temple || "-") + " mm",
+    "Face height: " + (m.faceH || "-") + " mm",
+    "",
+    "fitframe.store",
+  ].join("\n");
+}
+
+function buildFounderNotificationText(email, measurements, frameId, position) {
+  const m = measurements || {};
+  return [
+    "New FitFrame waitlist signup",
+    "",
+    `Email: ${email}`,
+    `Position: #${position}`,
+    `Frame: ${frameId || "Not selected"}`,
+    "",
+    "Measurements",
+    `PD: ${m.pd || "-"}`,
+    `Bridge: ${m.bridge || "-"} mm`,
+    `Temple: ${m.temple || "-"} mm`,
+    `Face height: ${m.faceH || "-"} mm`,
+    `Face width: ${m.faceW || "-"} mm`,
+    "",
+    `Submitted: ${new Date().toISOString()}`,
+  ].join("\n");
+}
+
 async function waitlist(request, env) {
   if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405);
   let payload;
@@ -300,28 +356,63 @@ async function waitlist(request, env) {
   const email = normalizeEmail(payload.email);
   if (!validEmail(email)) return json({ ok:false, error:"Enter a valid email address." }, 400);
 
+  const measurements = payload.measurements || null;
+  const frameId = payload.frame_id || null;
+
   const key = `waitlist:${email}`;
-  let duplicate;
+  let duplicate = false;
+  let position = 1;
+
   if (env.FITFRAME_KV) {
-    duplicate = Boolean(await env.FITFRAME_KV.get(key));
-    if (!duplicate) await env.FITFRAME_KV.put(key, JSON.stringify({ email, created_at:new Date().toISOString() }));
+    const existing = await env.FITFRAME_KV.get(key);
+    duplicate = Boolean(existing);
+    if (!duplicate) {
+      const nextCount = (await readWaitlistCount(env)) + 1;
+      await env.FITFRAME_KV.put(WAITLIST_COUNT_KEY, String(nextCount));
+      position = nextCount;
+      await env.FITFRAME_KV.put(key, JSON.stringify({
+        email,
+        measurements,
+        frame_id:frameId,
+        position,
+        created_at:new Date().toISOString(),
+      }));
+    } else {
+      const parsed = JSON.parse(existing);
+      position = parsed.position || 1;
+    }
   } else {
     duplicate = fallbackWaitlist.has(email);
+    if (!duplicate) {
+      fallbackWaitlistCount += 1;
+      position = fallbackWaitlistCount;
+    }
     fallbackWaitlist.add(email);
   }
 
-  let emailSent = false;
+  const currentCount = await readWaitlistCount(env).catch(() => fallbackWaitlistCount);
+
   if (!duplicate && env.RESEND_API_KEY) {
-    await sendResendEmail({
-      env,
-      to:email,
-      subject:"You're on the FitFrame early access list",
-      text:"You're on the list — we'll reach out when your pair is ready.\n\nThanks for following FitFrame while we bring made-to-measure eyewear online.",
-    });
-    emailSent = true;
+    const emailPromises = [
+      sendResendEmail({
+        env,
+        to:email,
+        subject:"You're on the FitFrame founding member list",
+        text:buildWaitlistEmailText(email, measurements, frameId, position),
+      }),
+    ];
+    if (env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL) {
+      emailPromises.push(sendResendEmail({
+        env,
+        to:env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL,
+        subject:`FitFrame waitlist signup — ${email}`,
+        text:buildFounderNotificationText(email, measurements, frameId, position),
+      }));
+    }
+    await Promise.allSettled(emailPromises);
   }
 
-  return json({ ok:true, duplicate, email_sent:emailSent });
+  return json({ ok:true, duplicate, position, count:currentCount });
 }
 
 export default {
@@ -335,6 +426,7 @@ export default {
     if (url.pathname === "/api/scan-count") return scanCount(request, env);
     if (url.pathname === "/api/scan-complete") return scanComplete(request, env);
     if (url.pathname === "/api/waitlist") return waitlist(request, env);
+    if (url.pathname === "/api/waitlist-count") return waitlistCount(request, env);
 
     if (url.pathname.startsWith("/api/")) return json({ error:"Not found." }, 404);
     return new Response(null, { status:404 });

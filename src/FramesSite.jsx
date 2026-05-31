@@ -13,16 +13,12 @@ const LENS_OPTIONS = DEFAULT_LENS;
 const EMPTY_CUSTOMER = { name:"", email:"", address:"", city:"", state:"", zip:"" };
 
 const FAQS = [
-  { q:"How does the face scan work and is it private?", a:"The scan runs in your browser using your camera and face landmarks. It measures proportions like PD, bridge width, temple width, and face height. FitFrame does not upload or store camera images; only the measurement values move forward into checkout." },
-  { q:"What are the glasses made from?", a:"Frames are made from PA12 nylon, a lightweight material commonly used for durable 3D printed parts. It has enough flex for daily wear while holding the custom shape we generate from your scan." },
-  { q:"Do you offer prescription lenses?", a:"Not yet. The launch pair uses clear blue light lenses. Prescription support is planned, but we do not want to offer it until the verification and fulfillment process is as reliable as the frame fit." },
-  { q:"How long does shipping take?", a:"Most orders are expected to ship in about 7 to 10 days after payment and spec review. You will hear from us within 2 business days if anything in the scan needs a quick confirmation before printing." },
-  { q:"What if my frames don't fit?", a:"FitFrame includes a one-time reprint guarantee. If the frame fit is meaningfully off, contact us with the issue and we will use the scan data and your feedback to make it right." },
-  { q:"Are these glasses durable?", a:"Yes. PA12 is chosen because it is light, resilient, and well suited to daily-use objects. Like any eyewear, the frames should still be kept out of extreme heat and protected from crushing force." },
-  { q:"How do I care for my frames?", a:"Rinse dust away before wiping lenses, use a microfiber cloth, and store the frames in a case when they are not on your face. Avoid alcohol wipes on the frame surface because they can dull the finish over time." },
-  { q:"What is your return policy?", a:"Every FitFrame is made to order from your scan, so we do not accept returns for fit preference. If there is a manufacturing defect or the scan measurements were significantly off, we review the order and prioritize a correction or one-time reprint." },
-  { q:"Can I choose my lens type?", a:"At launch, checkout is fixed at $89 for clear blue light lenses. The interface shows the lens direction we are building toward, but paid orders today are fulfilled as the included blue light pair." },
-  { q:"Why $89 — what am I actually paying for?", a:"You are paying for a made-to-measure frame workflow: browser scan, custom frame geometry, PA12 3D printing, finishing, lenses, packing, and shipping. The goal is a price that feels closer to normal eyewear while solving the fit problem custom frames usually make expensive." },
+  { q:"What are the frames made from?", a:"PA12 nylon — a lightweight, American-made material used in high-performance 3D printed parts. It has enough flex for daily wear while holding the custom geometry we generate from your scan. Durable, precise, and significantly lighter than acetate." },
+  { q:"What about lenses?", a:"The founding pair includes clear blue light lenses. They filter high-energy blue light for everyday screen use. No medical claims — these are a comfort and style choice, not a vision correction product." },
+  { q:"Can I get prescription lenses?", a:"Not at launch. We want prescription fulfillment to be as reliable as the frame fit before we offer it. It's in the plan. For now, the founding pair ships with blue light lenses only." },
+  { q:"How does the scan work? How accurate is it?", a:"Your browser uses your front camera and a face landmark model to measure proportions — pupillary distance, bridge width, temple width, face height. No images leave your device. We target ±1.5mm accuracy, calibrated against a standard credit card for scale." },
+  { q:"When can I order?", a:"We're opening in limited batches. Join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. This keeps production manageable and guarantees every pair gets the attention it needs." },
+  { q:"What's the returns and fit guarantee?", a:"Because every pair is made to your measurements, we don't do standard returns. If the fit is meaningfully off — the frame sits crooked, pinches, or slides in a way the scan should have caught — we'll use your data and your feedback to reprint it. One-time, no questions asked." },
 ];
 
 const FrameSVG = ({ id, size=56, color="currentColor" }) => {
@@ -103,6 +99,71 @@ function sanitizeText(value, max=160) {
   return value.trim().replace(/[<>"'&]/g, "").slice(0, max);
 }
 
+// --- Why Section ---
+function WhySection({ onScan }) {
+  return (
+    <section className="why-section">
+      <div className="why-inner">
+        <div className="eyebrow">Why this exists</div>
+        <p className="why-p">
+          I built FitFrame because my girlfriend and I both stopped wearing glasses. Not because we didn't need them — because nothing fit. Too tight at the temples. Sliding down after an hour. Sitting crooked no matter how many times we adjusted. We're not unusual sizes. We just don't match the average face shape that every frame on the market is designed around, and we're far from alone in that.
+        </p>
+        <p className="why-p">
+          The problem isn't your face. It's that <span className="why-accent">the frame is built for a statistical average, not for you.</span> FitFrame reverses that. Your scan drives the geometry. The frame is shaped to your face — not the other way around.
+        </p>
+        <button className="btn btn-ghost why-cta" onClick={onScan}>Start your scan →</button>
+      </div>
+    </section>
+  );
+}
+
+// --- Brand Pillars ---
+function PillarsSection() {
+  const pillars = [
+    { label:"Made Here", desc:"Printed and finished in the US. Not outsourced, not warehoused overseas." },
+    { label:"Zero Inventory", desc:"Each pair is made after your scan. Nothing sits in a box waiting." },
+    { label:"No Branding", desc:"No logo on the frame. The fit is the statement." },
+    { label:"Zero Waste", desc:"Printed to order. No overstock, no landfill cycle." },
+  ];
+  return (
+    <section className="pillars-section">
+      <div className="pillars-grid">
+        {pillars.map(p => (
+          <div className="pillar" key={p.label}>
+            <div className="pillar-label">{p.label}</div>
+            <div className="pillar-desc">{p.desc}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// --- Process Photography Slots ---
+function ProcessSection() {
+  const slots = [
+    { label:"Raw PA12 material", caption:"The powder before it becomes your frame." },
+    { label:"Printer mid-job", caption:"Layer by layer, shaped to your scan." },
+    { label:"Work in progress", caption:"Finishing before it ships." },
+  ];
+  return (
+    <section className="process-section">
+      <div className="eyebrow">How it's made</div>
+      <div className="process-grid">
+        {slots.map(s => (
+          <div className="process-slot" key={s.label}>
+            <div className="process-img-placeholder" aria-label={s.label}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" opacity=".3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+            </div>
+            <div className="process-caption">{s.caption}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// --- FAQ Page (standalone route) ---
 function FAQPage() {
   useEffect(()=>{
     document.title = "FAQ | FitFrame";
@@ -129,9 +190,9 @@ function FAQPage() {
       <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/">Scan</a><div className="header-tag">FAQ</div></div></header>
       <main className="container">
         <section className="section faq-page">
-          <div className="eyebrow">Buyer questions</div>
+          <div className="eyebrow">Common questions</div>
           <h1 className="step-head">FitFrame FAQ.</h1>
-          <p className="step-sub">Straight answers about the scan, materials, shipping, fit guarantee, and what the $89 pair includes.</p>
+          <p className="step-sub">Straight answers about materials, lenses, the scan, and how orders work.</p>
           <div className="faq-list">
             {FAQS.map((item,index)=><details className="faq-item" key={item.q} open={index===0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
           </div>
@@ -139,6 +200,113 @@ function FAQPage() {
         </section>
       </main>
       <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a></div>
+    </div>
+  );
+}
+
+// --- Waitlist Gate (replaces order/checkout at result step) ---
+function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJoined }) {
+  const [email, setEmail] = useState(() => {
+    try { return localStorage.getItem("ff_waitlist_email") || ""; } catch { return ""; }
+  });
+  const [status, setStatus] = useState(() => {
+    try { return localStorage.getItem("ff_waitlist_status") || null; } catch { return null; }
+  });
+  const [position, setPosition] = useState(null);
+  const [liveCount, setLiveCount] = useState(scanCount);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Check returning user
+  useEffect(() => {
+    const saved = (() => { try { return localStorage.getItem("ff_waitlist_email"); } catch { return null; } })();
+    const savedStatus = (() => { try { return localStorage.getItem("ff_waitlist_status"); } catch { return null; } })();
+    if (saved && savedStatus === "joined") {
+      setEmail(saved);
+      setStatus("joined");
+      if (onAlreadyJoined) onAlreadyJoined();
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/waitlist-count")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.count) setLiveCount(d.count); })
+      .catch(() => {});
+  }, []);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const trimmed = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: trimmed,
+          measurements: measurements || null,
+          frame_id: frameId || null,
+          colorway_id: colorwayId || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Could not join the list.");
+      setStatus("joined");
+      setPosition(data.position || null);
+      if (data.count) setLiveCount(data.count);
+      try {
+        localStorage.setItem("ff_waitlist_email", trimmed);
+        localStorage.setItem("ff_waitlist_status", "joined");
+      } catch {}
+    } catch (err) {
+      setError(err.message || "Something went wrong. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (status === "joined") {
+    return (
+      <div className="waitlist-gate">
+        <div className="wg-confirmed">
+          <div className="wg-check">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={ACCENT_COLOR} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div className="wg-confirmed-head">You're in.</div>
+          <p className="wg-confirmed-body">We'll reach out when your batch opens. Your frame spec is saved — we have everything we need.</p>
+          {position && <div className="wg-position">#{position} on the list</div>}
+          {liveCount > 0 && <div className="wg-count">{liveCount.toLocaleString()} faces scanned so far</div>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="waitlist-gate">
+      <div className="wg-head">Orders open in limited batches.</div>
+      <p className="wg-sub">Be first. Drop your email and we'll reach out when your batch is ready. Your scan result and frame selection are saved.</p>
+      {liveCount > 0 && <div className="wg-count">{liveCount.toLocaleString()} faces scanned</div>}
+      <form className="wg-form" onSubmit={handleSubmit} noValidate>
+        <input
+          className="wg-input"
+          type="email"
+          placeholder="Your email address"
+          autoComplete="email"
+          value={email}
+          onChange={e => { setEmail(e.target.value); setError(null); }}
+        />
+        <button className="btn btn-primary wg-submit" disabled={submitting}>
+          {submitting ? "Saving…" : "Join the founding list"}
+        </button>
+      </form>
+      {error && <div className="submit-error wg-error">{error}</div>}
+      <p className="wg-note">No spam. One email when your batch opens.</p>
     </div>
   );
 }
@@ -185,25 +353,14 @@ function FitFrameApp(){
   const [rxForm] = useState(saved.rxForm??{odSphere:"",odCyl:"",odAxis:"",osSphere:"",osCyl:"",osAxis:""});
   const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
   const [selectedColorway, setSelectedColorway] = useState(saved.selectedColorway??"matte-black");
-  const [customerInfo, setCustomerInfo] = useState({...EMPTY_CUSTOMER,...(saved.customerInfo||{})});
   const [focusedField, setFocusedField] = useState(null);
-  const [submitError, setSubmitError] = useState(null);
   const [scanning, setScanning] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [sent, setSent] = useState(saved.sent??false);
-  const [pendingOrder, setPendingOrder] = useState(saved.pendingOrder??null);
-  const [paymentDetails, setPaymentDetails] = useState(saved.paymentDetails??null);
   const [scanCount, setScanCount] = useState(47);
-  const [waitlistEmail, setWaitlistEmail] = useState("");
-  const [waitlistStatus, setWaitlistStatus] = useState(null);
-  const [waitlistError, setWaitlistError] = useState(null);
-  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [cardCalibrating, setCardCalibrating] = useState(false);
   const [cardCaptured, setCardCaptured] = useState(saved.cardCaptured??false);
   const [calDwell, setCalDwell] = useState(0);
   const [calMoved, setCalMoved] = useState(false);
   const [calCapturedFlash, setCalCapturedFlash] = useState(false);
-  const [orderId] = useState(()=>saved.orderId??genOrderId());
 
   const canvasRef=useRef(null);
   const scanCountedRef=useRef(false);
@@ -214,8 +371,6 @@ function FitFrameApp(){
   const suggestedTags=Object.values(styleAnswers).flatMap(a=>a?.tags||[]);
   const topFrames=[...FRAMES].map(f=>({...f,score:f.tags.filter(t=>suggestedTags.includes(t)).length})).sort((a,b)=>b.score-a.score);
   const maxScore=Math.max(1,...topFrames.map(f=>f.score));
-  const lensData=LENS_OPTIONS.find(l=>l.id===lensChoice);
-  const totalPrice=BASE_PRICE;
   const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
   const chosenColorway=COLORWAYS.find(c=>c.id===selectedColorway)||COLORWAYS[0];
 
@@ -256,27 +411,9 @@ function FitFrameApp(){
   },[]);
 
   useEffect(()=>{
-    const params = new URLSearchParams(window.location.search);
-    const checkout = params.get("checkout");
-    if (checkout === "success") {
-      const sessionId = params.get("session_id") || "";
-      setPaymentDetails(p=>({...p,session_id:sessionId,payment_status:"paid"}));
-      setSent(true);
-      setStep(6);
-      if (sessionId) hydrateCheckoutSession(sessionId);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    if (checkout === "cancelled") {
-      setStep(6);
-      setSubmitError("Checkout was cancelled. Your order has not been charged.");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
-
-  useEffect(()=>{
-    if (step===0&&!sent) return;
-    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,customerInfo,orderId,cardCaptured,sent,pendingOrder,paymentDetails});
-  },[step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,customerInfo,orderId,cardCaptured,sent,pendingOrder,paymentDetails]);
+    if (step===0) return;
+    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,cardCaptured});
+  },[step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,cardCaptured]);
 
   useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
   useEffect(()=>{
@@ -324,28 +461,17 @@ function FitFrameApp(){
     };
     raf=requestAnimationFrame(tick);
     return ()=>cancelAnimationFrame(raf);
-  },[cardCalibrating,camReady,scan.mpReady,scan.facePresent,scan.poseHint,cardCaptured]);
+  },[cardCalibrating,cam.ready,scan.mpReady,scan.facePresent,scan.poseHint,cardCaptured]);
 
-  async function submitWaitlist(event) {
-    event.preventDefault();
-    const email = waitlistEmail.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setWaitlistError("Enter a valid email address.");
-      setWaitlistStatus(null);
-      return;
-    }
-    setWaitlistSubmitting(true);
-    setWaitlistError(null);
+  async function recordScanComplete() {
+    if (scanCountedRef.current) return;
+    scanCountedRef.current = true;
     try {
-      const res = await fetch("/api/waitlist", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) });
+      const res = await fetch("/api/scan-complete", { method:"POST" });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Could not join the list.");
-      setWaitlistStatus(data.duplicate ? "You're already on the list — we'll reach out when your pair is ready." : "You're on the list — we'll reach out when your pair is ready.");
-      setWaitlistEmail(email);
-    } catch (err) {
-      setWaitlistError(err.message || "Could not join the list.");
-    } finally {
-      setWaitlistSubmitting(false);
+      if (res.ok && data?.count) setScanCount(data.count);
+    } catch {
+      scanCountedRef.current = false;
     }
   }
 
@@ -361,81 +487,6 @@ function FitFrameApp(){
     scan.reset();
     setScanning(false);
     setConfirmedMeas(null);
-    setSubmitError(null);
-  }
-
-  function updateCustomer(key,value){
-    setSubmitError(null);
-    setCustomerInfo(p=>({...p,[key]:value}));
-  }
-
-  function buildOrderPayload(name=customerInfo.name,email=customerInfo.email,info=customerInfo){
-    const m=currentMeas;
-    return {
-      order_id:orderId,
-      customer_name:name,
-      customer_email:email,
-      timestamp:new Date().toISOString(),
-      frame_id:chosenFrame?.id||"-",
-      frame:chosenFrame?.label||"-",
-      colorway_id:chosenColorway.id,
-      colorway:chosenColorway.label,
-      lens:lensData?.label||"Blue Light",
-      lens_spec:lensData?.spec||"Clear blue light lenses",
-      lens_price:0,
-      total:totalPrice,
-      shipping_name:name,
-      shipping_address:info.address,
-      shipping_city:info.city,
-      shipping_state:info.state,
-      shipping_zip:info.zip,
-      style_fit:styleAnswers.fit?.label||"-",
-      style_vibe:styleAnswers.vibe?.label||"-",
-      style_use:styleAnswers.use?.label||"-",
-      style_priority:styleAnswers.priority?.label||"-",
-      pd_binocular:m?.pd||"-",
-      pd_left:m?.pdLeft||"-",
-      pd_right:m?.pdRight||"-",
-      bridge_width_mm:m?.bridge||"-",
-      bridge_mm:m?.bridge||"-",
-      temple_mm:m?.temple||"-",
-      lens_height_mm:m?.lensH||"-",
-      face_height_mm:m?.faceH||m?.lensH||"-",
-      face_width_mm:m?.faceW||"-",
-      scan_quality:scan.quality?.label||"-",
-      valid_frames_pct:scan.validPct||"-",
-      user_agent:navigator.userAgent,
-      ...(lensChoice==="prescription"?{rx_od_sphere:rxForm.odSphere||"-",rx_od_cyl:rxForm.odCyl||"-",rx_od_axis:rxForm.odAxis||"-",rx_os_sphere:rxForm.osSphere||"-",rx_os_cyl:rxForm.osCyl||"-",rx_os_axis:rxForm.osAxis||"-"}:{})
-    };
-  }
-
-  async function submitOrder(){
-    setSubmitting(true);
-    setSubmitError(null);
-    const safeName=sanitizeText(customerInfo.name,120);
-    const safeEmail=customerInfo.email.trim().toLowerCase().slice(0,254);
-    const safeAddress=sanitizeText(customerInfo.address,180);
-    const safeCity=sanitizeText(customerInfo.city,80);
-    const safeState=sanitizeText(customerInfo.state,40);
-    const safeZip=sanitizeText(customerInfo.zip,20);
-    const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail);
-    if(!safeName){ setSubmitError("Enter your full name."); setSubmitting(false); return; }
-    if(!emailOk){ setSubmitError("Enter a valid email address."); setSubmitting(false); return; }
-    if(!safeAddress||!safeCity||!safeState||!safeZip){ setSubmitError("Enter your full shipping address."); setSubmitting(false); return; }
-
-    const payload=buildOrderPayload(safeName,safeEmail,{...customerInfo,address:safeAddress,city:safeCity,state:safeState,zip:safeZip});
-    setPendingOrder(payload);
-    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,customerInfo:{...customerInfo,name:safeName,email:safeEmail,address:safeAddress,city:safeCity,state:safeState,zip:safeZip},orderId,cardCaptured,pendingOrder:payload});
-
-    try {
-      const res=await fetch("/api/create-checkout-session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-      const data=await res.json();
-      if(!res.ok||!data.ok||!data.url) throw new Error(data.error||"Checkout could not start.");
-      window.location.assign(data.url);
-    } catch (err) {
-      setSubmitError(err.message||"Checkout could not start.");
-      setSubmitting(false);
-    }
   }
 
   function scanBadge(){
@@ -446,44 +497,112 @@ function FitFrameApp(){
     return {label:"READY",tone:""};
   }
 
+  // Steps: 0=hero, 1=scan, 2=style, 3=lenses, 4=frames, 5=colorway, 6=result+waitlist
   const dots=[1,2,3,4,5,6].map(i=>({done:step>i,active:step===i}));
-  const firstName=customerInfo.name.trim().split(" ")[0]||"there";
   const activeMeasure=MEASURE_FIELDS.find(f=>f.key===focusedField);
   const badge=scanBadge();
-  const confirmationOrder=pendingOrder||buildOrderPayload();
-  const stripeConfirmationId=paymentDetails?.payment_intent||paymentDetails?.session_id||"Processing";
-  const cameraActive=camLoading||(camReady&&!scan.done);
-  const scannerReady=camReady&&scan.mpReady&&!scan.done;
 
   return (
     <div className="app" style={{"--accent":ACCENT_COLOR}}>
-      <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/faq">FAQ</a><div className="header-tag">{DOMAIN}</div></div></header>
-      {step>0&&!sent&&<div className="prog-strip">{dots.map((d,i)=><div key={i} className={`prog-dot ${d.done?"done":d.active?"active":""}`}/>)}</div>}
-      <div className="container">
-        {step===0&&<div className="section">
-          <div className="eyebrow">Made-to-measure eyewear</div><div className="display">Frames built<br/>for <em>your</em> face.</div>
-          <p className="body-lg">Scan your face. Answer four questions. Checkout securely with Stripe for custom 3D-printed frames built to your exact measurements.</p>
-          <div className="scan-count">Join {scanCount.toLocaleString()} people who've already scanned their face</div>
-          <form className="waitlist-form" onSubmit={submitWaitlist} noValidate>
-            <div className="waitlist-row"><input className="waitlist-input" placeholder="Email for early access" type="email" autoComplete="email" value={waitlistEmail} onChange={e=>{setWaitlistEmail(e.target.value);setWaitlistError(null);}}/><button className="btn btn-accent" disabled={waitlistSubmitting}>{waitlistSubmitting?"Joining…":"Join early access"}</button></div>
-            {waitlistError&&<div className="submit-error">{waitlistError}</div>}
-            {waitlistStatus&&<div className="waitlist-success">{waitlistStatus}</div>}
-          </form>
-          <div className="proof-strip"><span className="proof-item"><ProofIcon type="flag"/>Made in America</span><span className="proof-item"><ProofIcon type="box"/>Ships in ~10 days</span><span className="proof-item"><ProofIcon type="refresh"/>One-time reprint guarantee</span><span className="proof-item"><ProofIcon type="lock"/>No images stored</span></div>
-          <div className="price-block"><div className="price-main">${BASE_PRICE}</div><div className="price-sub">Blue light lenses included · Secure Stripe checkout</div></div>
-          <div className="features">{[["01",<><strong>Browser-based face scan.</strong> No app, no store, no optician.</>],["02",<><strong>Every measurement captured.</strong> PD, bridge, temple, face width, and face height.</>],["03",<><strong>3D printed to your spec.</strong> PA12 nylon. Lightweight, precise, durable.</>],["04",<><strong>$89 fixed price.</strong> Pay securely after your frame spec is ready.</>]].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}</div>
-          <div className="btn-row"><button className="btn btn-primary" onClick={()=>setStep(1)}>Start your scan →</button></div>
-        </div>}
+      <header className="site-header">
+        <a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a>
+        <div className="header-nav">
+          <a className="header-link" href="/faq">FAQ</a>
+          <div className="header-tag">{DOMAIN}</div>
+        </div>
+      </header>
+      {step>0&&<div className="prog-strip">{dots.map((d,i)=><div key={i} className={`prog-dot ${d.done?"done":d.active?"active":""}`}/>)}</div>}
 
+      <div className="container">
+
+        {/* STEP 0 — HERO + WHY + PROCESS + PILLARS + FAQ PREVIEW */}
+        {step===0&&<>
+          <div className="section">
+            <div className="eyebrow">Made-to-measure eyewear</div>
+            <div className="display">Frames built<br/>for <em>your</em> face.</div>
+            <p className="body-lg">Scan your face. Pick your shape. We print a frame to your exact measurements — not to an average.</p>
+            <div className="hero-meta">
+              <div className="scan-count">{scanCount.toLocaleString()} faces scanned</div>
+              <a className="hero-faq-link" href="/faq">Questions? →</a>
+            </div>
+            <div className="price-block">
+              <div className="price-main">${BASE_PRICE}</div>
+              <div className="price-sub">PA12 nylon · blue light lenses included · US-made</div>
+            </div>
+            <div className="btn-row" style={{marginBottom:8}}>
+              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>Scan your face →</button>
+            </div>
+            <div className="proof-strip">
+              <span className="proof-item"><ProofIcon type="flag"/>Made in America</span>
+              <span className="proof-item"><ProofIcon type="box"/>Ships in ~10 days</span>
+              <span className="proof-item"><ProofIcon type="refresh"/>Fit guarantee</span>
+              <span className="proof-item"><ProofIcon type="lock"/>No images stored</span>
+            </div>
+          </div>
+
+          <WhySection onScan={()=>setStep(1)}/>
+
+          <ProcessSection/>
+
+          <PillarsSection/>
+
+          <div className="section" style={{paddingTop:8}}>
+            <div className="features">
+              {[
+                ["01",<><strong>Browser scan, no app.</strong> Your camera measures PD, bridge, temple, and face height in under two minutes.</>],
+                ["02",<><strong>Custom geometry, not adjustments.</strong> The frame spec is generated from your measurements, not bent to fit afterward.</>],
+                ["03",<><strong>PA12 nylon, 3D printed.</strong> Lightweight, precise, and durable. A material built for this kind of work.</>],
+                ["04",<><strong>$89 fixed price.</strong> Join the waitlist now. Orders open in limited batches.</>],
+              ].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}
+            </div>
+          </div>
+
+          <div className="section faq-preview" style={{paddingTop:0}}>
+            <div className="eyebrow">Common questions</div>
+            <div className="faq-list">
+              {FAQS.slice(0,3).map((item,i)=><details className="faq-item" key={item.q} open={i===0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
+            </div>
+            <div className="btn-row" style={{marginTop:14}}>
+              <a className="btn btn-ghost" href="/faq">All questions →</a>
+              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>Scan your face →</button>
+            </div>
+          </div>
+        </>}
+
+        {/* STEP 1 — SCAN */}
         {step===1&&<div className="section">
-          <div className="eyebrow">Step 1 of 6 — Face scan</div><div className="step-head">{scanning?"Stay still.":scan.done?"Scan complete.":"Position your face."}</div>
+          <div className="eyebrow">Step 1 of 6 — Face scan</div>
+          <div className="step-head">{scanning?"Stay still.":scan.done?"Scan complete.":"Position your face."}</div>
           <p className="step-sub">{cardCalibrating?"Hold the card flat below your chin — keep still":scanning?"We're capturing your measurements.":scan.done?"Processing your measurements.":"Center your face inside the oval and hold still. The scan starts automatically."}</p>
           <p className="privacy-note">Your camera is used only for measurement. No images are stored or transmitted.</p>
           {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>Face scan couldn't load.</div><div className="cam-sub">Check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>Reload page</button></div>}
-          {cameraActive&&!scan.mpLoadError&&<><div className="cam-outer"><div className="cam-inner"><video ref={videoRef} autoPlay playsInline muted/><canvas ref={canvasRef}/><div className="cam-vignette"/>{camLoading&&!camReady&&<div className="cam-loading-overlay"><div className="mp-spinner"/><div className="cam-label">Starting camera…</div><div className="cam-sub">Keep this tab open while Safari prepares the video feed.</div></div>}{camReady&&!scan.mpReady&&<div className="cam-loading-overlay"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>Preparing face scanner…</div></div>}{scannerReady&&<><FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={cardCalibrating&&!cardCaptured}/><div className="cam-top"><span className={`scan-tag ${badge.tone}`}>{badge.label}</span>{scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}%</span>}</div><div className="cam-bottom">{scan.pauseWarning&&<div className="pause-warning">Hold still — scan paused</div>}{scanning&&scan.seqIdx>=0?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>:scan.poseHint?<div className="scan-inst" style={{color:"var(--amber)"}}>{scan.poseHint}</div>:scan.autoStartPct>0&&scan.autoStartPct<1?<div className="scan-inst">Hold still…</div>:<div className="scan-inst">Look directly at the camera.</div>}{scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}</div></>}</div></div>{scannerReady&&cardCalibrating&&!cardCaptured&&<><div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"Moved — hold steady to recapture":"Hold the card flat below your chin — keep still"}</div><div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div></>}{scannerReady&&calCapturedFlash&&<div className="cal-status good">✓ Card captured</div>}</>}
-          {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
-          {!camReady&&!camLoading&&!camErr&&!currentMeas&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">Camera access needed</div><div className="cam-sub">FitFrame uses your front camera to measure your face. Nothing leaves your device.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>Allow camera</button></div>}
-          {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>Try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>Reload page</button>}</div>}
+          {cam.ready&&scan.mpReady&&!scan.done&&<>
+            <div className="cam-outer">
+              <div className="cam-inner">
+                <video ref={cam.videoRef} autoPlay playsInline muted/>
+                <canvas ref={canvasRef}/>
+                <div className="cam-vignette"/>
+                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={cardCalibrating&&!cardCaptured}/>
+                <div className="cam-top">
+                  <span className={`scan-tag ${badge.tone}`}>{badge.label}</span>
+                  {scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}%</span>}
+                </div>
+                <div className="cam-bottom">
+                  {scan.pauseWarning&&<div className="pause-warning">Hold still — scan paused</div>}
+                  {scanning&&scan.seqIdx>=0?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>:scan.poseHint?<div className="scan-inst" style={{color:"var(--amber)"}}>{scan.poseHint}</div>:scan.autoStartPct>0&&scan.autoStartPct<1?<div className="scan-inst">Hold still…</div>:<div className="scan-inst">Look directly at the camera.</div>}
+                  {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
+                </div>
+              </div>
+            </div>
+            {cardCalibrating&&!cardCaptured&&<>
+              <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"Moved — hold steady to recapture":"Hold the card flat below your chin — keep still"}</div>
+              <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
+            </>}
+            {calCapturedFlash&&<div className="cal-status good">✓ Card captured</div>}
+          </>}
+          {step===1&&cam.ready&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
+          {!cam.ready&&!cam.camErr&&!currentMeas&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">Camera access needed</div><div className="cam-sub">FitFrame uses your front camera to measure your face. Nothing leaves your device.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={cam.start}>Allow camera</button></div>}
+          {cam.camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{cam.camErr.headline}</div>{cam.camErr.type==="denied"?<div className="err-box">{cam.camErr.detail}</div>:<div className="cam-sub">{cam.camErr.detail}</div>}{cam.camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={cam.start}>Try again</button>}{cam.camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>Reload page</button>}</div>}
           {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>Scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>Retry scan</button></div>}
           {scan.scanLost&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--amber)"}}>Scan lost.</div><div className="cam-sub">Position your face and tap Start again.</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>Try again</button></div>}
           {camReady&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>Calibrate with card</button>:<button className="btn btn-primary" onClick={()=>setScanning(true)}>Start scan</button>}</div>}
@@ -492,19 +611,125 @@ function FitFrameApp(){
           {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">Measurements captured. Moving forward…</div>}
         </div>}
 
+        {/* STEP 2 — STYLE */}
         {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">Step 2 of 6 — Style</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← Back</button></div>}</div>; })()}
 
-        {step===3&&<div className="section"><div className="eyebrow">Step 3 of 6 — Lenses</div><div className="step-head">Choose your lens.</div><p className="step-sub">Blue light lenses are included in the fixed ${BASE_PRICE} checkout price.</p><div className="lens-list">{LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">Included</div></div>)}</div><div className="lens-disclaimer">Prescription support is in development. Checkout today is fixed at ${BASE_PRICE} for clear blue light lenses.</div><div className="btn-row"><button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>Choose your frame →</button><button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button></div></div>}
+        {/* STEP 3 — LENSES */}
+        {step===3&&<div className="section">
+          <div className="eyebrow">Step 3 of 6 — Lenses</div>
+          <div className="step-head">Choose your lens.</div>
+          <p className="step-sub">Blue light lenses are included in the fixed ${BASE_PRICE} price. No medical claims — comfort and screen use.</p>
+          <div className="lens-list">
+            {LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">Included</div></div>)}
+          </div>
+          <div className="lens-disclaimer">Prescription support is in development. Orders today ship with clear blue light lenses.</div>
+          <div className="btn-row">
+            <button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>Choose your frame →</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button>
+          </div>
+        </div>}
 
-        {step===4&&<div className="section"><div className="eyebrow">Step 4 of 6 — Frame</div><div className="step-head">Pick your shape.</div><p className="step-sub">Your top match is highlighted based on your answers. Choose the one that feels right.</p><div className="vto-note"><div className="vto-note-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div className="vto-note-text"><strong>Virtual try-on coming soon.</strong> Select the shape that matches your style for now.</div></div><div className="frame-grid">{topFrames.map((f,i)=><div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`} onClick={()=>setSelectedFrame(f.id)}>{i===0&&<div className="best-badge">best match</div>}<div className="frame-tile-icon"><FrameSVG id={f.id} size={52} color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/></div><div className="frame-tile-name">{f.label}</div><div className="frame-tile-desc">{f.desc}</div>{f.score>0&&<div className="frame-tile-bar" style={{width:`${Math.round((f.score/maxScore)*100)}%`}}/>}</div>)}</div><div className="btn-row" style={{marginTop:8}}><button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(5);}}>Choose colorway →</button><button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button></div></div>}
+        {/* STEP 4 — FRAMES */}
+        {step===4&&<div className="section">
+          <div className="eyebrow">Step 4 of 6 — Frame</div>
+          <div className="step-head">Pick your shape.</div>
+          <p className="step-sub">Your top match is highlighted based on your answers. Choose the one that feels right.</p>
+          <div className="frame-grid">
+            {topFrames.map((f,i)=><div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`} onClick={()=>setSelectedFrame(f.id)}>{i===0&&<div className="best-badge">best match</div>}<div className="frame-tile-icon"><FrameSVG id={f.id} size={52} color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/></div><div className="frame-tile-name">{f.label}</div><div className="frame-tile-desc">{f.desc}</div>{f.score>0&&<div className="frame-tile-bar" style={{width:`${Math.round((f.score/maxScore)*100)}%`}}/>}</div>)}
+          </div>
+          <div className="btn-row" style={{marginTop:8}}>
+            <button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(5);}}>Choose colorway →</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
+          </div>
+        </div>}
 
-        {step===5&&!sent&&<div className="section"><div className="eyebrow">Step 5 of 6 — Colorway</div><div className="step-head">Choose the finish.</div><p className="step-sub">One decision, three finishes. Matte Black is the default recommendation for most face shapes.</p><div className="colorway-grid">{COLORWAYS.map(c=><button key={c.id} className={`colorway-card ${selectedColorway===c.id?"sel":""}`} onClick={()=>setSelectedColorway(c.id)}>{c.recommended&&<span className="colorway-badge">Recommended for your face shape</span>}<div className="colorway-preview"><ColorwaySVG colorway={c}/></div><div><div className="colorway-name">{c.label}</div><div className="colorway-desc">{c.desc}</div></div></button>)}</div><div className="btn-row"><button className="btn btn-primary checkout-submit" onClick={()=>setStep(6)}>Continue to shipping →</button><button className="btn btn-ghost" onClick={()=>setStep(4)}>Back</button></div></div>}
+        {/* STEP 5 — COLORWAY */}
+        {step===5&&<div className="section">
+          <div className="eyebrow">Step 5 of 6 — Colorway</div>
+          <div className="step-head">Choose the finish.</div>
+          <p className="step-sub">One decision, three finishes. Matte Black is the default recommendation for most face shapes.</p>
+          <div className="colorway-grid">
+            {COLORWAYS.map(c=><button key={c.id} className={`colorway-card ${selectedColorway===c.id?"sel":""}`} onClick={()=>setSelectedColorway(c.id)}>{c.recommended&&<span className="colorway-badge">Recommended for your face shape</span>}<div className="colorway-preview"><ColorwaySVG colorway={c}/></div><div><div className="colorway-name">{c.label}</div><div className="colorway-desc">{c.desc}</div></div></button>)}
+          </div>
+          <div className="btn-row">
+            <button className="btn btn-primary checkout-submit" onClick={()=>setStep(6)}>See your result →</button>
+            <button className="btn btn-ghost" onClick={()=>setStep(4)}>Back</button>
+          </div>
+        </div>}
 
-        {step===6&&!sent&&<div className="section"><div className="eyebrow">Step 6 of 6 — Secure checkout</div><div className="step-head">Ship your pair.</div><p className="step-sub">Review the measurements, enter shipping, then checkout through Stripe. Nothing is charged until Stripe confirms payment.</p><div className="measure-grid">{MEASURE_FIELDS.map(field=>{ const value=field.key==="faceH"?(currentMeas?.faceH||currentMeas?.lensH||""):currentMeas?.[field.key]||""; const sane=isSane(value,field); return <div className="measure-field" key={field.key}><label>{field.label}</label><input className="measure-input" inputMode="decimal" value={value} onFocus={()=>setFocusedField(field.key)} onBlur={()=>setFocusedField(null)} onChange={e=>setConfirmedMeas(p=>({...currentMeas,...p,[field.key]:e.target.value}))}/>{sane!==null&&<span className={`measure-dot ${sane?"ok":""}`}/>}</div>; })}</div>{activeMeasure&&<div className="measure-tooltip">{activeMeasure.hint}</div>}<div className="receipt"><div className="receipt-head">Order summary · {orderId}</div><div className="receipt-row"><span>Custom frame — {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div><div className="receipt-row"><span>Colorway — {chosenColorway.label}</span><span>Included</span></div><div className="receipt-row"><span>{lensData?.label||"Blue Light"} lenses</span><span>Included</span></div><div className="receipt-total"><span>Total due today</span><span>${totalPrice}</span></div></div><div className="trust-line"><ProofIcon type="refresh"/><span>One-time reprint guarantee if the fit is off. No questions asked.</span></div><div className="payment-note"><span>Payment is processed by Stripe Checkout.</span><span>We never store card details on FitFrame servers.</span></div><input className="field" placeholder="Full name" autoComplete="shipping name" value={customerInfo.name} onChange={e=>updateCustomer("name",e.target.value)}/><input className="field" placeholder="Email address" type="email" autoComplete="email" value={customerInfo.email} onChange={e=>updateCustomer("email",e.target.value)}/><input className="field" placeholder="Street address" autoComplete="shipping address-line1" value={customerInfo.address} onChange={e=>updateCustomer("address",e.target.value)}/><input className="field" placeholder="City" autoComplete="shipping address-level2" value={customerInfo.city} onChange={e=>updateCustomer("city",e.target.value)}/><input className="field" placeholder="State" autoComplete="shipping address-level1" value={customerInfo.state} onChange={e=>updateCustomer("state",e.target.value)}/><input className="field" placeholder="ZIP code" inputMode="numeric" autoComplete="shipping postal-code" value={customerInfo.zip} onChange={e=>updateCustomer("zip",e.target.value)}/>{submitError&&<div className="submit-error">{submitError}</div>}<div className="btn-row"><button className="btn btn-primary checkout-submit" disabled={submitting} onClick={submitOrder}>{submitting?"Starting Stripe…":`Complete order - $${BASE_PRICE}`}</button><button className="btn btn-ghost" onClick={()=>setStep(5)}>Back</button></div></div>}
+        {/* STEP 6 — RESULT + WAITLIST GATE */}
+        {step===6&&<div className="section">
+          <div className="eyebrow">Your frame — designed by your face</div>
+          <div className="step-head">Your spec is ready.</div>
+          <p className="step-sub">Here's what we captured. Join the founding list and we'll reach out when your batch opens.</p>
 
-        {sent&&<div className="section"><div className="confirm-actions"><div className="order-badge">{orderId}</div></div><div className="confirm-greeting">You're all set,<br/>{firstName}.</div><p className="confirm-body">Your payment is confirmed and your FitFrame order is in. We'll be in touch within <strong>2 business days</strong> with the next update.</p><div className="receipt"><div className="receipt-head">Paid order summary</div><div className="receipt-row"><span>Stripe confirmation</span><span>{stripeConfirmationId}</span></div><div className="receipt-row"><span>Frame</span><span>{confirmationOrder.frame}</span></div><div className="receipt-row"><span>Colorway</span><span>{confirmationOrder.colorway}</span></div><div className="receipt-row"><span>Ship to</span><span>{confirmationOrder.shipping_city || customerInfo.city}</span></div><div className="receipt-total"><span>Total paid</span><span>${BASE_PRICE}</span></div></div><div className="next-steps">{[["01","We review your scan","Your measurements and payment confirmation are sent to the production inbox automatically."],["02","We print your frames","Print time is 2–3 days once the spec is approved."],["03","Shipped to your door",`Estimated delivery: ${getETA()}. We'll send tracking once your order ships.`],["04","Fit guarantee","If your frames don't fit, we reprint them once, free."]].map(([n,label,desc])=><div className="next-step" key={n}><span className="next-step-num">{n}</span><div><div className="next-step-label">{label}</div><div className="next-step-desc">{desc}</div></div></div>)}</div><div className="btn-row" style={{marginTop:24}}><a className="btn btn-ghost" href="/faq">Read FAQ</a><button className="btn btn-ghost" onClick={()=>{clearSession();setSent(false);setStep(0);}}>Start another scan</button></div><div className="confirm-footer">{orderId} · {DOMAIN}</div></div>}
+          {/* Measurements summary */}
+          <div className="result-spec">
+            <div className="result-spec-head">Face measurements</div>
+            <div className="measure-grid">
+              {MEASURE_FIELDS.map(field=>{
+                const value=field.key==="faceH"?(currentMeas?.faceH||currentMeas?.lensH||""):currentMeas?.[field.key]||"";
+                const sane=isSane(value,field);
+                return (
+                  <div className="measure-field" key={field.key}>
+                    <label>{field.label}</label>
+                    <input
+                      className="measure-input"
+                      inputMode="decimal"
+                      value={value}
+                      onFocus={()=>setFocusedField(field.key)}
+                      onBlur={()=>setFocusedField(null)}
+                      onChange={e=>setConfirmedMeas(p=>({...currentMeas,...p,[field.key]:e.target.value}))}
+                    />
+                    {sane!==null&&<span className={`measure-dot ${sane?"ok":""}`}/>}
+                  </div>
+                );
+              })}
+            </div>
+            {activeMeasure&&<div className="measure-tooltip">{activeMeasure.hint}</div>}
+          </div>
+
+          {/* Frame summary */}
+          <div className="result-frame-summary">
+            <div className="rfs-row">
+              <span className="rfs-label">Frame</span>
+              <span className="rfs-value">{chosenFrame?.label || "—"}</span>
+            </div>
+            <div className="rfs-row">
+              <span className="rfs-label">Colorway</span>
+              <span className="rfs-value">{chosenColorway?.label || "—"}</span>
+            </div>
+            <div className="rfs-row">
+              <span className="rfs-label">Lenses</span>
+              <span className="rfs-value">Blue Light (included)</span>
+            </div>
+          </div>
+
+          {/* Waitlist gate — replaces checkout */}
+          <WaitlistGate
+            measurements={currentMeas}
+            frameId={chosenFrame?.id}
+            colorwayId={chosenColorway?.id}
+            scanCount={scanCount}
+          />
+
+          <div className="btn-row" style={{marginTop:20}}>
+            <button className="btn btn-ghost" onClick={()=>setStep(5)}>Back</button>
+            <a className="btn btn-ghost" href="/faq">FAQ →</a>
+          </div>
+        </div>}
+
       </div>
-      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/faq" className="footer-link">FAQ</a><span className="footer-dot">·</span><a href="/returns" className="footer-link">Returns</a></div>
+
+      <div className="site-footer">
+        <span>{DOMAIN}</span>
+        <span className="footer-dot">·</span>
+        <a href="/faq" className="footer-link">FAQ</a>
+        <span className="footer-dot">·</span>
+        <a href="/returns" className="footer-link">Returns</a>
+        <span className="footer-dot">·</span>
+        <a href={`mailto:hello@${DOMAIN}`} className="footer-link">hello@{DOMAIN}</a>
+      </div>
     </div>
   );
 }
