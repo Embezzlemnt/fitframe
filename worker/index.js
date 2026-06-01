@@ -9,9 +9,18 @@ let fallbackScanCount = SCAN_COUNT_SEED;
 let fallbackWaitlistCount = WAITLIST_COUNT_SEED;
 const fallbackWaitlist = new Set();
 
+const ALLOWED_ORIGIN = "https://fitframe.store";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 const jsonHeaders = {
   "Content-Type": "application/json",
   "X-Content-Type-Options": "nosniff",
+  ...corsHeaders,
 };
 
 function json(body, status = 200) {
@@ -347,17 +356,45 @@ function buildFounderNotificationText(email, measurements, frameId, position) {
 
 async function waitlist(request, env) {
   if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405);
+
+  // Rate limiting
+  if (env.RATE_LIMITER) {
+    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+    const { success } = await env.RATE_LIMITER.limit({ key: clientIp });
+    if (!success) {
+      return json({ error: "too many requests" }, 429);
+    }
+  }
+
   let payload;
   try {
     payload = await request.json();
   } catch {
     return json({ ok:false, error:"Invalid waitlist payload." }, 400);
   }
-  const email = normalizeEmail(payload.email);
-  if (!validEmail(email)) return json({ ok:false, error:"Enter a valid email address." }, 400);
 
-  const measurements = payload.measurements || null;
-  const frameId = payload.frame_id || null;
+  // Honeypot check — bot filled hidden field, silently accept
+  if (payload?.website && payload.website.length > 0) {
+    return json({ ok: true }, 200);
+  }
+
+  const email = normalizeEmail(payload.email);
+  if (!validEmail(email) || email.length > 254) return json({ ok:false, error:"Enter a valid email address." }, 400);
+
+  // Measurement sanity check
+  const pd = parseFloat(payload.measurements?.pd);
+  if (pd && (isNaN(pd) || pd < 45 || pd > 80)) {
+    return json({ ok:false, error:"invalid measurements" }, 400);
+  }
+
+  // Strip unexpected fields
+  const allowed = ["email", "measurements", "frame_id", "colorway_id", "timestamp"];
+  const sanitized = Object.fromEntries(
+    Object.entries(payload).filter(([k]) => allowed.includes(k))
+  );
+
+  const measurements = sanitized.measurements || null;
+  const frameId = sanitized.frame_id || null;
 
   const key = `waitlist:${email}`;
   let duplicate = false;
@@ -415,11 +452,25 @@ async function waitlist(request, env) {
   return json({ ok:true, duplicate, position, count:currentCount });
 }
 
+function validateOrigin(request) {
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== ALLOWED_ORIGIN) {
+    return new Response(null, { status: 204 });
+  }
+  return null;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method === "OPTIONS") return new Response(null, { status:204, headers:jsonHeaders });
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status:204, headers:corsHeaders });
+    }
+
+    const originBlock = validateOrigin(request);
+    if (originBlock) return originBlock;
+
     if (url.pathname === "/api/create-checkout-session" && request.method === "POST") return createCheckoutSession(request, env);
     if (url.pathname === "/api/checkout-session" && request.method === "GET") return getCheckoutSession(request, env);
     if (url.pathname === "/api/stripe-webhook" && request.method === "POST") return stripeWebhook(request, env);

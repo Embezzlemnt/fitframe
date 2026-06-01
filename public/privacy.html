@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="FitFrame privacy policy. Camera measurement stays on device. No face images are stored or transmitted. Order email includes measurements and shipping address only." />
+    <meta name="description" content="FitFrame privacy policy. Camera measurement stays on device. No face images are stored or transmitted. What we collect, why, and how to request deletion." />
     <link rel="canonical" href="https://fitframe.store/privacy" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/global.css" />
@@ -13,11 +13,14 @@
       .logo{font-size:30px;font-weight:600;letter-spacing:-.04em;margin-bottom:34px;}
       .logo-dot{color:var(--accent);}
       h1{font-size:32px;line-height:1.05;letter-spacing:-.04em;margin:0 0 20px;font-weight:600;}
+      h2{font-size:18px;font-weight:500;color:var(--text);margin:28px 0 12px;letter-spacing:-.02em;}
       p{font-size:15px;line-height:1.65;color:var(--dim);font-weight:300;margin:0 0 18px;}
       .facts{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:18px 0;margin:28px 0;display:grid;gap:14px;}
       .fact{display:grid;gap:4px;}
       .fact strong{font-size:13px;color:var(--text);font-weight:500;}
       .fact span{font-size:13px;line-height:1.55;color:var(--dim);font-weight:300;}
+      ul{font-size:14px;line-height:1.7;color:var(--dim);font-weight:300;margin:0 0 18px;padding-left:20px;}
+      ul li{margin-bottom:4px;}
       .footer{font-size:12px;color:var(--soft);margin-top:30px;}
       a{color:inherit;text-decoration:none;}
     </style>
@@ -26,22 +29,46 @@
     <main class="page">
       <a class="logo" href="/">fitframe<span class="logo-dot">.</span></a>
       <h1>Privacy, plainly.</h1>
-      <p>FitFrame uses your camera only to measure frame fit. The camera feed runs in your browser during the scan.</p>
+
+      <h2>what we collect</h2>
+      <ul>
+        <li><strong>email address</strong> — used to notify you when your batch opens</li>
+        <li><strong>face measurements</strong> — pupillary distance, bridge width, temple length, face height, face width, lens height. these are numbers, not images. computed on your device from the camera feed.</li>
+        <li><strong>frame selection</strong> — your chosen frame style, colorway, and lens preference</li>
+        <li><strong>timestamp</strong> — when you joined the waitlist</li>
+      </ul>
+
+      <h2>what we do not collect</h2>
       <div class="facts">
         <div class="fact">
-          <strong>No face images are stored.</strong>
-          <span>The scan produces fit measurements. It does not save photos or video.</span>
+          <strong>no camera images.</strong>
+          <span>the camera feed runs in your browser only. no frame, photo, or video is transmitted or stored anywhere.</span>
         </div>
         <div class="fact">
-          <strong>No face images are transmitted.</strong>
-          <span>The order email includes measurements, frame choice, style answers, and shipping address.</span>
+          <strong>no account or password.</strong>
+          <span>fitframe runs in the browser. there is no login, dashboard, or customer profile.</span>
         </div>
         <div class="fact">
-          <strong>No app account is required.</strong>
-          <span>FitFrame runs in the browser. There is no login, password, or customer dashboard.</span>
+          <strong>no payment data.</strong>
+          <span>payment processing is handled by stripe. fitframe never sees your card details.</span>
         </div>
       </div>
-      <p>Shipping details are used to make and deliver the order. FitFrame does not sell customer contact or shipping information.</p>
+
+      <h2>how we store it</h2>
+      <p>data is stored in cloudflare kv, a globally distributed key-value store running on us-based edge infrastructure. we retain it until the order is fulfilled or you request deletion.</p>
+
+      <h2>on biometric data</h2>
+      <p>the measurements we collect (pd, bridge width, temple length, face height, face width, lens height) are functional fit parameters — the same numbers an optician writes on a prescription pad. they are not biometric identifiers used for recognition or identification. some states define facial measurements differently under biometric privacy laws. we describe our data accurately and recommend you consult your own legal counsel if you have concerns.</p>
+
+      <h2>your rights</h2>
+      <p>you can request deletion of your data at any time. email <a href="mailto:hello@fitframe.store" style="color:var(--accent)">hello@fitframe.store</a> with the email address you used to join the waitlist and we will remove your entry within 14 days.</p>
+
+      <h2>third parties</h2>
+      <p>we use <strong>cloudflare</strong> for hosting and edge storage, <strong>resend</strong> for transactional email, and <strong>stripe</strong> for payment processing. each operates under its own privacy and data processing agreement. we do not sell, share, or monetize your data.</p>
+
+      <h2>changes</h2>
+      <p>if this policy changes materially, we will update this page and note the change in our next waitlist email. last updated: may 2026.</p>
+
       <p class="footer"><a href="/">fitframe.store</a> / <a href="mailto:hello@fitframe.store">hello@fitframe.store</a></p>
     </main>
   </body>

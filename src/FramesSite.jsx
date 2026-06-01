@@ -191,12 +191,34 @@ function FAQPage() {
           <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">scan your face</a></div>
         </section>
       </main>
-      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a></div>
+      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a><span className="footer-dot">·</span><a href="/privacy" className="footer-link">Privacy</a></div>
     </div>
   );
 }
 
 // --- Waitlist Gate (replaces order/checkout at result step) ---
+function ReturnsPage() {
+  useEffect(()=>{ document.title = "Returns & Reprints | FitFrame"; },[]);
+  return (
+    <div className="app" style={{"--accent":ACCENT_COLOR}}>
+      <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/faq">FAQ</a><div className="header-tag">Returns</div></div></header>
+      <main className="container">
+        <section className="section faq-page">
+          <div className="eyebrow">Policy</div>
+          <h1 className="step-head">Returns & Reprints.</h1>
+          <div className="returns-copy">
+            <p>Every FitFrame is made to order from your scan. Because each pair is printed to your measurements, we don't accept returns for fit preference — that's the nature of custom manufacturing.</p>
+            <p>However, if your frame arrives with a manufacturing defect — broken hinge, structural crack, lens that won't seat — we will reprint and reship at no cost. No forms, no back-and-forth. Email hello@fitframe.store with your order ID and a photo.</p>
+            <p>If your scan measurements were significantly off and the frame is unwearable, email us. We'll review the scan data and determine whether a reprint is warranted. We'd rather fix it than lose you.</p>
+            <p>One reprint per order. Reprint requests accepted within 30 days of delivery.</p>
+          </div>
+          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">Scan your face</a></div>
+        </section>
+      </main>
+      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/faq" className="footer-link">FAQ</a></div>
+    </div>
+  );
+}
 function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJoined }) {
   const [email, setEmail] = useState(() => {
     try { return localStorage.getItem("ff_waitlist_email") || ""; } catch { return ""; }
@@ -264,16 +286,18 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
   }
 
   if (status === "joined") {
+    const m = measurements || {};
     return (
       <div className="waitlist-gate">
         <div className="wg-confirmed">
-          <div className="wg-check">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={ACCENT_COLOR} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <div className="wg-head" style={{textAlign:"center"}}>{position ? `you're in. #${position} on the list.` : "you're in."}</div>
+          <p className="wg-sub" style={{textAlign:"center"}}>we'll reach out when your batch opens. your frame spec is saved.</p>
+          {liveCount > 0 && <div className="wg-count" style={{justifyContent:"center"}}>{liveCount.toLocaleString()} faces scanned so far</div>}
+          <div className="wg-spec-summary">
+            <span className="wg-spec-item">{FRAMES.find(f=>f.id===frameId)?.label || frameId || "—"}</span>
+            <span className="wg-spec-item">{COLORWAYS.find(c=>c.id===colorwayId)?.label || colorwayId || "—"}</span>
+            <span className="wg-spec-item">pd: {m.pd || "—"} mm</span>
           </div>
-          <div className="wg-confirmed-head">you're in.</div>
-          <p className="wg-confirmed-body">we'll reach out when your batch opens. your frame spec is saved — we have everything we need.</p>
-          {position && <div className="wg-position">#{position} on the list</div>}
-          {liveCount > 0 && <div className="wg-count">{liveCount.toLocaleString()} faces scanned so far</div>}
         </div>
       </div>
     );
@@ -285,6 +309,15 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
       <p className="wg-sub">be first. drop your email and we'll reach out when your batch is ready. your scan result and frame selection are saved.</p>
       {liveCount > 0 && <div className="wg-count">{liveCount.toLocaleString()} faces scanned</div>}
       <form className="wg-form" onSubmit={handleSubmit} noValidate>
+        <input
+          type="text"
+          name="website"
+          style={{ display:"none", position:"absolute", left:"-9999px" }}
+          tabIndex={-1}
+          autoComplete="off"
+          value=""
+          onChange={() => {}}
+        />
         <input
           className="wg-input"
           type="email"
@@ -310,30 +343,6 @@ export default function FramesSite(){
   return <FitFrameApp/>;
 }
 
-function ReturnsPage() {
-  useEffect(()=>{ document.title = "Returns & Reprints | FitFrame"; },[]);
-
-  return (
-    <div className="app" style={{"--accent":ACCENT_COLOR}}>
-      <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/faq">FAQ</a><div className="header-tag">Returns</div></div></header>
-      <main className="container">
-        <section className="section faq-page">
-          <div className="eyebrow">Policy</div>
-          <h1 className="step-head">Returns & Reprints.</h1>
-          <div className="returns-copy">
-            <p>Every FitFrame is made to order from your scan. Because each pair is printed to your measurements, we don't accept returns for fit preference — that's the nature of custom manufacturing.</p>
-            <p>However, if your frame arrives with a manufacturing defect — broken hinge, structural crack, lens that won't seat — we will reprint and reship at no cost. No forms, no back-and-forth. Email hello@fitframe.store with your order ID and a photo.</p>
-            <p>If your scan measurements were significantly off and the frame is unwearable, email us. We'll review the scan data and determine whether a reprint is warranted. We'd rather fix it than lose you.</p>
-            <p>One reprint per order. Reprint requests accepted within 30 days of delivery.</p>
-          </div>
-          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">Scan your face</a></div>
-        </section>
-      </main>
-      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/faq" className="footer-link">FAQ</a></div>
-    </div>
-  );
-}
-
 function FitFrameApp(){
   const saved=loadSession()||{};
   const [step, setStep] = useState(saved.step??0);
@@ -345,7 +354,6 @@ function FitFrameApp(){
   const [rxForm] = useState(saved.rxForm??{odSphere:"",odCyl:"",odAxis:"",osSphere:"",osCyl:"",osAxis:""});
   const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
   const [selectedColorway, setSelectedColorway] = useState(saved.selectedColorway??"matte-black");
-  const [focusedField, setFocusedField] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanCount, setScanCount] = useState(47);
   const [cardCalibrating, setCardCalibrating] = useState(false);
@@ -491,7 +499,6 @@ function FitFrameApp(){
 
   // Steps: 0=hero, 1=scan, 2=style, 3=lenses, 4=frames, 5=colorway, 6=result+waitlist
   const dots=[1,2,3,4,5,6].map(i=>({done:step>i,active:step===i}));
-  const activeMeasure=MEASURE_FIELDS.find(f=>f.key===focusedField);
   const badge=scanBadge();
 
   return (
@@ -574,7 +581,7 @@ function FitFrameApp(){
                 <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={cardCalibrating&&!cardCaptured}/>
                 <div className="cam-top">
                   <span className={`scan-tag ${badge.tone}`}>{badge.label}</span>
-                  {scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}%</span>}
+                  {scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}</span>}
                 </div>
                 <div className="cam-bottom">
                   {scan.pauseWarning&&<div className="pause-warning">Hold still — scan paused</div>}
@@ -648,34 +655,46 @@ function FitFrameApp(){
 
         {/* STEP 6 — RESULT + WAITLIST GATE */}
         {step===6&&<div className="section">
-          <div className="eyebrow">your frame — designed by your face</div>
-          <div className="step-head">your spec is ready.</div>
-          <p className="step-sub">here's what we captured. join the founding list and we'll reach out when your batch opens.</p>
+          <div className="eyebrow">your face. measured.</div>
+          <div className="step-head">these numbers build your frame.</div>
+          <p className="step-sub">your measurements are saved. join the founding list and we'll reach out when your batch opens.</p>
 
-          {/* Measurements summary */}
-          <div className="result-spec">
-            <div className="result-spec-head">face measurements</div>
-            <div className="measure-grid">
-              {MEASURE_FIELDS.map(field=>{
-                const value=field.key==="faceH"?(currentMeas?.faceH||currentMeas?.lensH||""):currentMeas?.[field.key]||"";
-                const sane=isSane(value,field);
-                return (
-                  <div className="measure-field" key={field.key}>
-                    <label>{field.label}</label>
-                    <input
-                      className="measure-input"
-                      inputMode="decimal"
-                      value={value}
-                      onFocus={()=>setFocusedField(field.key)}
-                      onBlur={()=>setFocusedField(null)}
-                      onChange={e=>setConfirmedMeas(p=>({...currentMeas,...p,[field.key]:e.target.value}))}
-                    />
-                    {sane!==null&&<span className={`measure-dot ${sane?"ok":""}`}/>}
-                  </div>
-                );
-              })}
-            </div>
-            {activeMeasure&&<div className="measure-tooltip">{activeMeasure.hint}</div>}
+          {/* Measurements spec card */}
+          <div className="spec-card">
+            <div className="spec-card-id">{genOrderId()}</div>
+            {(()=>{
+              const m = currentMeas || {};
+              return <>
+                <div className="spec-row">
+                  <span className="spec-label">pd</span>
+                  <span className="spec-value">{m.pd}<span className="spec-unit">mm</span></span>
+                </div>
+                <div className="spec-row spec-row-indent">
+                  <span className="spec-label">left</span>
+                  <span className="spec-value">{m.pdLeft}<span className="spec-unit">mm</span></span>
+                </div>
+                <div className="spec-row spec-row-indent">
+                  <span className="spec-label">right</span>
+                  <span className="spec-value">{m.pdRight}<span className="spec-unit">mm</span></span>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">bridge</span>
+                  <span className="spec-value">{m.bridge}<span className="spec-unit">mm</span></span>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">lens height</span>
+                  <span className="spec-value">{m.lensH}<span className="spec-unit">mm</span></span>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">face width</span>
+                  <span className="spec-value">{m.faceW}<span className="spec-unit">mm</span></span>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">temple</span>
+                  <span className="spec-value">{m.temple}<span className="spec-unit">mm</span></span>
+                </div>
+              </>;
+            })()}
           </div>
 
           {/* Frame summary */}
@@ -716,6 +735,8 @@ function FitFrameApp(){
         <a href="/faq" className="footer-link">FAQ</a>
         <span className="footer-dot">·</span>
         <a href="/returns" className="footer-link">Returns</a>
+        <span className="footer-dot">·</span>
+        <a href="/privacy" className="footer-link">Privacy</a>
         <span className="footer-dot">·</span>
         <a href={`mailto:hello@${DOMAIN}`} className="footer-link">hello@{DOMAIN}</a>
       </div>
