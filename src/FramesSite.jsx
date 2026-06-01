@@ -134,9 +134,9 @@ function PillarsSection() {
 // --- Process Photography Slots ---
 function ProcessSection() {
   const slots = [
-    { label:"raw PA12 material", caption:"the powder before it becomes your frame." },
-    { label:"printer mid-job", caption:"layer by layer, shaped to your scan." },
-    { label:"work in progress", caption:"finishing before it ships." },
+    { label:"raw PA12 material", caption:"your measurements. your geometry. nothing averaged." },
+    { label:"printer mid-job", caption:"built once. for one face." },
+    { label:"work in progress", caption:"no logo. the fit is the statement." },
   ];
   return (
     <section className="process-section">
@@ -537,10 +537,10 @@ function FitFrameApp(){
           <div className="section" style={{paddingTop:8}}>
             <div className="features">
               {[
-                ["01",<><strong>browser scan, no app.</strong> your camera maps pd, bridge, temple, and face height in under two minutes.</>],
-                ["02",<><strong>custom geometry, not adjustments.</strong> the frame spec is generated from your measurements, not bent to fit afterward.</>],
-                ["03",<><strong>pa12 nylon, 3d printed.</strong> lightweight, precise, and durable. a material built for this kind of work.</>],
-                ["04",<><strong>founding batch.</strong> join the list — orders open soon.</>],
+                ["01",<><strong>your phone does what an optician does.</strong> no appointment.</>],
+                ["02",<><strong>custom geometry.</strong> not a size medium with adjustments.</>],
+                ["03",<><strong>carbon fiber nylon.</strong> printed once. to your numbers.</>],
+                ["04",<><strong>first batch is limited.</strong> you're early.</>],
               ].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}
             </div>
           </div>
