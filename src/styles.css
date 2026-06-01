@@ -32,7 +32,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;}
 .display{font-size:48px;font-weight:500;color:var(--text);letter-spacing:-.06em;line-height:1;margin-bottom:18px;}
 .display em{font-style:normal;color:var(--accent);}
-.proof-strip{font-size:11px;color:var(--dim);display:flex;gap:18px;flex-wrap:wrap;margin:-14px 0 26px;}
+.proof-strip{font-size:11px;color:var(--dim);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 16px;margin-top:16px;}
 .proof-item{display:flex;align-items:center;gap:5px;white-space:nowrap;}
 .proof-item svg{width:14px;height:14px;color:var(--accent);opacity:.8;}
 .price-block{margin:-8px 0 26px;}

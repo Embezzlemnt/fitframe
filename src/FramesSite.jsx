@@ -13,12 +13,12 @@ const LENS_OPTIONS = DEFAULT_LENS;
 const EMPTY_CUSTOMER = { name:"", email:"", address:"", city:"", state:"", zip:"" };
 
 const FAQS = [
-  { q:"What are the frames made from?", a:"PA12 nylon — a lightweight, American-made material used in high-performance 3D printed parts. It has enough flex for daily wear while holding the custom geometry we generate from your scan. Durable, precise, and significantly lighter than acetate." },
-  { q:"What about lenses?", a:"The founding pair includes clear blue light lenses. They filter high-energy blue light for everyday screen use. No medical claims — these are a comfort and style choice, not a vision correction product." },
-  { q:"Can I get prescription lenses?", a:"Not at launch. We want prescription fulfillment to be as reliable as the frame fit before we offer it. It's in the plan. For now, the founding pair ships with blue light lenses only." },
-  { q:"How does the scan work? How accurate is it?", a:"Your browser uses your front camera and a face landmark model to measure proportions — pupillary distance, bridge width, temple width, face height. No images leave your device. We target ±1.5mm accuracy, calibrated against a standard credit card for scale." },
-  { q:"When can I order?", a:"We're opening in limited batches. Join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. This keeps production manageable and guarantees every pair gets the attention it needs." },
-  { q:"What's the returns and fit guarantee?", a:"Because every pair is made to your measurements, we don't do standard returns. If the fit is meaningfully off — the frame sits crooked, pinches, or slides in a way the scan should have caught — we'll use your data and your feedback to reprint it. One-time, no questions asked." },
+  { q:"what are the frames made from?", a:"PA12 nylon — a lightweight, American-made material used in high-performance 3D printed parts. It has enough flex for daily wear while holding the custom geometry we generate from your scan. Durable, precise, and significantly lighter than acetate." },
+  { q:"what about lenses?", a:"The founding pair includes clear blue light lenses. They filter high-energy blue light for everyday screen use. No medical claims — these are a comfort and style choice, not a vision correction product." },
+  { q:"can I get prescription lenses?", a:"Not at launch. We want prescription fulfillment to be as reliable as the frame fit before we offer it. It's in the plan. For now, the founding pair ships with blue light lenses only." },
+  { q:"how does the scan work? how accurate is it?", a:"Your browser uses your front camera and a face landmark model to measure proportions — pupillary distance, bridge width, temple width, face height. No images leave your device. We target ±1.5mm accuracy, calibrated against a standard credit card for scale." },
+  { q:"when can I order?", a:"We're opening in limited batches. Join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. This keeps production manageable and guarantees every pair gets the attention it needs." },
+  { q:"what's the returns and fit guarantee?", a:"Because every pair is made to your measurements, we don't do standard returns. If the fit is meaningfully off — the frame sits crooked, pinches, or slides in a way the scan should have caught — we'll use your data and your feedback to reprint it. One-time, no questions asked." },
 ];
 
 const FrameSVG = ({ id, size=56, color="currentColor" }) => {
