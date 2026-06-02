@@ -548,19 +548,18 @@ function FitFrameApp(){
           <p className="step-sub">{cardCalibrating?"any standard card. hold it flat against your cheek, level with the outer corner of your eye. this gives the scan a real measurement scale.":scanning?"we're capturing your measurements.":scan.done?"processing your measurements.":"look straight ahead."}</p>
           <p className="privacy-note">your camera is used only for measurement. no images are stored or transmitted.</p>
 
-          {camLoading&&<div className="cam-placeholder"><div className="cam-loading-ring"/><div className="cam-label">starting camera</div><div className="cam-sub">this takes a moment on first load.</div></div>}
-          {!camLoading&&camReady&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
-          {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
-          {!camReady&&!camErr&&!currentMeas&&!camLoading&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">we need your camera.</div><div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button></div>}
+          {/* Placeholder states — only when !camReady, never overlap with cam-outer */}
+          {!camReady&&!camErr&&!currentMeas&&<div className="cam-placeholder">{camLoading?<><div className="cam-loading-ring"/><div className="cam-label">starting camera</div><div className="cam-sub">this takes a moment on first load.</div></>:<><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">we need your camera.</div><div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button></>}</div>}
           {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
+          {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
 
           <div className="cam-outer">
-            {/* Always-mounted video — hidden initially, fills cam-outer when ready */}
             <video ref={videoRef} autoPlay playsInline muted
               style={camReady&&scan.mpReady?
                 {position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",transform:"scaleX(-1)"}:
                 {display:"none"}}/>
             <div className="cam-inner">
+              {camReady&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div style={{position:"absolute",inset:0,zIndex:4,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,background:"var(--scan)"}}><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
               {camReady&&scan.mpReady&&!scan.done&&<>
                 <canvas ref={canvasRef}/>
                 <div className="cam-vignette"/>
