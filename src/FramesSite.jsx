@@ -452,18 +452,6 @@ function FitFrameApp(){
     return ()=>cancelAnimationFrame(raf);
   },[cardCalibrating,camReady,scan.mpReady,scan.facePresent,scan.poseHint,cardCaptured]);
 
-  async function recordScanComplete() {
-    if (scanCountedRef.current) return;
-    scanCountedRef.current = true;
-    try {
-      const res = await fetch("/api/scan-complete", { method:"POST" });
-      const data = await res.json();
-      if (res.ok && data?.count) setScanCount(data.count);
-    } catch {
-      scanCountedRef.current = false;
-    }
-  }
-
   function selectOption(opt){
     setTapped(opt.label);
     const qId=STYLE_QUESTIONS[styleQIdx].id;
