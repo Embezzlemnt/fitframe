@@ -47,6 +47,7 @@ export default function useCamera() {
       console.log("Video element ready");
       setReady(true);
     } catch(e) {
+      console.error("Camera error:", e?.name, e?.message, e?.constraint, e);
       stream?.getTracks().forEach(t => t.stop());
       setCamErr(classifyCamError(e));
       setReady(false);
