@@ -6,9 +6,9 @@ const IOS_SAFARI_FRAME_TIMEOUT_MS = 2500;
 const IOS_SAFARI_RESULT_TIMEOUT_MS = 6500;
 
 const MP_SCRIPTS = [
-  "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.4.1633559619/camera_utils.js",
-  "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js",
-  "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js",
+  "https://unpkg.com/@mediapipe/camera_utils/camera_utils.js",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js",
+  "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js",
 ];
 
 export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart }) {

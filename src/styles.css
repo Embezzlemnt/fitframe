@@ -34,7 +34,10 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 @media(max-width:480px){ .btn-row{margin-top:24px;} }
 @media(max-width:390px){ .proof-item{font-size:12px;} }
 .display{font-size:48px;font-weight:500;color:var(--text);letter-spacing:-.06em;line-height:1;margin-bottom:18px;}
-.display em{font-style:normal;color:var(--accent);}
+.display em{font-style:normal;color:var(--accent);position:relative;}
+.display em::after{content:'';position:absolute;left:0;right:0;bottom:0.05em;height:0.08em;background:var(--accent);opacity:0.5;border-radius:2px;}
+
+.cam-loading-ring{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.9s linear infinite;margin-bottom:14px;}
 .proof-strip{font-size:11px;color:var(--dim);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 16px;margin-top:16px;}
 .proof-item{display:flex;align-items:center;gap:5px;white-space:nowrap;}
 .proof-item svg{width:14px;height:14px;color:var(--accent);opacity:.8;}
@@ -208,10 +211,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 
 /* Process photography slots */
 .process-section{width:100%;max-width:480px;padding:28px 24px;border-top:1px solid var(--border);}
-.process-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;}
-.process-slot{}
-.process-img-placeholder{aspect-ratio:4/3;border-radius:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);margin-bottom:8px;}
-.process-caption{font-size:10px;color:var(--soft);line-height:1.45;font-weight:300;}
+.process-body{font-size:14px;color:var(--dim);line-height:1.7;font-weight:300;}
 
 /* Spec card for measurement results */
 .spec-card{position:relative;background:var(--surface);border-radius:14px;padding:20px;margin-bottom:22px;margin-top:6px;}

@@ -14,10 +14,10 @@ const EMPTY_CUSTOMER = { name:"", email:"", address:"", city:"", state:"", zip:"
 
 const FAQS = [
   { q:"what are the frames made from?", a:"PA12 nylon — a lightweight, American-made material used in high-performance 3D printed parts. It has enough flex for daily wear while holding the custom geometry we generate from your scan. Durable, precise, and significantly lighter than acetate." },
-  { q:"what about lenses?", a:"The founding pair includes clear blue light lenses. They filter high-energy blue light for everyday screen use. No medical claims — these are a comfort and style choice, not a vision correction product." },
-  { q:"can I get prescription lenses?", a:"Not at launch. We want prescription fulfillment to be as reliable as the frame fit before we offer it. It's in the plan. For now, the founding pair ships with blue light lenses only." },
+  { q:"what about lenses?", a:"blue light polycarbonate lenses are included with every pair. designed for screen use — comfortable for all-day wear. they're cut to the frame by a US optical lab." },
+  { q:"can I get prescription lenses?", a:"prescription is something we're working toward. before we offer it, the optical lab relationship needs to be as dialed in as the frame fit — we're not going to rush that. founding pairs ship with blue light polycarbonate lenses. if demand is there, prescription follows." },
   { q:"how does the scan work? how accurate is it?", a:"Your browser uses your front camera and a face landmark model to measure proportions — pupillary distance, bridge width, temple width, face height. No images leave your device. We target ±1.5mm accuracy, calibrated against a standard credit card for scale." },
-  { q:"when can I order?", a:"We're opening in limited batches. Join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. This keeps production manageable and guarantees every pair gets the attention it needs." },
+  { q:"when can I order?", a:"We're opening in limited batches. Join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. each pair is made after your order. nothing is warehoused." },
   { q:"what's the returns and fit guarantee?", a:"Because every pair is made to your measurements, we don't do standard returns. If the fit is meaningfully off — the frame sits crooked, pinches, or slides in a way the scan should have caught — we'll use your data and your feedback to reprint it. One-time, no questions asked." },
 ];
 
@@ -133,24 +133,10 @@ function PillarsSection() {
 
 // --- Process Photography Slots ---
 function ProcessSection() {
-  const slots = [
-    { label:"raw PA12 material", caption:"your measurements. your geometry. nothing averaged." },
-    { label:"printer mid-job", caption:"built once. for one face." },
-    { label:"work in progress", caption:"no logo. the fit is the statement." },
-  ];
   return (
     <section className="process-section">
-      <div className="eyebrow">how it's made</div>
-      <div className="process-grid">
-        {slots.map(s => (
-          <div className="process-slot" key={s.label}>
-            <div className="process-img-placeholder" aria-label={s.label}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" opacity=".3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-            </div>
-            <div className="process-caption">{s.caption}</div>
-          </div>
-        ))}
-      </div>
+      <div className="eyebrow">how we build it</div>
+      <p className="process-body">every pair starts with your scan. the measurements go directly into the print file — no averaging, no standardizing. PA12 carbon fiber nylon is printed layer by layer to those numbers, finished by hand, and shipped from the US. nothing is made until you order.</p>
     </section>
   );
 }
@@ -204,18 +190,21 @@ function ReturnsPage() {
       <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/faq">FAQ</a><div className="header-tag">Returns</div></div></header>
       <main className="container">
         <section className="section faq-page">
-          <div className="eyebrow">Policy</div>
-          <h1 className="step-head">Returns & Reprints.</h1>
+          <div className="eyebrow">returns, plainly.</div>
+          <h1 className="step-head">returns, plainly.</h1>
           <div className="returns-copy">
-            <p>Every FitFrame is made to order from your scan. Because each pair is printed to your measurements, we don't accept returns for fit preference — that's the nature of custom manufacturing.</p>
-            <p>However, if your frame arrives with a manufacturing defect — broken hinge, structural crack, lens that won't seat — we will reprint and reship at no cost. No forms, no back-and-forth. Email hello@fitframe.store with your order ID and a photo.</p>
-            <p>If your scan measurements were significantly off and the frame is unwearable, email us. We'll review the scan data and determine whether a reprint is warranted. We'd rather fix it than lose you.</p>
-            <p>One reprint per order. Reprint requests accepted within 30 days of delivery.</p>
+            <p><strong>fit guarantee</strong></p>
+            <p>if your frames don't fit the way they should, we reprint them. one time, at no cost. email us at <a href="mailto:hello@fitframe.store" style={{color:"var(--accent)"}}>hello@fitframe.store</a> with your order ID and a description of the fit issue. we'll sort it out.</p>
+            <p><strong>damaged on arrival</strong></p>
+            <p>if your frames arrive damaged, that's on us. same process — email us, we'll make it right.</p>
+            <p><strong>everything else</strong></p>
+            <p>custom manufacturing means we build your pair specifically for you. if something feels wrong — fit, finish, anything — email us. we'd rather understand what happened than leave you with something you're not happy with.</p>
+            <p><a href="mailto:hello@fitframe.store" style={{color:"var(--accent)",textDecoration:"none"}}>hello@fitframe.store</a></p>
           </div>
-          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">Scan your face</a></div>
+          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">scan your face</a></div>
         </section>
       </main>
-      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/faq" className="footer-link">FAQ</a></div>
+      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a><span className="footer-dot">·</span><a href="/privacy" className="footer-link">Privacy</a></div>
     </div>
   );
 }
@@ -490,11 +479,12 @@ function FitFrameApp(){
   }
 
   function scanBadge(){
-    if(scan.done&&scan.quality?.rescan) return {label:"RESCAN",tone:"red"};
-    if(scan.done&&scan.quality?.label==="Excellent") return {label:"EXCELLENT",tone:"good"};
-    if(scan.done&&(scan.quality?.label==="Good"||scan.quality?.label==="Fair")) return {label:scan.quality.label.toUpperCase(),tone:"amber"};
-    if(scanning&&scan.seqIdx>=0&&!scan.done) return {label:"SCANNING",tone:"good"};
-    return {label:"READY",tone:""};
+    if(scan.done&&scan.quality?.rescan) return {label:"rescan",tone:"red"};
+    if(scan.done&&scan.quality?.label==="Excellent") return {label:"excellent",tone:"good"};
+    if(scan.done&&(scan.quality?.label==="Good"||scan.quality?.label==="Fair")) return {label:scan.quality.label.toLowerCase(),tone:"amber"};
+    if(scanning&&scan.seqIdx>=0&&!scan.done) return {label:"measuring",tone:"good"};
+    if(!scan.facePresent&&scan.mpReady) return {label:"no face",tone:""};
+    return {label:"ready",tone:""};
   }
 
   // Steps: 0=hero, 1=scan, 2=style, 3=lenses, 4=frames, 5=colorway, 6=result+waitlist
@@ -531,7 +521,6 @@ function FitFrameApp(){
               <span className="proof-item"><ProofIcon type="flag"/>made in america</span>
               <span className="proof-item"><ProofIcon type="box"/>ships in ~10 days</span>
               <span className="proof-item"><ProofIcon type="refresh"/>fit guarantee</span>
-              <span className="proof-item"><ProofIcon type="lock"/>no images stored</span>
             </div>
           </div>
 
@@ -544,10 +533,10 @@ function FitFrameApp(){
           <div className="section" style={{paddingTop:8}}>
             <div className="features">
               {[
-                ["01",<><strong>your phone does what an optician does.</strong> no appointment.</>],
-                ["02",<><strong>custom geometry.</strong> not a size medium with adjustments.</>],
-                ["03",<><strong>carbon fiber nylon.</strong> printed once. to your numbers.</>],
-                ["04",<><strong>first batch is limited.</strong> you're early.</>],
+                ["01","your phone does what an optician does. no appointment."],
+                ["02","custom geometry. not a size medium with adjustments."],
+                ["03","carbon fiber nylon. printed once. to your numbers."],
+                ["04","first batch is limited. you're early."],
               ].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}
             </div>
           </div>
@@ -567,10 +556,11 @@ function FitFrameApp(){
         {/* STEP 1 — SCAN */}
         {step===1&&<div className="section">
           <div className="eyebrow">step 1 of 6 — face scan</div>
-          <div className="step-head">{scanning?"stay still.":scan.done?"scan complete.":"position your face."}</div>
-          <p className="step-sub">{cardCalibrating?"hold the card flat below your chin — keep still":scanning?"we're capturing your measurements.":scan.done?"processing your measurements.":"center your face inside the oval and hold still. the scan starts automatically."}</p>
+          <div className="step-head">{cardCalibrating?"hold a card to your face.":scanning?"stay still.":scan.done?"scan complete.":"position your face."}</div>
+          <p className="step-sub">{cardCalibrating?"any standard card. hold it flat against your cheek, level with the outer corner of your eye. this gives the scan a real measurement scale.":scanning?"we're capturing your measurements.":scan.done?"processing your measurements.":"look straight ahead."}</p>
           <p className="privacy-note">your camera is used only for measurement. no images are stored or transmitted.</p>
-          {camReady&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
+          {loading&&<div className="cam-placeholder"><div className="cam-loading-ring"/><div className="cam-label">starting camera</div><div className="cam-sub">this takes a moment on first load.</div></div>}
+          {!loading&&camReady&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
           {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
           {camReady&&scan.mpReady&&!scan.done&&<>
             <div className="cam-outer">
@@ -584,24 +574,24 @@ function FitFrameApp(){
                   {scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}</span>}
                 </div>
                 <div className="cam-bottom">
-                  {scan.pauseWarning&&<div className="pause-warning">Hold still — scan paused</div>}
+                  {scan.pauseWarning&&<div className="pause-warning">hold still — scan paused</div>}
                   {scanning&&scan.seqIdx>=0?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>:scan.poseHint?<div className="scan-inst" style={{color:"var(--amber)"}}>{scan.poseHint}</div>:scan.autoStartPct>0&&scan.autoStartPct<1?<div className="scan-inst">hold still…</div>:<div className="scan-inst">look directly at the camera.</div>}
                   {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
                 </div>
               </div>
             </div>
             {cardCalibrating&&!cardCaptured&&<>
-              <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold the card flat below your chin — keep still"}</div>
+              <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold still — scanning the card"}</div>
               <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
             </>}
             {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
           </>}
           {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
-          {!camReady&&!camErr&&!currentMeas&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">camera access needed</div><div className="cam-sub">FitFrame uses your front camera to measure your face. nothing leaves your device.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera</button></div>}
+          {!camReady&&!camErr&&!currentMeas&&!loading&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">we need your camera.</div><div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button></div>}
           {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
           {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>retry scan</button></div>}
           {scan.scanLost&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--amber)"}}>scan lost.</div><div className="cam-sub">position your face and tap start again.</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>try again</button></div>}
-          {camReady&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>calibrate with card</button>:<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
+          {camReady&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?(!scan.facePresent?<button className="btn btn-ghost" disabled>find your face first</button>:<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>set scale →</button>):<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
           {scan.done&&!currentMeas&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"let's try that again.":"no face data captured."}</div><div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div><button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>try again</button></div>}
           {currentMeas&&scan.quality?.rescan&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label">let's try that again.</div><div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div><button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>rescan</button></div>}
           {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">measurements captured. moving forward…</div>}
@@ -614,11 +604,11 @@ function FitFrameApp(){
         {step===3&&<div className="section">
           <div className="eyebrow">step 3 of 6 — lenses</div>
           <div className="step-head">choose your lens.</div>
-          <p className="step-sub">blue light lenses are included in the founding pair. no medical claims — comfort and screen use.</p>
+          <p className="step-sub">blue light polycarbonate lenses are included with every pair. designed for screen use — comfortable for all-day wear.</p>
           <div className="lens-list">
             {LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">included</div></div>)}
           </div>
-          <div className="lens-disclaimer">prescription support is in development. the founding pair ships with clear blue light lenses.</div>
+          <div className="lens-disclaimer">prescription is something we're working toward. founding pairs ship with blue light polycarbonate lenses.</div>
           <div className="btn-row">
             <button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>choose your frame →</button>
             <button className="btn btn-ghost" onClick={()=>setStep(2)}>back</button>

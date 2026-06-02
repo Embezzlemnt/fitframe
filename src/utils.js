@@ -106,7 +106,7 @@ export function classifyCamError(err) {
   if (n==="NotAllowedError"||n==="PermissionDeniedError") {
     const safari=/Safari/.test(navigator.userAgent)&&!/Chrome/.test(navigator.userAgent);
     return {type:"denied",headline:"camera access blocked",fix:"reload",
-      detail:safari?"Safari → settings for this website → camera → allow → reload.":"tap the camera icon in your address bar → allow → reload."};
+      detail:safari?"go to safari settings → this website → camera → allow, then reload.":"tap the camera icon in your address bar → allow → reload."};
   }
   return {type:"unknown",headline:"camera unavailable",detail:`${err?.message||"unknown error"}. try reloading.`,fix:"reload"};
 }
