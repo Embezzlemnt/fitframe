@@ -547,13 +547,21 @@ function FitFrameApp(){
           <div className="step-head">{cardCalibrating?"hold a card to your face.":scanning?"stay still.":scan.done?"scan complete.":"position your face."}</div>
           <p className="step-sub">{cardCalibrating?"any standard card. hold it flat against your cheek, level with the outer corner of your eye. this gives the scan a real measurement scale.":scanning?"we're capturing your measurements.":scan.done?"processing your measurements.":"look straight ahead."}</p>
           <p className="privacy-note">your camera is used only for measurement. no images are stored or transmitted.</p>
+
           {camLoading&&<div className="cam-placeholder"><div className="cam-loading-ring"/><div className="cam-label">starting camera</div><div className="cam-sub">this takes a moment on first load.</div></div>}
           {!camLoading&&camReady&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div className="cam-placeholder loading"><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
           {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
-          {camReady&&scan.mpReady&&!scan.done&&<>
-            <div className="cam-outer">
-              <div className="cam-inner">
-                <video ref={videoRef} autoPlay playsInline muted/>
+          {!camReady&&!camErr&&!currentMeas&&!camLoading&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">we need your camera.</div><div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button></div>}
+          {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
+
+          <div className="cam-outer">
+            {/* Always-mounted video — hidden initially, fills cam-outer when ready */}
+            <video ref={videoRef} autoPlay playsInline muted
+              style={camReady&&scan.mpReady?
+                {position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",transform:"scaleX(-1)"}:
+                {display:"none"}}/>
+            <div className="cam-inner">
+              {camReady&&scan.mpReady&&!scan.done&&<>
                 <canvas ref={canvasRef}/>
                 <div className="cam-vignette"/>
                 <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={cardCalibrating&&!cardCaptured}/>
@@ -566,20 +574,22 @@ function FitFrameApp(){
                   {scanning&&scan.seqIdx>=0?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>:scan.poseHint?<div className="scan-inst" style={{color:"var(--amber)"}}>{scan.poseHint}</div>:scan.autoStartPct>0&&scan.autoStartPct<1?<div className="scan-inst">hold still…</div>:<div className="scan-inst">look directly at the camera.</div>}
                   {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
                 </div>
-              </div>
+              </>}
             </div>
+          </div>
+
+          {camReady&&scan.mpReady&&!scan.done&&<>
             {cardCalibrating&&!cardCaptured&&<>
               <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold still — scanning the card"}</div>
               <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
             </>}
             {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
+            {!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?(!scan.facePresent?<button className="btn btn-ghost" disabled>find your face first</button>:<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>set scale →</button>):<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
           </>}
+
           {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
-          {!camReady&&!camErr&&!currentMeas&&!camLoading&&<div className="cam-placeholder"><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">we need your camera.</div><div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button></div>}
-          {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
           {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>retry scan</button></div>}
           {scan.scanLost&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--amber)"}}>scan lost.</div><div className="cam-sub">position your face and tap start again.</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>try again</button></div>}
-          {camReady&&scan.mpReady&&!scan.done&&!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?(!scan.facePresent?<button className="btn btn-ghost" disabled>find your face first</button>:<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>set scale →</button>):<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
           {scan.done&&!currentMeas&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"let's try that again.":"no face data captured."}</div><div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div><button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>try again</button></div>}
           {currentMeas&&scan.quality?.rescan&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label">let's try that again.</div><div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div><button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>rescan</button></div>}
           {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">measurements captured. moving forward…</div>}
