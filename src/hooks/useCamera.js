@@ -2,10 +2,24 @@ import { useCallback, useRef, useState } from "react";
 import { classifyCamError } from "../utils.js";
 
 export default function useCamera() {
-  const videoRef = useRef(null);
+  const videoElRef = useRef(null);
+  const streamRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [camErr, setCamErr] = useState(null);
+
+  const attachStream = useCallback((node) => {
+    if (!node || !streamRef.current) return;
+    node.setAttribute("playsinline", "");
+    node.muted = true;
+    node.srcObject = streamRef.current;
+    node.play().catch(() => {});
+  }, []);
+
+  const videoRef = useCallback((node) => {
+    videoElRef.current = node;
+    attachStream(node);
+  }, [attachStream]);
 
   const start = useCallback(async () => {
     setCamErr(null);
@@ -26,42 +40,41 @@ export default function useCamera() {
         stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
       }
 
-      console.log("Camera stream acquired");
-      let v = videoRef.current;
+      streamRef.current = stream;
+
+      let v = videoElRef.current;
       for (let i = 0; i < 10 && !v; i++) {
         await new Promise(r => setTimeout(r, 100));
-        v = videoRef.current;
+        v = videoElRef.current;
       }
 
       if (!v) {
         stream.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
         setCamErr({ type:"unknown", headline:"camera unavailable", detail:"could not connect to camera view. reload and try again.", fix:"reload" });
         setLoading(false);
         return;
       }
 
-      v.setAttribute("playsinline", "");
-      v.muted = true;
-      v.srcObject = stream;
-      await v.play().catch(() => {});
-      console.log("Video element ready");
+      attachStream(v);
       setReady(true);
     } catch(e) {
-      console.error("Camera error:", e?.name, e?.message, e?.constraint, e);
       stream?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
       setCamErr(classifyCamError(e));
       setReady(false);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [attachStream]);
 
   const stop = useCallback(() => {
-    const v = videoRef.current;
-    if (v?.srcObject) {
-      v.srcObject.getTracks().forEach(t => t.stop());
-      v.srcObject = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
+    const v = videoElRef.current;
+    if (v) v.srcObject = null;
     setReady(false);
     setLoading(false);
   }, []);
