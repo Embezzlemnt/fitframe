@@ -395,6 +395,7 @@ async function waitlist(request, env) {
 
   const measurements = sanitized.measurements || null;
   const frameId = sanitized.frame_id || null;
+  const colorwayId = sanitized.colorway_id || null;
 
   const key = `waitlist:${email}`;
   let duplicate = false;
@@ -411,6 +412,7 @@ async function waitlist(request, env) {
         email,
         measurements,
         frame_id:frameId,
+        colorway_id:colorwayId,
         position,
         created_at:new Date().toISOString(),
       }));
