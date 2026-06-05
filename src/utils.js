@@ -68,7 +68,7 @@ export function validatePose(lm) {
   if (span < 0.34) return { valid:false, reason:"move a bit closer" };
   if (span > 0.72) return { valid:false, reason:"move back slightly" };
   const faceCenterX = (lm[234].x + lm[454].x) / 2;
-  const yawRatio = Math.abs(lm[1].x - faceCenterX) / (span / 2);
+  const yawRatio = span > 0 ? Math.abs(lm[1].x - faceCenterX) / (span / 2) : 1;
   if (yawRatio >= 0.15) {
     return { valid:false, reason:lm[1].x < faceCenterX ? "tilt right slightly" : "tilt left slightly" };
   }
@@ -84,7 +84,7 @@ export function calcMeasurements(lm, W, H, { scaleMmPerPx=null, pdCorrection=1 }
   const avg = (lId+rId)/2;
   if (avg < 2) return null;
   const sc = Number.isFinite(scaleMmPerPx) && scaleMmPerPx > 0 ? scaleMmPerPx : IRIS_MM/avg;
-  const correction = Math.max(0.94, Math.min(pdCorrection, 1));
+  const correction = Math.max(0.88, Math.min(pdCorrection, 1));
   const lPd = d(468,168)*sc*correction, rPd = d(473,168)*sc*correction;
   return {
     pd:      (lPd+rPd).toFixed(1), pdLeft:lPd.toFixed(1), pdRight:rPd.toFixed(1),

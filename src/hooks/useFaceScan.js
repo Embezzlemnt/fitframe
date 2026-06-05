@@ -316,7 +316,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
           const sane = pd >= 52 && pd <= 80 && br >= 10 && br <= 28;
           const stable = std("pd") <= 2.0 && std("bridge") <= 1.5;
           setMeasurements({ pd:pd.toFixed(1), pdLeft:avg("pdLeft").toFixed(1), pdRight:avg("pdRight").toFixed(1), bridge:br.toFixed(1), temple:avg("temple").toFixed(0), lensH:avg("lensH").toFixed(1), faceW:avg("faceW").toFixed(0) });
-          setQuality(!sane ? { label:"Out of range", rescan:true } : !stable ? { label:"Fair", rescan:false } : vp >= .7 ? { label:"Excellent", rescan:false } : vp >= .5 ? { label:"Good", rescan:false } : vp >= .3 ? { label:"Fair", rescan:false } : { label:"Low", rescan:true });
+          setQuality(!sane ? { label:"Out of range", rescan:true } : !stable ? { label:"Unstable", rescan:true, reason:"Measurements varied during the scan. Try again while holding still." } : vp >= .7 ? { label:"Excellent", rescan:false } : vp >= .5 ? { label:"Good", rescan:false } : vp >= .3 ? { label:"Fair", rescan:false } : { label:"Low", rescan:true });
         } else {
           setQuality({ label:"Low", rescan:true, reason:"Not enough stable frames captured. Try better lighting and hold still." });
           setMeasurements(null);

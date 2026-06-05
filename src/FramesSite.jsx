@@ -3,7 +3,7 @@ import "./styles.css";
 import { COLORWAYS, DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
 import useCamera from "./hooks/useCamera.js";
 import useFaceScan from "./hooks/useFaceScan.js";
-import { SCAN_SEQ, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
+import { CARD_GUIDE_WIDTH_RATIO, CREDIT_CARD_WIDTH_MM, SCAN_SEQ, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
 
 const DOMAIN = "fitframe.store";
 const ACCENT_COLOR = "#4caf7d";
@@ -317,7 +317,7 @@ function FitFrameApp(){
   const [scanning, setScanning] = useState(false);
   const [waitlistCount, setWaitlistCount] = useState(null);
   const [cardCalibrating, setCardCalibrating] = useState(false);
-  const [cardCaptured, setCardCaptured] = useState(saved.cardCaptured??false);
+  const [calibration, setCalibration] = useState(saved.calibration??null);
   const [calDwell, setCalDwell] = useState(0);
   const [calMoved, setCalMoved] = useState(false);
   const [calCapturedFlash, setCalCapturedFlash] = useState(false);
@@ -325,12 +325,11 @@ function FitFrameApp(){
   const canvasRef=useRef(null);
   const scanCountedRef=useRef(false);
   const { videoRef, ready:camReady, camErr, start:startCamera, stop:stopCamera }=useCamera();
-  const calibration=cardCaptured;
   const scan=useFaceScan({
     videoRef,
     scanning,
     canvasRef,
-    scaleMmPerPx:null,
+    scaleMmPerPx:calibration?.mmPerPx || null,
     scaleSource:calibration ? "credit-card" : "iris-fallback",
     onAutoStart:()=>{ if (!calibration) setScanning(true); }
   });
@@ -363,8 +362,8 @@ function FitFrameApp(){
 
   useEffect(()=>{
     if (step===0) return;
-    saveSession({step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,cardCaptured});
-  },[step,confirmedMeas,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway,cardCaptured]);
+    saveSession({step,confirmedMeas,calibration,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway});
+  },[step,confirmedMeas,calibration,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway]);
 
   useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
   useEffect(()=>{
@@ -385,7 +384,7 @@ function FitFrameApp(){
   },[scan.measurements,scan.quality]);
 
   useEffect(()=>{
-    if (!cardCalibrating || !camReady || !scan.mpReady || cardCaptured) return;
+    if (!cardCalibrating || !camReady || !scan.mpReady || calibration) return;
     let raf;
     let start=null;
     const stable = () => scan.facePresent && !scan.poseHint;
@@ -402,7 +401,13 @@ function FitFrameApp(){
       const pct=Math.min((now-start)/2000,1);
       setCalDwell(pct);
       if (pct>=1) {
-        setCardCaptured(true);
+        const nextCalibration = buildCardCalibration();
+        if (!nextCalibration) {
+          setCalMoved(true);
+          raf=requestAnimationFrame(tick);
+          return;
+        }
+        setCalibration(nextCalibration);
         setCardCalibrating(false);
         setCalCapturedFlash(true);
         setTimeout(()=>setCalCapturedFlash(false),1000);
@@ -412,7 +417,7 @@ function FitFrameApp(){
     };
     raf=requestAnimationFrame(tick);
     return ()=>cancelAnimationFrame(raf);
-  },[cardCalibrating,camReady,scan.mpReady,scan.facePresent,scan.poseHint,cardCaptured]);
+  },[cardCalibrating,camReady,scan.mpReady,scan.facePresent,scan.poseHint,calibration]);
 
   function selectOption(opt){
     setTapped(opt.label);
@@ -428,17 +433,36 @@ function FitFrameApp(){
     setConfirmedMeas(null);
   }
 
+  function buildCardCalibration(){
+    const canvas = canvasRef.current;
+    const visibleVideoWidth = canvas?.width || canvas?.getBoundingClientRect?.().width || 0;
+    const cardPxWidth = visibleVideoWidth * CARD_GUIDE_WIDTH_RATIO;
+    if (!Number.isFinite(cardPxWidth) || cardPxWidth <= 0) return null;
+    return {
+      source:"credit-card",
+      cardPxWidth,
+      mmPerPx:CREDIT_CARD_WIDTH_MM / cardPxWidth,
+      capturedAt:new Date().toISOString(),
+    };
+  }
+
   function captureCalibration(){
-    setCardCalibrating(true);
     setCalDwell(0);
+    const nextCalibration = buildCardCalibration();
+    if (nextCalibration) {
+      setCalibration(nextCalibration);
+      setCardCalibrating(false);
+      setCalCapturedFlash(true);
+      setTimeout(()=>setCalCapturedFlash(false),1000);
+      return;
+    }
+    setCardCalibrating(true);
   }
 
   function flowStepLabel(stepNum){
     if (stepNum===1) return "step 1 of 4 — face scan";
     if (stepNum===2) return "step 2 of 4 — style";
-    if (stepNum===3) return "step 3 of 4 — lenses";
-    if (stepNum===4) return "step 3 of 4 — frame";
-    if (stepNum===5) return "step 3 of 4 — colorway";
+    if (stepNum===3||stepNum===4||stepNum===5) return "step 3 of 4 — frame";
     if (stepNum===6) return "step 4 of 4 — waitlist";
     return "";
   }
