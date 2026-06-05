@@ -2,15 +2,15 @@ export const ACCENT = "#4caf7d";
 export const IRIS_MM = 11.8;
 export const CREDIT_CARD_WIDTH_MM = 85.6;
 export const CARD_GUIDE_WIDTH_RATIO = 0.58;
-export const HOLD_FRAMES = 18;
+export const HOLD_FRAMES = 12;
 export const STORE_KEY = "fitframe_session_v1";
 
 export const SCAN_SEQ = [
-  { instruction:"",                   holdMs:1500, fill:0.08 },
-  { instruction:"keep eyes forward.", holdMs:3000, fill:0.35 },
-  { instruction:"almost there.",      holdMs:3000, fill:0.65 },
-  { instruction:"nearly done.",       holdMs:2500, fill:0.88 },
-  { instruction:"",                   holdMs:1500, fill:1.00 },
+  { instruction:"look straight ahead.", holdMs:1500, fill:0.08 },
+  { instruction:"eyes forward.",        holdMs:3000, fill:0.35 },
+  { instruction:"hold position.",       holdMs:3000, fill:0.65 },
+  { instruction:"nearly done.",         holdMs:2500, fill:0.88 },
+  { instruction:"stay still.",          holdMs:1500, fill:1.00 },
 ];
 
 export const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -62,12 +62,20 @@ export function isIOSSafari() {
 
 export function validatePose(lm) {
   const nx = lm[1].x, ny = lm[1].y;
-  if (nx < 0.10 || nx > 0.90) return { valid:false, reason:"Center your face" };
-  if (ny < 0.08 || ny > 0.92) return { valid:false, reason:"Center your face" };
+  if (nx < 0.10 || nx > 0.90) return { valid:false, reason:"center up" };
+  if (ny < 0.08 || ny > 0.92) return { valid:false, reason:"center up" };
+  const span = Math.abs(lm[454].x - lm[234].x);
+  if (span < 0.34) return { valid:false, reason:"move a bit closer" };
+  if (span > 0.72) return { valid:false, reason:"move back slightly" };
+  const faceCenterX = (lm[234].x + lm[454].x) / 2;
+  const yawRatio = Math.abs(lm[1].x - faceCenterX) / (span / 2);
+  if (yawRatio >= 0.15) {
+    return { valid:false, reason:lm[1].x < faceCenterX ? "tilt right slightly" : "tilt left slightly" };
+  }
   return { valid:true, reason:null };
 }
 
-export function calcMeasurements(lm, W, H) {
+export function calcMeasurements(lm, W, H, { scaleMmPerPx=null, pdCorrection=1 } = {}) {
   if (![468,469,470,471,472,473,474,475,476,477].every(i => lm[i])) return null;
   const pts = lm.map(p => ({ x:p.x*W, y:p.y*H }));
   const d   = (a,b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
@@ -75,8 +83,9 @@ export function calcMeasurements(lm, W, H) {
   const rId = (d(473,474)+d(473,475)+d(473,476)+d(473,477))/4*2;
   const avg = (lId+rId)/2;
   if (avg < 2) return null;
-  const sc = IRIS_MM/avg;
-  const lPd = d(468,168)*sc, rPd = d(473,168)*sc;
+  const sc = Number.isFinite(scaleMmPerPx) && scaleMmPerPx > 0 ? scaleMmPerPx : IRIS_MM/avg;
+  const correction = Math.max(0.94, Math.min(pdCorrection, 1));
+  const lPd = d(468,168)*sc*correction, rPd = d(473,168)*sc*correction;
   return {
     pd:      (lPd+rPd).toFixed(1), pdLeft:lPd.toFixed(1), pdRight:rPd.toFixed(1),
     bridge:  (d(133,362)*sc).toFixed(1),

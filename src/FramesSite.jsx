@@ -325,9 +325,16 @@ function FitFrameApp(){
   const canvasRef=useRef(null);
   const scanCountedRef=useRef(false);
   const { videoRef, ready:camReady, camErr, start:startCamera, stop:stopCamera }=useCamera();
-  const scan=useFaceScan({videoRef,scanning,canvasRef,onAutoStart:()=>cardCaptured&&setScanning(true)});
-  const currentMeas=confirmedMeas||scan.measurements;
   const calibration=cardCaptured;
+  const scan=useFaceScan({
+    videoRef,
+    scanning,
+    canvasRef,
+    scaleMmPerPx:null,
+    scaleSource:calibration ? "credit-card" : "iris-fallback",
+    onAutoStart:()=>{ if (!calibration) setScanning(true); }
+  });
+  const currentMeas=confirmedMeas||scan.measurements;
 
   const suggestedTags=Object.values(styleAnswers).flatMap(a=>a?.tags||[]);
   const topFrames=[...FRAMES].map(f=>({...f,score:f.tags.filter(t=>suggestedTags.includes(t)).length})).sort((a,b)=>b.score-a.score);
@@ -552,7 +559,7 @@ function FitFrameApp(){
                 <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={!calibration&&!scanning}/>
                 <div className="cam-top">
                   <span className={`scan-tag ${scan.facePresent?"live":""}`}>
-                    {!calibration?"card setup":scan.facePresent?"measuring":"no face"}
+                    {scanning?"measuring":!calibration?"card optional":scan.facePresent?"measuring":"no face"}
                   </span>
                   {scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}</span>}
                 </div>
@@ -560,8 +567,10 @@ function FitFrameApp(){
                   {scan.pauseWarning&&<div className="pause-warning">hold still — scan paused</div>}
                   {scanning&&scan.seqIdx>=0
                     ?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
-                    :!calibration
-                      ?<div className="scan-inst">line up the card guide.</div>
+                    :!calibration&&scan.autoStartPct>0&&scan.autoStartPct<1
+                      ?<div className="scan-inst">hold still.</div>
+                      :!calibration
+                      ?<div className="scan-inst">look straight ahead.</div>
                       :scan.poseHint
                       ?<div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
                       :scan.autoStartPct>0&&scan.autoStartPct<1
@@ -583,10 +592,32 @@ function FitFrameApp(){
             <div style={{textAlign:"center",marginTop:14}}>
               {!calibration?(
                 <>
-                  <p className="scan-note">any standard card. hold it flat at cheek level. this gives the scan a real millimeter scale.</p>
-                  <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={captureCalibration}>
-                    {scan.mpReady?scan.facePresent?"set scale →":"find your face first":"loading..."}
-                  </button>
+                  <p className="scan-note">
+                    for a more precise fit, hold a standard card flat against
+                    your cheek before scanning. or skip and we'll use your
+                    iris as the scale reference.
+                  </p>
+                  <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
+                    <button
+                      className="btn btn-primary"
+                      disabled={!scan.mpReady||!scan.facePresent}
+                      onClick={captureCalibration}
+                    >
+                      {scan.mpReady
+                        ?scan.facePresent?"use card →":"find your face first"
+                        :"loading..."}
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      disabled={!scan.mpReady||!scan.facePresent}
+                      onClick={()=>setScanning(true)}
+                      style={{fontSize:13}}
+                    >
+                      {scan.mpReady
+                        ?scan.facePresent?"skip card →":"find your face first"
+                        :"..."}
+                    </button>
+                  </div>
                 </>
               ):(
                 <>

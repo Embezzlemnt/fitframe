@@ -305,6 +305,20 @@ async function readWaitlistCount(env) {
   if (!env.FITFRAME_KV) return fallbackWaitlistCount;
   const stored = await env.FITFRAME_KV.get(WAITLIST_COUNT_KEY);
   const count = Number.parseInt(stored || "", 10);
+  if (Number.isFinite(count) && count > 0) return count;
+  let recovered = 0;
+  if (typeof env.FITFRAME_KV.list === "function") {
+    let cursor;
+    do {
+      const page = await env.FITFRAME_KV.list({ prefix:"waitlist:", cursor });
+      recovered += page.keys.length;
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+  }
+  if (recovered > 0) {
+    await env.FITFRAME_KV.put(WAITLIST_COUNT_KEY, String(recovered));
+    return recovered;
+  }
   if (Number.isFinite(count)) return count;
   await env.FITFRAME_KV.put(WAITLIST_COUNT_KEY, String(WAITLIST_COUNT_SEED));
   return WAITLIST_COUNT_SEED;

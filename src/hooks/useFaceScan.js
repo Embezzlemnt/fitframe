@@ -11,7 +11,7 @@ const MP_SCRIPTS = [
   "https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js",
 ];
 
-export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart }) {
+export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", onAutoStart }) {
   const fmRef = useRef(null);
   const iosSafariRef = useRef(isIOSSafari());
   const [mpReady, setMpReady] = useState(false);
@@ -28,7 +28,10 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
   const fillRef = useRef(0);
   const frameCountRef = useRef(0);
   const facePresentRef = useRef(false);
+  const validFrameRef = useRef(false);
   const lastResultAtRef = useRef(0);
+  const scaleMmPerPxRef = useRef(scaleMmPerPx);
+  const scaleSourceRef = useRef(scaleSource);
 
   const [seqIdx, setSeqIdx] = useState(-1);
   const [fill, setFill] = useState(0);
@@ -46,6 +49,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
   const [scanError, setScanError] = useState(null);
 
   useEffect(() => { scanningRef.current = scanning; }, [scanning]);
+  useEffect(() => { scaleMmPerPxRef.current = scaleMmPerPx; }, [scaleMmPerPx]);
+  useEffect(() => { scaleSourceRef.current = scaleSource; }, [scaleSource]);
 
   function handleResults(results) {
     lastResultAtRef.current = performance.now();
@@ -78,6 +83,12 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     const d = (a,b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
     const span = Math.abs(lm[454].x - lm[234].x);
     const pose = validatePose(lm);
+    const faceCenterX = (lm[234].x + lm[454].x) / 2;
+    const yawOffset = Math.abs(lm[1].x - faceCenterX);
+    const yawRatio = span > 0 ? yawOffset / (span / 2) : 1;
+    const yawOk = yawRatio < 0.15;
+    const yawHint = yawOk ? null : lm[1].x < faceCenterX ? "tilt right slightly" : "tilt left slightly";
+    const pdCorrection = 1 - yawRatio * 0.12;
 
     ctx.drawImage(video, 0, 0, W, H);
     const sx = Math.max(0, Math.min(W - 1, Math.floor(pts[1].x) - 20));
@@ -87,9 +98,11 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     const imageData = ctx.getImageData(sx, sy, sw, sh);
     const luma = imageData.data.reduce((sum, v, i) => i % 4 !== 3 ? sum + v : sum, 0) / (sw * sh * 3);
     ctx.clearRect(0, 0, W, H);
-    const lightHint = luma < 40 ? "Better lighting needed" : luma > 220 ? "Move from direct light" : null;
-    const currentHint = lightHint || (pose.valid ? null : pose.reason);
-    facePresentRef.current = pose.valid && !lightHint;
+    const lightHint = luma < 40 ? "better lighting needed" : luma > 220 ? "move from direct light" : null;
+    const currentHint = lightHint || (!yawOk ? yawHint : pose.valid ? null : pose.reason);
+    const frameValid = pose.valid && yawOk && !lightHint;
+    facePresentRef.current = results.multiFaceLandmarks?.length > 0;
+    validFrameRef.current = frameValid;
 
     if (shouldUpdateUI) {
       setFacePresent(true);
@@ -99,7 +112,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     }
 
     if (!autoStarted.current && !scanningRef.current) {
-      pose.valid && !lightHint ? holdRef.current++ : (holdRef.current = Math.max(0, holdRef.current - 2));
+      frameValid ? holdRef.current++ : (holdRef.current = Math.max(0, holdRef.current - 2));
       const pct = Math.min(holdRef.current / HOLD_FRAMES, 1);
       if (shouldUpdateUI) setAutoStartPct(pct);
       if (pct >= 1) {
@@ -112,7 +125,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     const lId = hasIris ? (d(468,469)+d(468,470)+d(468,471)+d(468,472))/4*2 : 0;
     const rId = hasIris ? (d(473,474)+d(473,475)+d(473,476)+d(473,477))/4*2 : 0;
     if (hasIris) {
-      const ink = pose.valid && !lightHint ? ACCENT : "rgba(255,255,255,.22)";
+      const ink = frameValid ? ACCENT : "rgba(255,255,255,.22)";
       [[pts[468],lId],[pts[473],rId]].forEach(([c,diam]) => {
         ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
         ctx.strokeStyle = ink; ctx.lineWidth = 1.5; ctx.stroke();
@@ -122,7 +135,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     }
 
     if (scanningRef.current) totalRef.current++;
-    if (scanningRef.current && pose.valid && !lightHint && hasIris) {
+    if (scanningRef.current && frameValid && hasIris) {
       if (lId < 4 || rId < 4) return;
       const ratio = Math.min(lId, rId) / Math.max(lId, rId);
       if (ratio < 0.70) return;
@@ -132,8 +145,9 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
         const spread = Math.max(...recent) - Math.min(...recent);
         if (spread > 0.018) return;
       }
-      const m = calcMeasurements(lm, W, H);
+      const m = calcMeasurements(lm, W, H, { scaleMmPerPx:scaleMmPerPxRef.current, pdCorrection });
       if (m) {
+        m.scaleSource = scaleSourceRef.current;
         samplesRef.current.push(m);
         validRef.current++;
       }
@@ -232,7 +246,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     if (seqIdx < 0 || seqIdx >= SCAN_SEQ.length) return;
     const step = SCAN_SEQ[seqIdx], end = step.fill;
     let start = fillRef.current;
-    let t0 = performance.now();
+    let lastNow = performance.now();
+    let progressMs = 0;
     let wasPaused = false;
     let lostSince = null;
     let raf;
@@ -265,14 +280,19 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
       }
       if (wasPaused) {
         start = fillRef.current;
-        t0 = now;
+        lastNow = now;
+        progressMs = 0;
         wasPaused = false;
         lostSince = null;
       }
       setPauseWarning(false);
-      const t = Math.min((now - t0) / step.holdMs, 1);
+      const advanceRate = validFrameRef.current ? 1 : 0.2;
+      const delta = Math.max(0, now - lastNow);
+      lastNow = now;
+      progressMs += delta * advanceRate;
+      const t = Math.min(progressMs / step.holdMs, 1);
       const v = start + (end - start) * t;
-      fillRef.current = v;
+      fillRef.current = Math.max(fillRef.current, v);
       setFill(v);
       if (t < 1) {
         raf = requestAnimationFrame(animate);
@@ -288,10 +308,15 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
           const trim = Math.max(1, Math.floor(sorted.length * .15));
           const good = sorted.slice(trim, sorted.length - trim);
           const avg = k => good.map(m => parseFloat(m[k])).reduce((a,b) => a + b, 0) / good.length;
+          const std = k => {
+            const mean = avg(k);
+            return Math.sqrt(good.map(m => (parseFloat(m[k]) - mean) ** 2).reduce((a,b) => a + b, 0) / good.length);
+          };
           const pd = avg("pd"), br = avg("bridge");
           const sane = pd >= 52 && pd <= 80 && br >= 10 && br <= 28;
+          const stable = std("pd") <= 2.0 && std("bridge") <= 1.5;
           setMeasurements({ pd:pd.toFixed(1), pdLeft:avg("pdLeft").toFixed(1), pdRight:avg("pdRight").toFixed(1), bridge:br.toFixed(1), temple:avg("temple").toFixed(0), lensH:avg("lensH").toFixed(1), faceW:avg("faceW").toFixed(0) });
-          setQuality(!sane ? { label:"Out of range", rescan:true } : vp >= .7 ? { label:"Excellent", rescan:false } : vp >= .5 ? { label:"Good", rescan:false } : vp >= .3 ? { label:"Fair", rescan:false } : { label:"Low", rescan:true });
+          setQuality(!sane ? { label:"Out of range", rescan:true } : !stable ? { label:"Fair", rescan:false } : vp >= .7 ? { label:"Excellent", rescan:false } : vp >= .5 ? { label:"Good", rescan:false } : vp >= .3 ? { label:"Fair", rescan:false } : { label:"Low", rescan:true });
         } else {
           setQuality({ label:"Low", rescan:true, reason:"Not enough stable frames captured. Try better lighting and hold still." });
           setMeasurements(null);
@@ -318,6 +343,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     setScanError(null);
     setFaceSpan(0);
     facePresentRef.current = false;
+    validFrameRef.current = false;
     samplesRef.current = [];
     noseXRef.current = [];
     validRef.current = 0;
