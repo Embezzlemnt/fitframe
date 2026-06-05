@@ -397,8 +397,8 @@ async function waitlist(request, env) {
   const frameId = sanitized.frame_id || null;
 
   const key = `waitlist:${email}`;
-  let duplicate = false;
   let position = 1;
+  let duplicate;
 
   if (env.FITFRAME_KV) {
     const existing = await env.FITFRAME_KV.get(key);

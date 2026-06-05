@@ -91,12 +91,6 @@ export function genOrderId() {
   return "FF-"+Math.random().toString(36).substring(2,8).toUpperCase();
 }
 
-export function getETA() {
-  const d = new Date();
-  d.setDate(d.getDate()+10);
-  return d.toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" });
-}
-
 export function classifyCamError(err) {
   const n = err?.name||"";
   const local = location.hostname==="localhost"||location.hostname==="127.0.0.1";
