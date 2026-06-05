@@ -26,7 +26,6 @@ export default function useCamera() {
         stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
       }
 
-      console.log("Camera stream acquired");
       let v = videoRef.current;
       for (let i = 0; i < 10 && !v; i++) {
         await new Promise(r => setTimeout(r, 100));
@@ -44,10 +43,8 @@ export default function useCamera() {
       v.muted = true;
       v.srcObject = stream;
       await v.play().catch(() => {});
-      console.log("Video element ready");
       setReady(true);
     } catch(e) {
-      console.error("Camera error:", e?.name, e?.message, e?.constraint, e);
       stream?.getTracks().forEach(t => t.stop());
       setCamErr(classifyCamError(e));
       setReady(false);

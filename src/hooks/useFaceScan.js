@@ -147,9 +147,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
     async function init(attempt = 0) {
       try {
         await Promise.all(MP_SCRIPTS.map(loadScript));
-        console.log("MediaPipe scripts loaded");
         if (!window.FaceMesh) throw new Error("FaceMesh unavailable");
-        console.log("FaceMesh found, initializing");
         const fm = new window.FaceMesh({
           locateFile:f => {
             const file = iosSafariRef.current && f.includes("_simd_") ? f.replace("_simd_", "_") : f;
@@ -159,17 +157,15 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, onAutoStart
         fm.setOptions({ maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:.5, minTrackingConfidence:.5, ...(iosSafariRef.current ? { useCpuInference:true } : {}) });
         fm.onResults(handleResults);
         await fm.initialize();
-        console.log("MediaPipe ready");
         if (!cancelled) {
           fmRef.current = fm;
           setMpReady(true);
         }
-      } catch (e) {
+      } catch {
         if (cancelled) return;
         if (attempt < delays.length) {
           setTimeout(() => init(attempt + 1), delays[attempt]);
         } else {
-          console.error("MediaPipe:", e);
           setMpLoadError(true);
         }
       }
