@@ -37,7 +37,6 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .display em{font-style:normal;color:var(--accent);position:relative;}
 .display em::after{content:'';position:absolute;left:0;right:0;bottom:0.05em;height:0.08em;background:var(--accent);opacity:0.5;border-radius:2px;}
 
-.cam-loading-ring{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.9s linear infinite;margin-bottom:14px;}
 .proof-strip{font-size:11px;color:var(--dim);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 16px;margin-top:16px;}
 .proof-item{display:flex;align-items:center;gap:5px;white-space:nowrap;}
 .proof-item svg{width:14px;height:14px;color:var(--accent);opacity:.8;}
@@ -93,6 +92,10 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .cam-loading-overlay{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(8,8,8,.68);padding:24px;}
 .err-box{padding:11px 15px;background:rgba(229,166,74,.1);border:1px solid rgba(229,166,74,.35);border-radius:8px;font-size:12px;color:var(--amber);line-height:1.65;max-width:280px;}
 .scan-ok{font-size:12px;color:var(--accent);text-align:center;margin-top:10px;font-weight:300;}
+.scan-note{font-size:12px;color:var(--dim);line-height:1.6;font-weight:300;margin-bottom:14px;max-width:320px;margin-left:auto;margin-right:auto;}
+.calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;font-size:12px;color:var(--dim);font-weight:300;}
+.calibration-strip strong{color:var(--accent);font-weight:500;}
+.photo-slot{aspect-ratio:4/3;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;}
 .q-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
 .q-counter{font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);}
 .q-label{font-size:27px;font-weight:500;color:var(--text);letter-spacing:-.035em;line-height:1.25;margin-bottom:20px;}
@@ -183,7 +186,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .faq-item summary::after{content:"+";float:right;color:var(--accent);font-family:'Geist Mono',monospace;}
 .faq-item[open] summary{border-bottom:1px solid var(--border);}
 .faq-item[open] summary::after{content:"–";}
-.faq-item[open] p{padding:15px 18px 18px 34px;font-size:13px;line-height:1.65;color:var(--dim);font-weight:300;border-left:2px solid rgba(76,175,125,0.3);margin-left:18px;}
+.faq-item[open] .faq-answer,.faq-item[open] p{padding:15px 18px 18px 16px;font-size:13px;line-height:1.65;color:var(--dim);font-weight:300;border-left:2px solid rgba(76,175,125,0.3);margin-left:18px;}
 .returns-copy{display:flex;flex-direction:column;gap:16px;color:var(--dim);font-size:15px;line-height:1.68;font-weight:300;}
 .site-footer{width:100%;max-width:462px;padding:18px 18px 10px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;color:var(--soft);font-weight:300;flex-wrap:wrap;}
 .footer-dot{color:var(--border2);}
@@ -200,7 +203,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .why-inner{}
 .why-lead{font-size:22px;font-weight:500;letter-spacing:-.03em;color:var(--text);line-height:1.2;margin-bottom:16px;}
 .why-body{font-size:14px;font-weight:300;color:var(--mid);line-height:1.7;margin-bottom:0;}
-.why-emph{color:var(--text);font-weight:400;}
+.why-emph{color:var(--text);font-weight:500;}
 
 /* Brand pillars */
 .pillars-section{width:100%;max-width:480px;padding:28px 24px;border-top:1px solid var(--border);}
@@ -218,10 +221,10 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .spec-card::before{content:"";display:block;height:1px;background:var(--border);margin-bottom:18px;}
 .spec-card-id{position:absolute;top:14px;right:18px;font-family:'Geist Mono',monospace;font-size:9px;color:var(--soft);letter-spacing:.06em;}
 .spec-row{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:baseline;padding:3px 0;}
-.spec-row-indent{padding-left:20px;}
+.spec-row-indent{padding-left:14px;}
 .spec-label{font-size:10px;color:var(--dim);font-family:'Geist Mono',monospace;letter-spacing:.04em;text-transform:lowercase;}
-.spec-value{font-family:'Geist Mono',monospace;font-size:16px;font-weight:500;color:var(--text);letter-spacing:-.02em;}
-.spec-unit{font-size:11px;color:var(--soft);font-weight:300;margin-left:2px;}
+.spec-value{font-family:'Geist Mono',monospace;font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;}
+.spec-unit{font-size:12px;color:var(--dim);font-weight:300;margin-left:2px;}
 
 /* Waitlist spec summary */
 .wg-spec-summary{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}

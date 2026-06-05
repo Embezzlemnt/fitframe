@@ -3,7 +3,7 @@ import "./styles.css";
 import { COLORWAYS, DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
 import useCamera from "./hooks/useCamera.js";
 import useFaceScan from "./hooks/useFaceScan.js";
-import { SCAN_SEQ, clearSession, genOrderId, getETA, loadSession, saveSession } from "./utils.js";
+import { SCAN_SEQ, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
 
 const DOMAIN = "fitframe.store";
 const ACCENT_COLOR = "#4caf7d";
@@ -14,11 +14,11 @@ const EMPTY_CUSTOMER = { name:"", email:"", address:"", city:"", state:"", zip:"
 
 const FAQS = [
   { q:"what are the frames made from?", a:"PA12 nylon — a lightweight, American-made material used in high-performance 3D printed parts. It has enough flex for daily wear while holding the custom geometry we generate from your scan. Durable, precise, and significantly lighter than acetate." },
-  { q:"what about lenses?", a:"blue light polycarbonate lenses are included with every pair. designed for screen use — comfortable for all-day wear. they're cut to the frame by a US optical lab." },
+  { q:"what about lenses?", a:"blue light polycarbonate lenses are included with every pair. designed for screen use — comfortable for all-day wear. cut to the frame by a US optical lab." },
   { q:"can I get prescription lenses?", a:"prescription is something we're working toward. before we offer it, the optical lab relationship needs to be as dialed in as the frame fit — we're not going to rush that. founding pairs ship with blue light polycarbonate lenses. if demand is there, prescription follows." },
-  { q:"how does the scan work? how accurate is it?", a:"Your browser uses your front camera and a face landmark model to measure proportions — pupillary distance, bridge width, temple width, face height. No images leave your device. We target ±1.5mm accuracy, calibrated against a standard credit card for scale." },
-  { q:"when can I order?", a:"We're opening in limited batches. Join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. each pair is made after your order. nothing is warehoused." },
-  { q:"what's the returns and fit guarantee?", a:"Because every pair is made to your measurements, we don't do standard returns. If the fit is meaningfully off — the frame sits crooked, pinches, or slides in a way the scan should have caught — we'll use your data and your feedback to reprint it. One-time, no questions asked." },
+  { q:"how accurate is the scan?", a:"your browser uses your front camera and a face landmark model to measure proportions — pupillary distance, bridge width, temple width, face height. no images leave your device. we target ±1.5mm accuracy, calibrated against a standard credit card for scale." },
+  { q:"what if my frames don't fit?", a:"if your frames don't fit the way they should, we reprint them. one time, at no cost. email us at hello@fitframe.store with your order ID and a description of the fit issue. we'll sort it out." },
+  { q:"when can I order?", a:"we're opening in limited batches. join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. each pair is made after your order. nothing is warehoused." },
 ];
 
 const FrameSVG = ({ id, size=56, color="currentColor" }) => {
@@ -73,7 +73,7 @@ function FaceGuide({ fill, autoStartPct, facePresent, poseHint, faceSpan, showCa
       {autoStartPct>0&&autoStartPct<1&&<ellipse cx={cx} cy={cy} rx={rx+11} ry={ry+11} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="2" strokeDasharray={`${autoStartPct*circ*1.1} 9999`} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>}
       <ellipse cx={cx} cy={cy} rx={rx+6} ry={ry+6} fill="none" stroke={ringColor} strokeWidth="2" style={{transition:"stroke 0.3s ease"}}/>
       <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" style={{transition:"stroke .4s ease"}}/>
-      {fill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={ACCENT_COLOR} strokeWidth="3" strokeDasharray={`${circ*Math.min(fill,1)} ${circ+10}`} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dasharray .1s linear"}}/>}
+      {fill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={ACCENT_COLOR} strokeWidth="3" strokeDasharray={`${circ*Math.min(fill,1)} ${circ+10}`} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`} style={{transition:fill>=1?"none":"stroke-dasharray .1s linear"}}/>}
       <circle cx={cx-26} cy={cy-22} r="2" fill={`rgba(255,255,255,${bo})`} opacity=".4"/>
       <circle cx={cx+26} cy={cy-22} r="2" fill={`rgba(255,255,255,${bo})`} opacity=".4"/>
       {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)" fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="300">{poseHint}</text>}
@@ -105,28 +105,6 @@ function WhySection() {
     <section className="why-section">
       <p className="why-lead">glasses are built for an average face. most of us aren't average.</p>
       <p className="why-body">FitFrame exists for the person who gave up without realizing it. one browser-based scan maps your face to real millimeter measurements. a carbon fiber nylon frame gets printed to those numbers — zero inventory, zero waste, built to your geometry. <span className="why-emph">not adjusted. not approximated. yours.</span></p>
-    </section>
-  );
-}
-
-// --- Brand Pillars ---
-function PillarsSection() {
-  const pillars = [
-    { label:"made here", desc:"printed and finished in the US. not outsourced, not warehoused overseas." },
-    { label:"zero inventory", desc:"each pair is made after your scan. nothing sits in a box waiting." },
-    { label:"no branding", desc:"no logo on the frame. the fit is the statement." },
-    { label:"zero waste", desc:"printed to order. no overstock, no landfill cycle." },
-  ];
-  return (
-    <section className="pillars-section">
-      <div className="pillars-grid">
-        {pillars.map(p => (
-          <div className="pillar" key={p.label}>
-            <div className="pillar-label">{p.label}</div>
-            <div className="pillar-desc">{p.desc}</div>
-          </div>
-        ))}
-      </div>
     </section>
   );
 }
@@ -193,12 +171,9 @@ function ReturnsPage() {
           <div className="eyebrow">returns, plainly.</div>
           <h1 className="step-head">returns, plainly.</h1>
           <div className="returns-copy">
-            <p><strong>fit guarantee</strong></p>
             <p>if your frames don't fit the way they should, we reprint them. one time, at no cost. email us at <a href="mailto:hello@fitframe.store" style={{color:"var(--accent)"}}>hello@fitframe.store</a> with your order ID and a description of the fit issue. we'll sort it out.</p>
-            <p><strong>damaged on arrival</strong></p>
             <p>if your frames arrive damaged, that's on us. same process — email us, we'll make it right.</p>
-            <p><strong>everything else</strong></p>
-            <p>custom manufacturing means we build your pair specifically for you. if something feels wrong — fit, finish, anything — email us. we'd rather understand what happened than leave you with something you're not happy with.</p>
+            <p>if something feels wrong — fit, finish, anything — email us. we'd rather understand what happened than leave you with something you're not happy with.</p>
             <p><a href="mailto:hello@fitframe.store" style={{color:"var(--accent)",textDecoration:"none"}}>hello@fitframe.store</a></p>
           </div>
           <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">scan your face</a></div>
@@ -208,34 +183,21 @@ function ReturnsPage() {
     </div>
   );
 }
-function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJoined }) {
+function WaitlistGate({ measurements, frameId, colorwayId }) {
   const [email, setEmail] = useState(() => {
     try { return localStorage.getItem("ff_waitlist_email") || ""; } catch { return ""; }
   });
   const [status, setStatus] = useState(() => {
-    try { return localStorage.getItem("ff_waitlist_status") || null; } catch { return null; }
+    try { return localStorage.getItem("ff_waitlist_joined") === "1" ? "joined" : null; } catch { return null; }
   });
   const [position, setPosition] = useState(null);
-  const [liveCount, setLiveCount] = useState(scanCount);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Check returning user
   useEffect(() => {
-    const saved = (() => { try { return localStorage.getItem("ff_waitlist_email"); } catch { return null; } })();
-    const savedStatus = (() => { try { return localStorage.getItem("ff_waitlist_status"); } catch { return null; } })();
-    if (saved && savedStatus === "joined") {
-      setEmail(saved);
-      setStatus("joined");
-      if (onAlreadyJoined) onAlreadyJoined();
-    }
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/waitlist-count")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.count) setLiveCount(d.count); })
-      .catch(() => {});
+    try {
+      if (localStorage.getItem("ff_waitlist_joined") === "1") setStatus("joined");
+    } catch { /* ignore */ }
   }, []);
 
   async function handleSubmit(e) {
@@ -262,13 +224,12 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
       if (!res.ok || !data.ok) throw new Error(data.error || "Could not join the list.");
       setStatus("joined");
       setPosition(data.position || null);
-      if (data.count) setLiveCount(data.count);
       try {
         localStorage.setItem("ff_waitlist_email", trimmed);
-        localStorage.setItem("ff_waitlist_status", "joined");
-      } catch {}
-    } catch (err) {
-      setError(err.message || "Something went wrong. Try again.");
+        localStorage.setItem("ff_waitlist_joined", "1");
+      } catch { /* ignore */ }
+    } catch {
+      setError("something went wrong. try again.");
     } finally {
       setSubmitting(false);
     }
@@ -276,17 +237,23 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
 
   if (status === "joined") {
     const m = measurements || {};
+    const returning = !position;
     return (
       <div className="waitlist-gate">
         <div className="wg-confirmed">
-          <div className="wg-head" style={{textAlign:"center"}}>{position ? `you're in. #${position} on the list.` : "you're in."}</div>
-          <p className="wg-sub" style={{textAlign:"center"}}>we'll reach out when your batch opens. your frame spec is saved.</p>
-          {liveCount > 0 && <div className="wg-count" style={{justifyContent:"center"}}>{liveCount.toLocaleString()} faces scanned so far</div>}
-          <div className="wg-spec-summary">
-            <span className="wg-spec-item">{FRAMES.find(f=>f.id===frameId)?.label || frameId || "—"}</span>
-            <span className="wg-spec-item">{COLORWAYS.find(c=>c.id===colorwayId)?.label || colorwayId || "—"}</span>
-            <span className="wg-spec-item">pd: {m.pd || "—"} mm</span>
+          <div className="wg-head" style={{textAlign:"center"}}>
+            {returning ? "you're on the list." : `you're in. #${position} on the list.`}
           </div>
+          {!returning && (
+            <>
+              <div className="wg-spec-summary">
+                <span className="wg-spec-item">{FRAMES.find(f=>f.id===frameId)?.label || frameId || "—"}</span>
+                <span className="wg-spec-item">{COLORWAYS.find(c=>c.id===colorwayId)?.label || colorwayId || "—"}</span>
+                <span className="wg-spec-item">pd: {m.pd || "—"} mm</span>
+              </div>
+              <p className="wg-sub" style={{textAlign:"center",marginTop:14,marginBottom:0}}>we'll reach out when your batch opens.</p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -296,7 +263,6 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
     <div className="waitlist-gate">
       <div className="wg-head">orders open in limited batches.</div>
       <p className="wg-sub">be first. drop your email and we'll reach out when your batch is ready. your scan result and frame selection are saved.</p>
-      {liveCount > 0 && <div className="wg-count">{liveCount.toLocaleString()} faces scanned</div>}
       <form className="wg-form" onSubmit={handleSubmit} noValidate>
         <input
           type="text"
@@ -319,7 +285,12 @@ function WaitlistGate({ measurements, frameId, colorwayId, scanCount, onAlreadyJ
           {submitting ? "saving…" : "join the list →"}
         </button>
       </form>
-      {error && <div className="submit-error wg-error">{error}</div>}
+      {error && (
+        <div className="submit-error wg-error">
+          {error}
+          <button className="btn btn-ghost" style={{marginTop:10,width:"100%"}} onClick={()=>setError(null)}>try again</button>
+        </div>
+      )}
       <p className="wg-note">no spam. one email when your batch opens.</p>
     </div>
   );
@@ -344,7 +315,7 @@ function FitFrameApp(){
   const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
   const [selectedColorway, setSelectedColorway] = useState(saved.selectedColorway??"matte-black");
   const [scanning, setScanning] = useState(false);
-  const [scanCount, setScanCount] = useState(47);
+  const [waitlistCount, setWaitlistCount] = useState(null);
   const [cardCalibrating, setCardCalibrating] = useState(false);
   const [cardCaptured, setCardCaptured] = useState(saved.cardCaptured??false);
   const [calDwell, setCalDwell] = useState(0);
@@ -353,9 +324,10 @@ function FitFrameApp(){
 
   const canvasRef=useRef(null);
   const scanCountedRef=useRef(false);
-  const { videoRef, ready:camReady, loading:camLoading, camErr, start:startCamera, stop:stopCamera }=useCamera();
+  const { videoRef, ready:camReady, camErr, start:startCamera, stop:stopCamera }=useCamera();
   const scan=useFaceScan({videoRef,scanning,canvasRef,onAutoStart:()=>cardCaptured&&setScanning(true)});
   const currentMeas=confirmedMeas||scan.measurements;
+  const calibration=cardCaptured;
 
   const suggestedTags=Object.values(styleAnswers).flatMap(a=>a?.tags||[]);
   const topFrames=[...FRAMES].map(f=>({...f,score:f.tags.filter(t=>suggestedTags.includes(t)).length})).sort((a,b)=>b.score-a.score);
@@ -363,39 +335,22 @@ function FitFrameApp(){
   const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
   const chosenColorway=COLORWAYS.find(c=>c.id===selectedColorway)||COLORWAYS[0];
 
-  async function hydrateCheckoutSession(sessionId) {
-    try {
-      const res = await fetch(`/api/checkout-session?session_id=${encodeURIComponent(sessionId)}`);
-      const data = await res.json();
-      if (!res.ok || !data.ok) return;
-      setPaymentDetails({
-        session_id:data.session_id,
-        payment_intent:data.payment_intent,
-        payment_status:data.payment_status,
-        customer_email:data.customer_email,
-        metadata:data.metadata,
-      });
-    } catch {
-      setPaymentDetails(p=>p||{session_id:sessionId,payment_status:"paid"});
-    }
-  }
-
   async function recordScanComplete() {
     if (scanCountedRef.current) return;
     scanCountedRef.current = true;
     try {
       const res = await fetch("/api/scan-complete", { method:"POST" });
       const data = await res.json();
-      if (res.ok && data?.count) setScanCount(data.count);
+      if (res.ok && data?.count) { /* scan count tracked server-side */ }
     } catch {
       scanCountedRef.current = false;
     }
   }
 
   useEffect(()=>{
-    fetch("/api/scan-count")
+    fetch("/api/waitlist-count")
       .then(res=>res.ok?res.json():null)
-      .then(data=>{ if (data?.count) setScanCount(data.count); })
+      .then(data=>{ if (data?.count != null) setWaitlistCount(data.count); })
       .catch(()=>{});
   },[]);
 
@@ -466,18 +421,32 @@ function FitFrameApp(){
     setConfirmedMeas(null);
   }
 
-  function scanBadge(){
-    if(scan.done&&scan.quality?.rescan) return {label:"rescan",tone:"red"};
-    if(scan.done&&scan.quality?.label==="Excellent") return {label:"excellent",tone:"good"};
-    if(scan.done&&(scan.quality?.label==="Good"||scan.quality?.label==="Fair")) return {label:scan.quality.label.toLowerCase(),tone:"amber"};
-    if(scanning&&scan.seqIdx>=0&&!scan.done) return {label:"measuring",tone:"good"};
-    if(!scan.facePresent&&scan.mpReady) return {label:"no face",tone:""};
-    return {label:"ready",tone:""};
+  function captureCalibration(){
+    setCardCalibrating(true);
+    setCalDwell(0);
+  }
+
+  function flowStepLabel(stepNum){
+    if (stepNum===1) return "step 1 of 4 — face scan";
+    if (stepNum===2) return "step 2 of 4 — style";
+    if (stepNum===3) return "step 3 of 4 — lenses";
+    if (stepNum===4) return "step 3 of 4 — frame";
+    if (stepNum===5) return "step 3 of 4 — colorway";
+    if (stepNum===6) return "step 4 of 4 — waitlist";
+    return "";
+  }
+
+  function flowProgressIndex(){
+    if (step<=0) return 0;
+    if (step===1) return 1;
+    if (step===2) return 2;
+    if (step>=3&&step<=5) return 3;
+    return 4;
   }
 
   // Steps: 0=hero, 1=scan, 2=style, 3=lenses, 4=frames, 5=colorway, 6=result+waitlist
-  const dots=[1,2,3,4,5,6].map(i=>({done:step>i,active:step===i}));
-  const badge=scanBadge();
+  const flowStep=flowProgressIndex();
+  const dots=[1,2,3,4].map(i=>({done:flowStep>i,active:flowStep===i}));
 
   return (
     <div className="app" style={{"--accent":ACCENT_COLOR}}>
@@ -499,7 +468,7 @@ function FitFrameApp(){
             <div className="display">frames built<br/>for <em>your</em> face.</div>
             <p className="body-lg">scan your face. answer four questions. get frames built to your exact measurements.</p>
             <div className="hero-meta">
-              <div className="scan-count">{scanCount.toLocaleString()} faces scanned</div>
+              {waitlistCount!=null&&<div className="scan-count">{waitlistCount.toLocaleString()} faces scanned</div>}
               <a className="hero-faq-link" href="/faq">questions? →</a>
             </div>
             <div className="btn-row" style={{marginBottom:8}}>
@@ -514,10 +483,6 @@ function FitFrameApp(){
 
           <WhySection/>
 
-          <ProcessSection/>
-
-          <PillarsSection/>
-
           <div className="section" style={{paddingTop:8}}>
             <div className="features">
               {[
@@ -528,6 +493,8 @@ function FitFrameApp(){
               ].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}
             </div>
           </div>
+
+          <ProcessSection/>
 
           <div className="section faq-preview" style={{paddingTop:0}}>
             <div className="eyebrow">common questions</div>
@@ -543,48 +510,94 @@ function FitFrameApp(){
 
         {/* STEP 1 — SCAN */}
         {step===1&&<div className="section">
-          <div className="eyebrow">step 1 of 6 — face scan</div>
-          <div className="step-head">{cardCalibrating?"hold a card to your face.":scanning?"stay still.":scan.done?"scan complete.":"position your face."}</div>
-          <p className="step-sub">{cardCalibrating?"any standard card. hold it flat against your cheek, level with the outer corner of your eye. this gives the scan a real measurement scale.":scanning?"we're capturing your measurements.":scan.done?"processing your measurements.":"look straight ahead."}</p>
-          <p className="privacy-note">your camera is used only for measurement. no images are stored or transmitted.</p>
+          <div className="eyebrow">{flowStepLabel(1)}</div>
+          <div className="step-head">
+            {scanning?"stay still."
+              :scan.done?"scan complete."
+              :!camReady?"position your face."
+              :!calibration?"hold a card to your face."
+              :"ready to measure."}
+          </div>
+          <p className="step-sub">
+            {scanning?"keep your face forward while we capture your measurements."
+              :scan.done?"reviewing your scan."
+              :!camReady?"your camera is used only for measurement. nothing stored or transmitted."
+              :!calibration?"any standard card. hold it flat against your cheek, level with the outer corner of your eye."
+              :"card reference saved. keep your face in the oval and start the measurement."}
+          </p>
 
-          {/* Placeholder states — only when !camReady, never overlap with cam-outer */}
-          {!camReady&&!camErr&&!currentMeas&&<div className="cam-placeholder">{camLoading?<><div className="cam-loading-ring"/><div className="cam-label">starting camera</div><div className="cam-sub">this takes a moment on first load.</div></>:<><div className="cam-icon"><svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div className="cam-label">we need your camera.</div><div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div><button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button></>}</div>}
+          {!camReady&&!camErr&&!currentMeas&&(
+            <div className="cam-placeholder">
+              <video ref={videoRef} autoPlay playsInline muted aria-hidden="true" style={{position:"absolute",width:1,height:1,opacity:0,pointerEvents:"none"}}/>
+              <div className="cam-icon">
+                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </div>
+              <div className="cam-label">we need your camera.</div>
+              <div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div>
+              <button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button>
+            </div>
+          )}
           {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
           {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
 
-          <div className="cam-outer">
-            <video ref={videoRef} autoPlay playsInline muted
-              style={camReady&&scan.mpReady?
-                {position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",transform:"scaleX(-1)"}:
-                {display:"none"}}/>
-            <div className="cam-inner">
-              {camReady&&!scan.mpReady&&!scan.mpLoadError&&!scan.done&&<div style={{position:"absolute",inset:0,zIndex:4,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,background:"var(--scan)"}}><div className="mp-spinner"/><div className="cam-sub" style={{fontSize:13}}>preparing face scanner…</div></div>}
-              {camReady&&scan.mpReady&&!scan.done&&<>
+          {camReady&&!scan.done&&(
+            <div className="cam-outer">
+              <div className="cam-inner">
+                <video ref={videoRef} autoPlay playsInline muted/>
                 <canvas ref={canvasRef}/>
                 <div className="cam-vignette"/>
-                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={cardCalibrating&&!cardCaptured}/>
+                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={!calibration&&!scanning}/>
                 <div className="cam-top">
-                  <span className={`scan-tag ${badge.tone}`}>{badge.label}</span>
+                  <span className={`scan-tag ${scan.facePresent?"live":""}`}>
+                    {!calibration?"card setup":scan.facePresent?"measuring":"no face"}
+                  </span>
                   {scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}</span>}
                 </div>
                 <div className="cam-bottom">
                   {scan.pauseWarning&&<div className="pause-warning">hold still — scan paused</div>}
-                  {scanning&&scan.seqIdx>=0?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>:scan.poseHint?<div className="scan-inst" style={{color:"var(--amber)"}}>{scan.poseHint}</div>:scan.autoStartPct>0&&scan.autoStartPct<1?<div className="scan-inst">hold still…</div>:<div className="scan-inst">look directly at the camera.</div>}
+                  {scanning&&scan.seqIdx>=0
+                    ?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
+                    :!calibration
+                      ?<div className="scan-inst">line up the card guide.</div>
+                      :scan.poseHint
+                      ?<div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
+                      :scan.autoStartPct>0&&scan.autoStartPct<1
+                        ?<div className="scan-inst">hold still.</div>
+                        :<div className="scan-inst">look straight ahead.</div>}
                   {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
                 </div>
-              </>}
+              </div>
             </div>
-          </div>
+          )}
 
-          {camReady&&scan.mpReady&&!scan.done&&<>
-            {cardCalibrating&&!cardCaptured&&<>
-              <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold still — scanning the card"}</div>
-              <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
-            </>}
-            {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
-            {!scanning&&!scan.scanLost&&!scan.scanError&&!calCapturedFlash&&<div style={{textAlign:"center",marginTop:14}}>{!cardCaptured?(!scan.facePresent?<button className="btn btn-ghost" disabled>find your face first</button>:<button className="btn btn-primary" onClick={()=>{setCardCalibrating(true);setCalDwell(0);}}>set scale →</button>):<button className="btn btn-primary" onClick={()=>setScanning(true)}>start scan</button>}</div>}
+          {cardCalibrating&&!calibration&&<>
+            <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold still — scanning the card"}</div>
+            <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
           </>}
+          {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
+
+          {camReady&&!scan.done&&!scanning&&(
+            <div style={{textAlign:"center",marginTop:14}}>
+              {!calibration?(
+                <>
+                  <p className="scan-note">any standard card. hold it flat at cheek level. this gives the scan a real millimeter scale.</p>
+                  <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={captureCalibration}>
+                    {scan.mpReady?scan.facePresent?"set scale →":"find your face first":"loading..."}
+                  </button>
+                </>
+              ):(
+                <>
+                  <div className="calibration-strip"><span>scale</span><strong>set from card</strong></div>
+                  <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={()=>setScanning(true)}>
+                    {scan.mpReady?scan.facePresent?"start scan →":"find your face first":"loading..."}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
           {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>retry scan</button></div>}
@@ -595,11 +608,11 @@ function FitFrameApp(){
         </div>}
 
         {/* STEP 2 — STYLE */}
-        {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">step 2 of 6 — style</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← back</button></div>}</div>; })()}
+        {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">{flowStepLabel(2)}</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← back</button></div>}</div>; })()}
 
         {/* STEP 3 — LENSES */}
         {step===3&&<div className="section">
-          <div className="eyebrow">step 3 of 6 — lenses</div>
+          <div className="eyebrow">{flowStepLabel(3)}</div>
           <div className="step-head">choose your lens.</div>
           <p className="step-sub">blue light polycarbonate lenses are included with every pair. designed for screen use — comfortable for all-day wear.</p>
           <div className="lens-list">
@@ -614,7 +627,7 @@ function FitFrameApp(){
 
         {/* STEP 4 — FRAMES */}
         {step===4&&<div className="section">
-          <div className="eyebrow">step 4 of 6 — frame</div>
+          <div className="eyebrow">{flowStepLabel(4)}</div>
           <div className="step-head">pick your shape.</div>
           <p className="step-sub">your top match is highlighted based on your answers. choose the one that feels right.</p>
           <div className="frame-grid">
@@ -628,7 +641,7 @@ function FitFrameApp(){
 
         {/* STEP 5 — COLORWAY */}
         {step===5&&<div className="section">
-          <div className="eyebrow">step 5 of 6 — colorway</div>
+          <div className="eyebrow">{flowStepLabel(5)}</div>
           <div className="step-head">choose the finish.</div>
           <p className="step-sub">one decision, three finishes. matte black is the default recommendation for most face shapes.</p>
           <div className="colorway-grid">
@@ -705,7 +718,6 @@ function FitFrameApp(){
             measurements={currentMeas}
             frameId={chosenFrame?.id}
             colorwayId={chosenColorway?.id}
-            scanCount={scanCount}
           />
 
           <div className="btn-row" style={{marginTop:20}}>
