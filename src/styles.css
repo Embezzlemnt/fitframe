@@ -70,9 +70,10 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .feature-text strong{color:var(--text);font-weight:400;}
 .cam-outer{width:100%;border-radius:16px;overflow:hidden;background:var(--scan);position:relative;margin-bottom:20px;}
 .cam-inner{width:100%;aspect-ratio:4/3;position:relative;}
-.cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
-.cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none;}
+.cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;}
+.cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none;z-index:1;}
 .cam-vignette{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at center,transparent 34%,rgba(8,8,8,.65) 100%);}
+.face-guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;filter:drop-shadow(0 0 7px rgba(76,175,125,.55));}
 .cam-top{position:absolute;top:0;left:0;right:0;z-index:3;padding:env(safe-area-inset-top,14px) 16px 14px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(rgba(8,8,8,.5),transparent);}
 .cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:3;padding:32px 16px 18px;background:linear-gradient(transparent,rgba(8,8,8,.8));display:flex;flex-direction:column;align-items:center;gap:4px;}
 .scan-tag{font-family:'Geist Mono',monospace;font-size:9px;color:rgba(255,255,255,.45);letter-spacing:.12em;text-transform:uppercase;}
@@ -90,6 +91,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .cam-sub{font-size:12px;color:var(--dim);line-height:1.6;max-width:260px;font-weight:300;}
 .mp-spinner{width:22px;height:22px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
 .cam-loading-overlay{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(8,8,8,.68);padding:24px;}
+@keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
 .err-box{padding:11px 15px;background:rgba(229,166,74,.1);border:1px solid rgba(229,166,74,.35);border-radius:8px;font-size:12px;color:var(--amber);line-height:1.65;max-width:280px;}
 .scan-ok{font-size:12px;color:var(--accent);text-align:center;margin-top:10px;font-weight:300;}
 .scan-note{font-size:12px;color:var(--dim);line-height:1.6;font-weight:300;margin-bottom:14px;max-width:320px;margin-left:auto;margin-right:auto;}

@@ -3,7 +3,7 @@ import "./styles.css";
 import { COLORWAYS, DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
 import useCamera from "./hooks/useCamera.js";
 import useFaceScan from "./hooks/useFaceScan.js";
-import { CARD_GUIDE_WIDTH_RATIO, CREDIT_CARD_WIDTH_MM, SCAN_SEQ, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
+import { CARD_GUIDE_WIDTH_RATIO, CREDIT_CARD_WIDTH_MM, SCAN_SEQ, clamp, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
 
 const DOMAIN = "fitframe.store";
 const ACCENT_COLOR = "#4caf7d";
@@ -59,24 +59,35 @@ function ProofIcon({ type }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 12a8 8 0 0 1-13.6 5.7"/><path d="M4 12A8 8 0 0 1 17.6 6.3"/><path d="M17 2v5h-5"/><path d="M7 22v-5h5"/></svg>;
 }
 
-function FaceGuide({ fill, autoStartPct, facePresent, poseHint, faceSpan, showCard=false }) {
+function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=false}){
   const VW=400,VH=300,cx=200,cy=150,rx=78,ry=108;
   const h=((rx-ry)/(rx+ry))**2;
   const circ=Math.PI*(rx+ry)*(1+(3*h)/(10+Math.sqrt(4-3*h)));
   const bo=facePresent?.62:.2;
-  const bx1=cx-rx-12,by1=cy-ry-12,bx2=cx+rx+12,by2=cy+ry+12,bl=13;
-  const ringColor=faceSpan>0&&(faceSpan<0.34||faceSpan>0.72)?"rgba(229,166,74,0.5)":"rgba(76,175,125,0.6)";
+  const activeFill=clamp(done?0:fill,0,1);
   return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:2}}>
-      {[`M${bx1+bl},${by1} L${bx1},${by1} L${bx1},${by1+bl}`,`M${bx2-bl},${by1} L${bx2},${by1} L${bx2},${by1+bl}`,`M${bx1},${by2-bl} L${bx1},${by2} L${bx1+bl},${by2}`,`M${bx2},${by2-bl} L${bx2},${by2} L${bx2-bl},${by2}`].map((p,i)=><path key={i} d={p} stroke="rgba(255,255,255,.5)" strokeWidth="2" fill="none" strokeLinecap="round"/>)}
-      {showCard&&<g opacity=".86"><rect x="126" y="212" width="148" height="43" rx="6" fill="none" stroke="rgba(76,175,125,.7)" strokeWidth="2" strokeDasharray="7 6"/><text x="200" y="239" textAnchor="middle" fill="rgba(255,255,255,.72)" fontSize="11" fontFamily="'Geist Mono',monospace">CARD HERE</text></g>}
-      {autoStartPct>0&&autoStartPct<1&&<ellipse cx={cx} cy={cy} rx={rx+11} ry={ry+11} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="2" strokeDasharray={`${autoStartPct*circ*1.1} 9999`} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>}
-      <ellipse cx={cx} cy={cy} rx={rx+6} ry={ry+6} fill="none" stroke={ringColor} strokeWidth="2" style={{transition:"stroke 0.3s ease"}}/>
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" style={{transition:"stroke .4s ease"}}/>
-      {fill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={ACCENT_COLOR} strokeWidth="3" strokeDasharray={`${circ*Math.min(fill,1)} ${circ+10}`} strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`} style={{transition:fill>=1?"none":"stroke-dasharray .1s linear"}}/>}
-      <circle cx={cx-26} cy={cy-22} r="2" fill={`rgba(255,255,255,${bo})`} opacity=".4"/>
-      <circle cx={cx+26} cy={cy-22} r="2" fill={`rgba(255,255,255,${bo})`} opacity=".4"/>
-      {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)" fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="300">{poseHint}</text>}
+    <svg className="face-guide" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      {!done&&autoStartPct>0&&autoStartPct<1&&(
+        <ellipse cx={cx} cy={cy} rx={rx+11} ry={ry+11} fill="none"
+          stroke="rgba(255,255,255,.1)" strokeWidth="2"
+          strokeDasharray={`${autoStartPct*circ*1.1} 9999`}
+          strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>
+      )}
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
+        stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" vectorEffect="non-scaling-stroke" style={{transition:"stroke .4s ease"}}/>
+      {activeFill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="#4caf7d" strokeWidth="3"
+        pathLength="1" strokeDasharray="1" strokeDashoffset={1-activeFill}
+        strokeLinecap="round" strokeOpacity="1" vectorEffect="non-scaling-stroke"
+        transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dashoffset .1s linear"}}/>}
+      {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
+        fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
+      {!done&&showCard&&(
+        <g opacity=".92">
+          <rect x="90" y="205" width="220" height="139" rx="6" fill="rgba(0,0,0,.18)" stroke="#4caf7d" strokeWidth="2" strokeDasharray="7 6" style={{animation:"cardPulse 1.4s ease-in-out infinite"}}/>
+          <text x="200" y="274" textAnchor="middle" fill="rgba(255,255,255,.82)"
+            fontSize="11" fontFamily="'Geist Mono',monospace" letterSpacing="1">CARD</text>
+        </g>
+      )}
     </svg>
   );
 }
@@ -580,15 +591,8 @@ function FitFrameApp(){
                 <video ref={videoRef} autoPlay playsInline muted/>
                 <canvas ref={canvasRef}/>
                 <div className="cam-vignette"/>
-                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={scan.poseHint} faceSpan={scan.faceSpan} showCard={!calibration&&!scanning}/>
-                <div className="cam-top">
-                  <span className={`scan-tag ${scan.facePresent?"live":""}`}>
-                    {scanning?"measuring":!calibration?"card optional":scan.facePresent?"measuring":"no face"}
-                  </span>
-                  {scanning&&scan.seqIdx>=0&&<span className="scan-pct">{Math.round(scan.fill*100)}</span>}
-                </div>
+                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={!scanning?scan.poseHint:null} showCard={!calibration&&!scanning} done={scan.done}/>
                 <div className="cam-bottom">
-                  {scan.pauseWarning&&<div className="pause-warning">hold still — scan paused</div>}
                   {scanning&&scan.seqIdx>=0
                     ?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
                     :!calibration&&scan.autoStartPct>0&&scan.autoStartPct<1
@@ -600,7 +604,6 @@ function FitFrameApp(){
                       :scan.autoStartPct>0&&scan.autoStartPct<1
                         ?<div className="scan-inst">hold still.</div>
                         :<div className="scan-inst">look straight ahead.</div>}
-                  {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
                 </div>
               </div>
             </div>
