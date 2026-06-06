@@ -90,14 +90,17 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     const yawHint = yawOk ? null : lm[1].x < faceCenterX ? "tilt right slightly" : "tilt left slightly";
     const pdCorrection = 1 - yawRatio * 0.12;
 
-    ctx.drawImage(video, 0, 0, W, H);
     const sx = Math.max(0, Math.min(W - 1, Math.floor(pts[1].x) - 20));
     const sy = Math.max(0, Math.min(H - 1, Math.floor(pts[1].y) - 20));
     const sw = Math.min(40, W - sx);
     const sh = Math.min(40, H - sy);
-    const imageData = ctx.getImageData(sx, sy, sw, sh);
+    const sampleCanvas = document.createElement("canvas");
+    sampleCanvas.width = sw;
+    sampleCanvas.height = sh;
+    const sampleCtx = sampleCanvas.getContext("2d");
+    sampleCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+    const imageData = sampleCtx.getImageData(0, 0, sw, sh);
     const luma = imageData.data.reduce((sum, v, i) => i % 4 !== 3 ? sum + v : sum, 0) / (sw * sh * 3);
-    ctx.clearRect(0, 0, W, H);
     const lightHint = luma < 40 ? "better lighting needed" : luma > 220 ? "move from direct light" : null;
     const currentHint = lightHint || (!yawOk ? yawHint : pose.valid ? null : pose.reason);
     const frameValid = pose.valid && yawOk && !lightHint;
@@ -124,7 +127,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     const hasIris = [468,469,470,471,472,473,474,475,476,477].every(i => lm[i]);
     const lId = hasIris ? (d(468,469)+d(468,470)+d(468,471)+d(468,472))/4*2 : 0;
     const rId = hasIris ? (d(473,474)+d(473,475)+d(473,476)+d(473,477))/4*2 : 0;
-    if (hasIris) {
+    if (scanningRef.current && hasIris) {
       const ink = frameValid ? ACCENT : "rgba(255,255,255,.22)";
       [[pts[468],lId],[pts[473],rId]].forEach(([c,diam]) => {
         ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
@@ -239,8 +242,14 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       validRef.current = 0;
       totalRef.current = 0;
       setSeqIdx(0);
+    } else {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      }
     }
-  }, [scanning]);
+  }, [scanning, done, canvasRef]);
 
   useEffect(() => {
     if (seqIdx < 0 || seqIdx >= SCAN_SEQ.length) return;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./styles.css";
 import { COLORWAYS, DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
 import useCamera from "./hooks/useCamera.js";
@@ -7,6 +7,7 @@ import { CARD_GUIDE_WIDTH_RATIO, CREDIT_CARD_WIDTH_MM, SCAN_SEQ, clamp, clearSes
 
 const DOMAIN = "fitframe.store";
 const ACCENT_COLOR = "#4caf7d";
+const PRE_SCAN_SETTLE_MS = 1000;
 const BASE_PRICE = 119;
 const LENS_OPTIONS = DEFAULT_LENS;
 
@@ -332,17 +333,18 @@ function FitFrameApp(){
   const [calDwell, setCalDwell] = useState(0);
   const [calMoved, setCalMoved] = useState(false);
   const [calCapturedFlash, setCalCapturedFlash] = useState(false);
+  const [scanSettling, setScanSettling] = useState(false);
 
   const canvasRef=useRef(null);
   const scanCountedRef=useRef(false);
+  const settleTimerRef=useRef(null);
   const { videoRef, ready:camReady, camErr, start:startCamera, stop:stopCamera }=useCamera();
   const scan=useFaceScan({
     videoRef,
     scanning,
     canvasRef,
     scaleMmPerPx:calibration?.mmPerPx || null,
-    scaleSource:calibration ? "credit-card" : "iris-fallback",
-    onAutoStart:()=>{ if (!calibration) setScanning(true); }
+    scaleSource:calibration?.skippedCard ? "iris-fallback" : calibration ? "credit-card" : "iris-fallback",
   });
   const currentMeas=confirmedMeas||scan.measurements;
 
@@ -386,6 +388,9 @@ function FitFrameApp(){
   useEffect(()=>{ if(scan.scanLost) setScanning(false); },[scan.scanLost]);
   useEffect(()=>{ if(scan.scanError) setScanning(false); },[scan.scanError]);
   useEffect(()=>{ setTapped(null); },[styleQIdx]);
+  useEffect(()=>()=>{
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+  },[]);
   useEffect(()=>{
     if (scan.measurements&&!scan.quality?.rescan){
       recordScanComplete();
@@ -393,6 +398,39 @@ function FitFrameApp(){
       return ()=>clearTimeout(t);
     }
   },[scan.measurements,scan.quality]);
+
+  function buildCardCalibration(){
+    const canvas = canvasRef.current;
+    const visibleVideoWidth = canvas?.width || canvas?.getBoundingClientRect?.().width || 0;
+    const cardPxWidth = visibleVideoWidth * CARD_GUIDE_WIDTH_RATIO;
+    if (!Number.isFinite(cardPxWidth) || cardPxWidth <= 0) return null;
+    return {
+      source:"credit-card",
+      cardPxWidth,
+      mmPerPx:CREDIT_CARD_WIDTH_MM / cardPxWidth,
+      capturedAt:new Date().toISOString(),
+    };
+  }
+
+  const startSettledScan=useCallback(()=>{
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    setScanSettling(true);
+    setScanning(false);
+    settleTimerRef.current=setTimeout(()=>{
+      setScanSettling(false);
+      setScanning(true);
+      settleTimerRef.current=null;
+    },PRE_SCAN_SETTLE_MS);
+  },[]);
+
+  function skipCardScan(){
+    setCalibration({
+      source:"iris-fallback",
+      skippedCard:true,
+      capturedAt:new Date().toISOString(),
+    });
+    startSettledScan();
+  }
 
   useEffect(()=>{
     if (!cardCalibrating || !camReady || !scan.mpReady || calibration) return;
@@ -439,22 +477,13 @@ function FitFrameApp(){
   }
 
   function resetScanFlow(){
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current=null;
     scan.reset();
     setScanning(false);
+    setScanSettling(false);
     setConfirmedMeas(null);
-  }
-
-  function buildCardCalibration(){
-    const canvas = canvasRef.current;
-    const visibleVideoWidth = canvas?.width || canvas?.getBoundingClientRect?.().width || 0;
-    const cardPxWidth = visibleVideoWidth * CARD_GUIDE_WIDTH_RATIO;
-    if (!Number.isFinite(cardPxWidth) || cardPxWidth <= 0) return null;
-    return {
-      source:"credit-card",
-      cardPxWidth,
-      mmPerPx:CREDIT_CARD_WIDTH_MM / cardPxWidth,
-      capturedAt:new Date().toISOString(),
-    };
+    setCalibration(null);
   }
 
   function captureCalibration(){
@@ -551,119 +580,174 @@ function FitFrameApp(){
         </>}
 
         {/* STEP 1 — SCAN */}
-        {step===1&&<div className="section">
-          <div className="eyebrow">{flowStepLabel(1)}</div>
-          <div className="step-head">
-            {scanning?"stay still."
-              :scan.done?"scan complete."
-              :!camReady?"position your face."
-              :!calibration?"hold a card to your face."
-              :"ready to measure."}
-          </div>
-          <p className="step-sub">
-            {scanning?"keep your face forward while we capture your measurements."
-              :scan.done?"reviewing your scan."
-              :!camReady?"your camera is used only for measurement. nothing stored or transmitted."
-              :!calibration?"any standard card. hold it flat against your cheek, level with the outer corner of your eye."
-              :"card reference saved. keep your face in the oval and start the measurement."}
-          </p>
-
-          {!camReady&&!camErr&&!currentMeas&&(
-            <div className="cam-placeholder">
-              <video ref={videoRef} autoPlay playsInline muted aria-hidden="true" style={{position:"absolute",width:1,height:1,opacity:0,pointerEvents:"none"}}/>
-              <div className="cam-icon">
-                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
-                </svg>
-              </div>
-              <div className="cam-label">we need your camera.</div>
-              <div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div>
-              <button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button>
+        {step===1&&(
+          <div className="section">
+            <div className="eyebrow">{flowStepLabel(1)}</div>
+            <div className="step-head">
+              {scanning?"stay still."
+                :scanSettling?"find your spot."
+                :scan.done?"scan complete."
+                :!camReady?"position your face."
+                :!calibration?"hold a card to your face."
+                :"ready to measure."}
             </div>
-          )}
-          {camErr&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>{camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}{camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}{camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}</div>}
-          {scan.mpLoadError&&<div className="cam-placeholder"><div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div><div className="cam-sub">check your connection and reload the page.</div><button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button></div>}
+            <p className="step-sub">
+              {scanning?"keep your face forward while we capture your measurements."
+                :scanSettling?"settle into the oval before we start measuring."
+                :scan.done?"reviewing your scan."
+                :!camReady?"your camera is used only for measurement. nothing stored or transmitted."
+                :!calibration?"any standard card. hold it flat against your cheek, level with the outer corner of your eye."
+                :"card reference saved. keep your face in the oval and start the measurement."}
+            </p>
 
-          {camReady&&!scan.done&&(
-            <div className="cam-outer">
-              <div className="cam-inner">
-                <video ref={videoRef} autoPlay playsInline muted/>
-                <canvas ref={canvasRef}/>
-                <div className="cam-vignette"/>
-                <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={!scanning?scan.poseHint:null} showCard={!calibration&&!scanning} done={scan.done}/>
-                <div className="cam-bottom">
-                  {scanning&&scan.seqIdx>=0
-                    ?<div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
-                    :!calibration&&scan.autoStartPct>0&&scan.autoStartPct<1
-                      ?<div className="scan-inst">hold still.</div>
-                      :!calibration
-                      ?<div className="scan-inst">look straight ahead.</div>
-                      :scan.poseHint
-                      ?<div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
-                      :scan.autoStartPct>0&&scan.autoStartPct<1
-                        ?<div className="scan-inst">hold still.</div>
-                        :<div className="scan-inst">look straight ahead.</div>}
+            {!camReady&&!camErr&&!currentMeas&&(
+              <div className="cam-placeholder">
+                <video ref={videoRef} autoPlay playsInline muted aria-hidden="true" style={{position:"absolute",width:1,height:1,opacity:0,pointerEvents:"none"}}/>
+                <div className="cam-icon">
+                  <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                </div>
+                <div className="cam-label">we need your camera.</div>
+                <div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div>
+                <button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button>
+              </div>
+            )}
+
+            {camErr&&(
+              <div className="cam-placeholder">
+                <div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>
+                {camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}
+                {camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}
+                {camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}
+              </div>
+            )}
+
+            {scan.mpLoadError&&(
+              <div className="cam-placeholder">
+                <div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div>
+                <div className="cam-sub">check your connection and reload the page.</div>
+                <button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button>
+              </div>
+            )}
+
+            {camReady&&!scan.done&&(
+              <div className="cam-outer">
+                <div className="cam-inner">
+                  <video ref={videoRef} autoPlay playsInline muted/>
+                  <canvas ref={canvasRef}/>
+                  <div className="cam-vignette"/>
+                  <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={!scanning&&!scanSettling?scan.poseHint:null} showCard={!calibration&&!scanning&&!scanSettling} done={scan.done}/>
+                  {scanSettling&&(
+                    <div className="settle-intro">
+                      <div className="settle-intro-main">find your spot</div>
+                    </div>
+                  )}
+                  <div className="cam-bottom">
+                    {scanning
+                      ? scan.seqIdx>=0
+                        ? <div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
+                        : <div className="scan-inst">hold still.</div>
+                      : scanSettling
+                        ? <div className="scan-inst">find your spot</div>
+                      : !calibration
+                        ? <div className="scan-inst">look straight ahead.</div>
+                        : scan.poseHint
+                          ? <div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
+                          : scan.autoStartPct>0&&scan.autoStartPct<1
+                            ? <div className="scan-inst">hold still.</div>
+                            : <div className="scan-inst">look straight ahead.</div>}
+                    {scan.pauseWarning&&<div className="pause-warning">hold still — scan paused</div>}
+                    {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {cardCalibrating&&!calibration&&<>
-            <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold still — scanning the card"}</div>
-            <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
-          </>}
-          {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
+            {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
 
-          {camReady&&!scan.done&&!scanning&&(
-            <div style={{textAlign:"center",marginTop:14}}>
-              {!calibration?(
-                <>
-                  <p className="scan-note">
-                    for a more precise fit, hold a standard card flat against
-                    your cheek before scanning. or skip and we'll use your
-                    iris as the scale reference.
-                  </p>
-                  <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
-                    <button
-                      className="btn btn-primary"
-                      disabled={!scan.mpReady||!scan.facePresent}
-                      onClick={captureCalibration}
-                    >
-                      {scan.mpReady
-                        ?scan.facePresent?"use card →":"find your face first"
-                        :"loading..."}
+            {cardCalibrating&&!calibration&&(
+              <>
+                <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold still — scanning the card"}</div>
+                <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
+              </>
+            )}
+            {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
+
+            {camReady&&!scan.done&&!scanning&&!scanSettling&&(
+              <div style={{textAlign:"center",marginTop:14}}>
+                {!calibration?(
+                  <>
+                    <p className="scan-note">
+                      for a more precise fit, hold a standard card flat against
+                      your cheek before scanning. or skip and we'll use your
+                      iris as the scale reference.
+                    </p>
+                    <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
+                      <button
+                        className="btn btn-primary"
+                        disabled={!scan.mpReady||!scan.facePresent}
+                        onClick={captureCalibration}
+                      >
+                        {scan.mpReady
+                          ?scan.facePresent?"use card →":"find your face first"
+                          :"loading..."}
+                      </button>
+                      <button
+                        className="btn btn-ghost"
+                        disabled={!scan.mpReady||!scan.facePresent}
+                        onClick={skipCardScan}
+                        style={{fontSize:13}}
+                      >
+                        {scan.mpReady
+                          ?scan.facePresent?"skip card →":"find your face first"
+                          :"..."}
+                      </button>
+                    </div>
+                  </>
+                ):(
+                  <>
+                    <div className="calibration-strip"><span>scale</span><strong>{calibration.skippedCard?"iris reference":"set from card"}</strong></div>
+                    <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={startSettledScan}>
+                      {scan.mpReady?scan.facePresent?"start scan →":"find your face first":"loading..."}
                     </button>
-                    <button
-                      className="btn btn-ghost"
-                      disabled={!scan.mpReady||!scan.facePresent}
-                      onClick={()=>setScanning(true)}
-                      style={{fontSize:13}}
-                    >
-                      {scan.mpReady
-                        ?scan.facePresent?"skip card →":"find your face first"
-                        :"..."}
-                    </button>
-                  </div>
-                </>
-              ):(
-                <>
-                  <div className="calibration-strip"><span>scale</span><strong>set from card</strong></div>
-                  <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={()=>setScanning(true)}>
-                    {scan.mpReady?scan.facePresent?"start scan →":"find your face first":"loading..."}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+                  </>
+                )}
+              </div>
+            )}
 
-          {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
-          {scan.scanError&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div><div className="cam-sub">{scan.scanError}</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>retry scan</button></div>}
-          {scan.scanLost&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--amber)"}}>scan lost.</div><div className="cam-sub">position your face and tap start again.</div><button className="btn btn-ghost" onClick={()=>{scan.reset();setScanning(false);}}>try again</button></div>}
-          {scan.done&&!currentMeas&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"let's try that again.":"no face data captured."}</div><div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div><button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>try again</button></div>}
-          {currentMeas&&scan.quality?.rescan&&<div className="cam-placeholder" style={{marginTop:0}}><div className="cam-label">let's try that again.</div><div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div><button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>rescan</button></div>}
-          {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">measurements captured. moving forward…</div>}
-        </div>}
+            {scan.scanError&&(
+              <div className="cam-placeholder" style={{marginTop:0}}>
+                <div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div>
+                <div className="cam-sub">{scan.scanError}</div>
+                <button className="btn btn-ghost" onClick={resetScanFlow}>retry scan</button>
+              </div>
+            )}
+            {scan.scanLost&&(
+              <div className="cam-placeholder" style={{marginTop:0}}>
+                <div className="cam-label" style={{color:"var(--amber)"}}>scan lost.</div>
+                <div className="cam-sub">position your face and tap start again.</div>
+                <button className="btn btn-ghost" onClick={resetScanFlow}>try again</button>
+              </div>
+            )}
+            {scan.done&&!currentMeas&&(
+              <div className="cam-placeholder" style={{marginTop:0}}>
+                <div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"let's try that again.":"no face data captured."}</div>
+                <div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div>
+                <button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>try again</button>
+              </div>
+            )}
+            {currentMeas&&scan.quality?.rescan&&(
+              <div className="cam-placeholder" style={{marginTop:0}}>
+                <div className="cam-label">let's try that again.</div>
+                <div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div>
+                <button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>rescan</button>
+              </div>
+            )}
+            {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">measurements captured. moving forward…</div>}
+          </div>
+        )}
 
         {/* STEP 2 — STYLE */}
         {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">{flowStepLabel(2)}</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← back</button></div>}</div>; })()}
