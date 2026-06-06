@@ -75,7 +75,7 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .cam-vignette{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at center,transparent 34%,rgba(8,8,8,.65) 100%);}
 .face-guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;filter:drop-shadow(0 0 7px rgba(76,175,125,.55));}
 .cam-top{position:absolute;top:0;left:0;right:0;z-index:3;padding:env(safe-area-inset-top,14px) 16px 14px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(rgba(8,8,8,.5),transparent);}
-.cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:3;padding:32px 16px 18px;background:linear-gradient(transparent,rgba(8,8,8,.8));display:flex;flex-direction:column;align-items:center;gap:4px;}
+.cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:5;padding:32px 16px 18px;background:linear-gradient(transparent,rgba(8,8,8,.8));display:flex;flex-direction:column;align-items:center;gap:4px;}
 .scan-tag{font-family:'Geist Mono',monospace;font-size:9px;color:rgba(255,255,255,.45);letter-spacing:.12em;text-transform:uppercase;}
 .scan-tag.live,.scan-tag.good{color:var(--accent);}
 .scan-tag.amber{color:var(--amber);}
