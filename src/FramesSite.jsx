@@ -3,7 +3,7 @@ import "./styles.css";
 import { COLORWAYS, DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
 import useCamera from "./hooks/useCamera.js";
 import useFaceScan from "./hooks/useFaceScan.js";
-import { CARD_GUIDE_WIDTH_RATIO, CREDIT_CARD_WIDTH_MM, SCAN_SEQ, clamp, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
+import { SCAN_SEQ, clamp, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
 
 const DOMAIN = "fitframe.store";
 const ACCENT_COLOR = "#4caf7d";
@@ -345,6 +345,11 @@ function FitFrameApp(){
     canvasRef,
     scaleMmPerPx:calibration?.mmPerPx || null,
     scaleSource:calibration?.skippedCard ? "iris-fallback" : calibration ? "credit-card" : "iris-fallback",
+    needsCard:step===1&&camReady&&!calibration&&!scanning&&!scanSettling,
+    faceEnabled:step===1&&camReady&&(!!calibration||scanning||scanSettling),
+    debugScan:new URLSearchParams(window.location.search).get("debug")==="1",
+    onCardLocked:handleCardLocked,
+    onCardSkipped:skipCardScan,
   });
   const currentMeas=confirmedMeas||scan.measurements;
 
@@ -399,19 +404,6 @@ function FitFrameApp(){
     }
   },[scan.measurements,scan.quality]);
 
-  function buildCardCalibration(){
-    const canvas = canvasRef.current;
-    const visibleVideoWidth = canvas?.width || canvas?.getBoundingClientRect?.().width || 0;
-    const cardPxWidth = visibleVideoWidth * CARD_GUIDE_WIDTH_RATIO;
-    if (!Number.isFinite(cardPxWidth) || cardPxWidth <= 0) return null;
-    return {
-      source:"credit-card",
-      cardPxWidth,
-      mmPerPx:CREDIT_CARD_WIDTH_MM / cardPxWidth,
-      capturedAt:new Date().toISOString(),
-    };
-  }
-
   const startSettledScan=useCallback(()=>{
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     setScanSettling(true);
@@ -423,7 +415,18 @@ function FitFrameApp(){
     },PRE_SCAN_SETTLE_MS);
   },[]);
 
+  function handleCardLocked(card){
+    setCalibration(card);
+    setCardCalibrating(false);
+    setCalDwell(1);
+    setCalMoved(false);
+    setCalCapturedFlash(true);
+    setTimeout(()=>setCalCapturedFlash(false),1000);
+    startSettledScan();
+  }
+
   function skipCardScan(){
+    setCardCalibrating(false);
     setCalibration({
       source:"iris-fallback",
       skippedCard:true,
@@ -431,42 +434,6 @@ function FitFrameApp(){
     });
     startSettledScan();
   }
-
-  useEffect(()=>{
-    if (!cardCalibrating || !camReady || !scan.mpReady || calibration) return;
-    let raf;
-    let start=null;
-    const stable = () => scan.facePresent && !scan.poseHint;
-    const tick = now => {
-      if (!stable()) {
-        start=null;
-        setCalDwell(0);
-        setCalMoved(true);
-        raf=requestAnimationFrame(tick);
-        return;
-      }
-      setCalMoved(false);
-      if (!start) start=now;
-      const pct=Math.min((now-start)/2000,1);
-      setCalDwell(pct);
-      if (pct>=1) {
-        const nextCalibration = buildCardCalibration();
-        if (!nextCalibration) {
-          setCalMoved(true);
-          raf=requestAnimationFrame(tick);
-          return;
-        }
-        setCalibration(nextCalibration);
-        setCardCalibrating(false);
-        setCalCapturedFlash(true);
-        setTimeout(()=>setCalCapturedFlash(false),1000);
-        return;
-      }
-      raf=requestAnimationFrame(tick);
-    };
-    raf=requestAnimationFrame(tick);
-    return ()=>cancelAnimationFrame(raf);
-  },[cardCalibrating,camReady,scan.mpReady,scan.facePresent,scan.poseHint,calibration]);
 
   function selectOption(opt){
     setTapped(opt.label);
@@ -488,14 +455,7 @@ function FitFrameApp(){
 
   function captureCalibration(){
     setCalDwell(0);
-    const nextCalibration = buildCardCalibration();
-    if (nextCalibration) {
-      setCalibration(nextCalibration);
-      setCardCalibrating(false);
-      setCalCapturedFlash(true);
-      setTimeout(()=>setCalCapturedFlash(false),1000);
-      return;
-    }
+    setCalMoved(false);
     setCardCalibrating(true);
   }
 
@@ -669,8 +629,8 @@ function FitFrameApp(){
 
             {cardCalibrating&&!calibration&&(
               <>
-                <div className={`cal-status ${calMoved?"warn":""}`}>{calMoved?"moved — hold steady to recapture":"hold still — scanning the card"}</div>
-                <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round(calDwell*100)}%`}}/></div>
+                <div className={`cal-status ${calMoved?"warn":""}`}>{scan.cardStatus?.reason||"hold still — scanning the card"}</div>
+                <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round((scan.cardStatus?.stablePct||calDwell)*100)}%`}}/></div>
               </>
             )}
             {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
@@ -679,6 +639,10 @@ function FitFrameApp(){
               <div style={{textAlign:"center",marginTop:14}}>
                 {!calibration?(
                   <>
+                    <div className="calibration-strip">
+                      <span>{scan.cardStatus?.label||"position card"}</span>
+                      {scan.cardStatus?.stablePct>0&&<strong>{Math.round(scan.cardStatus.stablePct*100)}%</strong>}
+                    </div>
                     <p className="scan-note">
                       for a more precise fit, hold a standard card flat against
                       your cheek before scanning. or skip and we'll use your
@@ -687,22 +651,18 @@ function FitFrameApp(){
                     <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
                       <button
                         className="btn btn-primary"
-                        disabled={!scan.mpReady||!scan.facePresent}
+                        disabled={!scan.cvReady}
                         onClick={captureCalibration}
                       >
-                        {scan.mpReady
-                          ?scan.facePresent?"use card →":"find your face first"
-                          :"loading..."}
+                        {scan.cvReady?"use card →":"loading card detector..."}
                       </button>
                       <button
                         className="btn btn-ghost"
-                        disabled={!scan.mpReady||!scan.facePresent}
+                        disabled={!scan.mpReady}
                         onClick={skipCardScan}
                         style={{fontSize:13}}
                       >
-                        {scan.mpReady
-                          ?scan.facePresent?"skip card →":"find your face first"
-                          :"..."}
+                        {scan.mpReady?"skip card →":"loading face scan..."}
                       </button>
                     </div>
                   </>
