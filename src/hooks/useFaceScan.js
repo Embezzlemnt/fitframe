@@ -480,7 +480,7 @@ export default function useFaceScan({
     const yawOk = yawRatio < 0.15;
     const pdCorrection = 1 - yawRatio * 0.12;
     const iris = calcIrisMetrics(pts, d);
-    const sampleCanvas = workCanvasRef.current || (workCanvasRef.current = document.createElement("canvas"));
+    const sampleCanvas = document.createElement("canvas");
     sampleCanvas.width = 40;
     sampleCanvas.height = 40;
     const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently:true });

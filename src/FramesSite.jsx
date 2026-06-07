@@ -1,27 +1,290 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import "./styles.css";
-import { COLORWAYS, DEFAULT_LENS, FRAMES, STYLE_QUESTIONS } from "./data.js";
-import useCamera from "./hooks/useCamera.js";
-import useFaceScan from "./hooks/useFaceScan.js";
-import { SCAN_SEQ, clamp, clearSession, genOrderId, loadSession, saveSession } from "./utils.js";
+import { useState, useRef, useEffect, useCallback } from "react";
 
-const DOMAIN = "fitframe.store";
-const ACCENT_COLOR = "#4caf7d";
-const PRE_SCAN_SETTLE_MS = 1000;
-const BASE_PRICE = 119;
-const LENS_OPTIONS = DEFAULT_LENS;
+// ─── Config ───────────────────────────────────────────────────────────────────
+const MAKER_EMAIL = "hello@fitframe.store";
+const DOMAIN_URL = "https://fitframe.store"; // LOCKED
+const DOMAIN_HOST = "fitframe.store"; // LOCKED
+const BASE_PRICE  = 89;
 
-const EMPTY_CUSTOMER = { name:"", email:"", address:"", city:"", state:"", zip:"" };
+// ─── localStorage persistence ─────────────────────────────────────────────────
+const STORE_KEY = "fitframe_session_v1";
+const SCAN_HISTORY_KEY = "fitframe_scan_history";
+function saveSession(data) { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch { /* storage can be unavailable in private mode */ } }
+function loadSession()     { try { const r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
+function clearSession()    { try { localStorage.removeItem(STORE_KEY); } catch { /* storage can be unavailable in private mode */ } }
+function appendScanHistory(entry) {
+  try {
+    const prev=JSON.parse(localStorage.getItem(SCAN_HISTORY_KEY)||"[]");
+    localStorage.setItem(SCAN_HISTORY_KEY, JSON.stringify([entry,...prev].slice(0,20)));
+  } catch { /* storage can be unavailable in private mode */ }
+}
 
-const FAQS = [
-  { q:"what are the frames made from?", a:"PA12 nylon — a lightweight, American-made material used in high-performance 3D printed parts. It has enough flex for daily wear while holding the custom geometry we generate from your scan. Durable, precise, and significantly lighter than acetate." },
-  { q:"what about lenses?", a:"blue light polycarbonate lenses are included with every pair. designed for screen use — comfortable for all-day wear. cut to the frame by a US optical lab." },
-  { q:"can I get prescription lenses?", a:"prescription is something we're working toward. before we offer it, the optical lab relationship needs to be as dialed in as the frame fit — we're not going to rush that. founding pairs ship with blue light polycarbonate lenses. if demand is there, prescription follows." },
-  { q:"how accurate is the scan?", a:"your browser uses your front camera and a face landmark model to measure proportions — pupillary distance, bridge width, temple width, face height. no images leave your device. we target ±1.5mm accuracy, calibrated against a standard credit card for scale." },
-  { q:"what if my frames don't fit?", a:"if your frames don't fit the way they should, we reprint them. one time, at no cost. email us at hello@fitframe.store with your order ID and a description of the fit issue. we'll sort it out." },
-  { q:"when can I order?", a:"we're opening in limited batches. join the waitlist after your scan and frame selection — you'll get notified when your batch is ready. each pair is made after your order. nothing is warehoused." },
+// ─── Script loader ────────────────────────────────────────────────────────────
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement("script");
+    s.src = src; s.crossOrigin = "anonymous";
+    s.defer = true;
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// ─── Pose validation ──────────────────────────────────────────────────────────
+function validatePose(lm) {
+  const nx = lm[1].x, ny = lm[1].y;
+  if (nx < 0.10 || nx > 0.90) return { valid:false, reason:"Center your face" };
+  if (ny < 0.08 || ny > 0.92) return { valid:false, reason:"Center your face" };
+  return { valid:true, reason:null };
+}
+
+// ─── Measurement math ─────────────────────────────────────────────────────────
+const IRIS_MM = 11.8;          // HVID mean reference
+const IRIS_SD = 0.5;           // +/-1 SD - acceptable iris diameter range: 10.8-12.8mm
+const IRIS_MIN_PX = 10;        // Launch-tolerant floor for arm's-length phone scans
+const IRIS_MAX_PX = 80;        // Above this, face is too close and landmarks compress
+const PD_ADULT_MIN = 52.0;     // Adult binocular PD lower reference
+const PD_ADULT_MAX = 80.0;     // Adult binocular PD upper reference
+const BRIDGE_MIN = 10.0;       // Minimum human bridge width
+const BRIDGE_MAX = 28.0;       // Maximum human bridge width
+const MONOCULAR_SYMMETRY = 2.5;// Max acceptable left/right monocular PD difference
+const TILT_THRESHOLD = 0.14;   // Iris center Y difference as a fraction of face height
+const IRIS_MISMATCH_MAX = 0.30;// Launch-tolerant left/right iris diameter difference
+const MIN_VALID_SAMPLES = 3;   // Review-screen safety net handles small usable samples
+const FACE_ABORT_FRAMES = 8;   // Roughly 250ms of sustained face/pose loss during active scan
+const FACE_YAW_MAX = 0.15;
+const SCALE_HISTORY_FRAMES = 10;
+const CREDIT_CARD_WIDTH_MM = 85.6;
+const CREDIT_CARD_HEIGHT_MM = 54;
+const CARD_ASPECT = CREDIT_CARD_WIDTH_MM / CREDIT_CARD_HEIGHT_MM;
+const CARD_STABLE_FRAMES = 6;
+const CARD_MAX_ROTATION_DEG = 14;
+const CARD_MIN_CONFIDENCE = 0.58;
+const CARD_FALLBACK_MS = 8000;
+const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
+const MEASUREMENT_RANGES = {
+  pd:[50,85], pdLeft:[20,45], pdRight:[20,45],
+  bridge:[8,30], faceW:[110,160], temple:[125,160], lensH:[30,50],
+};
+const FITFRAME_FAQ = [
+  ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
+  ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $89 is the honest price for what this is."],
+  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. FitFrame is an independent adult custom-fit eyewear workflow for non-Rx frames, direct from the maker to the customer."],
+  ["Who is behind FitFrame?","FitFrame is built and operated by its founder, who designs the frames, runs the scans, and fulfills every order personally. It's a small operation by choice - every pair gets real attention."],
+  ["How accurate is the FitFrame scan?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
+  ["What if my FitFrame frames don't fit?","FitFrame includes one free reprint if the first pair does not fit."],
+  ["Where does FitFrame ship from?","FitFrame ships from the US."],
+  ["What material are FitFrame frames made of?","FitFrame frames are 3D printed in PA12 nylon."],
 ];
+const clamp = (v,min,max) => Math.min(max,Math.max(min,v));
+const irisReferenceRange = () => [IRIS_MM - IRIS_SD * 2, IRIS_MM + IRIS_SD * 2];
 
+function median(arr) {
+  const s = [...arr].filter(Number.isFinite).sort((a,b)=>a-b);
+  if (!s.length) return null;
+  const m = Math.floor(s.length/2);
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+}
+
+let openCvPromise;
+function loadOpenCv(){
+  if (window.cv?.Mat) return Promise.resolve();
+  if (openCvPromise) return openCvPromise;
+  openCvPromise = loadScript(OPENCV_URL).then(()=>new Promise((resolve,reject)=>{
+    const started=performance.now();
+    const tick=()=>{
+      if (window.cv?.Mat) resolve();
+      else if (performance.now()-started>4000) reject(new Error("OpenCV failed to load"));
+      else setTimeout(tick,50);
+    };
+    tick();
+  }));
+  return openCvPromise;
+}
+
+function distPt(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+function orderQuad(points){
+  const pts=[...points];
+  const bySum=[...pts].sort((a,b)=>(a.x+a.y)-(b.x+b.y));
+  const byDiff=[...pts].sort((a,b)=>(a.x-a.y)-(b.x-b.y));
+  return [bySum[0],byDiff[3],bySum[3],byDiff[0]];
+}
+function quadAngleDeg(quad){
+  const [tl,tr]=quad;
+  return Math.abs(Math.atan2(tr.y-tl.y,tr.x-tl.x)*180/Math.PI);
+}
+function detectionSimilarity(a,b){
+  if (!a||!b) return 0;
+  const ac=a.center, bc=b.center;
+  const centerDelta=Math.hypot(ac.x-bc.x,ac.y-bc.y);
+  const sizeDelta=Math.abs(a.width-b.width)+Math.abs(a.height-b.height);
+  const angleDelta=Math.abs(a.angle-b.angle);
+  return centerDelta+sizeDelta*.5+angleDelta*3;
+}
+
+function drawDetectedCard(ctx,detection,stablePct){
+  const quad=detection.quad;
+  ctx.save();
+  ctx.lineWidth=3;
+  ctx.strokeStyle=detection.confidence>=CARD_MIN_CONFIDENCE?"#4caf7d":"#e5a64a";
+  ctx.shadowColor="rgba(76,175,125,.65)";
+  ctx.shadowBlur=12;
+  ctx.beginPath();
+  ctx.moveTo(quad[0].x,quad[0].y);
+  quad.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.closePath();
+  ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.fillStyle="rgba(76,175,125,.95)";
+  quad.forEach(p=>{ ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill(); });
+  ctx.font="13px 'Geist Mono', monospace";
+  ctx.fillStyle="rgba(255,255,255,.9)";
+  ctx.textAlign="center";
+  ctx.fillText(stablePct>=1?"SCALE LOCKED":`CARD ${Math.round(stablePct*100)}%`, detection.center.x, detection.center.y);
+  ctx.restore();
+}
+
+function detectCardOutline(video,W,H,workCanvas){
+  const cv=window.cv;
+  if (!cv?.Mat) return null;
+  workCanvas.width=W; workCanvas.height=H;
+  const wctx=workCanvas.getContext("2d",{willReadFrequently:true});
+  wctx.drawImage(video,0,0,W,H);
+
+  const roiX=Math.round(W*.08), roiY=Math.round(H*.30), roiW=Math.round(W*.84), roiH=Math.round(H*.68);
+  let src,roi,gray,blurred,edges,dilated,contours,hierarchy,kernel;
+  try {
+    src=cv.imread(workCanvas);
+    roi=src.roi(new cv.Rect(roiX,roiY,roiW,roiH));
+    gray=new cv.Mat(); blurred=new cv.Mat(); edges=new cv.Mat(); dilated=new cv.Mat();
+    contours=new cv.MatVector(); hierarchy=new cv.Mat();
+    kernel=cv.Mat.ones(3,3,cv.CV_8U);
+    cv.cvtColor(roi,gray,cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);
+    cv.Canny(blurred,edges,45,140);
+    cv.dilate(edges,dilated,kernel);
+    cv.findContours(dilated,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+
+    let best=null;
+    for (let i=0;i<contours.size();i++){
+      const contour=contours.get(i);
+      const area=cv.contourArea(contour);
+      if (area<roiW*roiH*.035) { contour.delete(); continue; }
+      const peri=cv.arcLength(contour,true);
+      const approx=new cv.Mat();
+      cv.approxPolyDP(contour,approx,peri*.025,true);
+      if (approx.rows===4&&cv.isContourConvex(approx)){
+        const raw=[];
+        for (let j=0;j<4;j++){
+          raw.push({x:approx.intPtr(j,0)[0]+roiX,y:approx.intPtr(j,0)[1]+roiY});
+        }
+        const quad=orderQuad(raw);
+        const top=distPt(quad[0],quad[1]), bottom=distPt(quad[3],quad[2]);
+        const left=distPt(quad[0],quad[3]), right=distPt(quad[1],quad[2]);
+        const width=(top+bottom)/2, height=(left+right)/2;
+        const aspect=width/height;
+        const angle=quadAngleDeg(quad);
+        const rect=cv.boundingRect(approx);
+        const rectangularity=area/(rect.width*rect.height);
+        const aspectScore=clamp(1-Math.abs(aspect-CARD_ASPECT)/.42,0,1);
+        const angleScore=clamp(1-angle/CARD_MAX_ROTATION_DEG,0,1);
+        const fillScore=clamp((rectangularity-.45)/.35,0,1);
+        const confidence=aspectScore*.45+angleScore*.3+fillScore*.25;
+        const candidate={
+          quad,width,height,angle,aspect,confidence,area,rectangularity,
+          center:{x:quad.reduce((s,p)=>s+p.x,0)/4,y:quad.reduce((s,p)=>s+p.y,0)/4},
+          mmPerPx:CREDIT_CARD_WIDTH_MM/width,
+        };
+        if (!best||candidate.confidence>best.confidence) best=candidate;
+      }
+      approx.delete(); contour.delete();
+    }
+    return best&&best.confidence>=.45?best:null;
+  } finally {
+    [kernel,hierarchy,contours,dilated,edges,blurred,gray,roi,src].forEach(m=>m?.delete?.());
+  }
+}
+
+function irisDiameter(center, edges, d) {
+  const radii = edges.map(edge => d(center, edge)).filter(r => r >= 1);
+  const med = median(radii);
+  if (!med) return null;
+  const clean = radii.filter(r => Math.abs(r - med) / med < 0.20);
+  if (!clean.length) return null;
+  return clean.reduce((a,b)=>a+b,0) / clean.length * 2;
+}
+
+function calcIrisMetrics(pts, d) {
+  const lId = irisDiameter(468, [469,470,471,472], d);
+  const rId = irisDiameter(473, [474,475,476,477], d);
+  if (!lId || !rId || lId < 2 || rId < 2) return {valid:false,lId:lId||0,rId:rId||0,reason:"iris-lost"};
+  const avgDiam = (lId + rId) / 2;
+  if (avgDiam < IRIS_MIN_PX) return {valid:false,lId,rId,avgDiam,reason:"too-far"};
+  if (avgDiam > IRIS_MAX_PX) return {valid:false,lId,rId,avgDiam,reason:"too-close"};
+  const irisDelta = Math.abs(lId - rId) / avgDiam;
+  if (irisDelta > IRIS_MISMATCH_MAX) return {valid:false,lId,rId,avgDiam,irisDelta,reason:"iris-mismatch"};
+  const faceH = distPt(pts[10], pts[152]);
+  const tiltRatio = faceH ? Math.abs(pts[468].y - pts[473].y) / faceH : 0;
+  return {
+    valid:true,
+    lId,
+    rId,
+    avgDiam,
+    irisDelta,
+    tiltRatio,
+    isTilted:tiltRatio > TILT_THRESHOLD,
+  };
+}
+
+function calcYawRatio(pts, d) {
+  const eyeDist = d(468,473);
+  if (!eyeDist) return 0;
+  const eyeMidX = (pts[468].x + pts[473].x) / 2;
+  return Math.abs(pts[1].x - eyeMidX) / eyeDist;
+}
+
+function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) {
+  const pts = lm.map(p => ({ x:p.x*W, y:p.y*H }));
+  const d   = (a,b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
+  const iris = calcIrisMetrics(pts,d);
+  if (!iris.valid) return null;
+  const irisScale = IRIS_MM / iris.avgDiam;
+  if (scaleHistoryRef) {
+    scaleHistoryRef.current.push(irisScale);
+    if (scaleHistoryRef.current.length > SCALE_HISTORY_FRAMES) scaleHistoryRef.current.shift();
+  }
+  const stableIrisScale = median(scaleHistoryRef?.current || [irisScale]) || irisScale;
+  const sc = calibratedScale || stableIrisScale;
+  if (!sc) return null;
+  const yawRatio = calcYawRatio(pts,d);
+  if (yawRatio >= FACE_YAW_MAX) return null;
+  const yawCorrection = Math.max(0.94, 1 - yawRatio * 0.12);
+  const pd = d(468,473)*sc*yawCorrection;
+  const lPd = d(468,6)*sc;
+  const rPd = d(473,6)*sc;
+  const innerCanthi = d(133,362)*sc;
+  const eyeOpening = ((d(159,145)+d(386,374))/2*sc);
+  const faceW = d(234,454)*sc;
+  const [irisMin, irisMax] = irisReferenceRange();
+  return {
+    pd:      pd.toFixed(1), pdLeft:lPd.toFixed(1), pdRight:rPd.toFixed(1),
+    bridge:  (innerCanthi*.62).toFixed(1),
+    lensH:   clamp(eyeOpening*2.7+10,34,48).toFixed(1),
+    faceW:   faceW.toFixed(0),
+    temple:  clamp(faceW*.52+68,130,155).toFixed(0),
+    sampleWeight: iris.isTilted ? 0.5 : 1,
+    tiltRatio: iris.tiltRatio,
+    yawRatio,
+    irisDelta: iris.irisDelta,
+    irisRange: `${irisMin.toFixed(1)}-${irisMax.toFixed(1)}`,
+  };
+}
+
+function genOrderId() { return "FF-"+Math.random().toString(36).substring(2,8).toUpperCase(); }
+function getETA()     { const d=new Date(); d.setDate(d.getDate()+10); return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}); }
+
+// ─── Frame SVGs ───────────────────────────────────────────────────────────────
 const FrameSVG = ({ id, size=56, color="currentColor" }) => {
   const p = { fill:"none", stroke:color, strokeLinecap:"round", strokeLinejoin:"round" };
   const s = {
@@ -34,380 +297,968 @@ const FrameSVG = ({ id, size=56, color="currentColor" }) => {
     "sporty-wrap": <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><path d="M2 20 Q4 8 20 8 Q36 8 40 20 Q44 8 60 8 Q76 8 78 20 Q76 32 60 30 Q44 28 40 20 Q36 28 20 30 Q4 32 2 20Z"/><line x1="0" y1="16" x2="2" y2="20"/><line x1="80" y1="16" x2="78" y2="20"/></svg>,
     "geometric":   <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><polygon points="20,5 34,12 34,26 20,33 6,26 6,12"/><polygon points="60,5 74,12 74,26 60,33 46,26 46,12"/><line x1="34" y1="19" x2="46" y2="19"/><line x1="0" y1="14" x2="6" y2="18"/><line x1="80" y1="14" x2="74" y2="18"/></svg>,
   };
-  return s[id] || s.rectangle;
+  return s[id] || s["rectangle"];
 };
 
-function ColorwaySVG({ colorway, size=88 }) {
-  const gradId = `tortoise-${colorway.id}`;
-  const fill = colorway.fill === "tortoise" ? `url(#${gradId})` : colorway.fill;
-  return (
-    <svg width={size} height={size*.5} viewBox="0 0 96 48" fill="none" aria-hidden="true">
-      {colorway.fill === "tortoise"&&<defs><linearGradient id={gradId} x1="0" y1="0" x2="96" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="var(--colorway-tortoise-1)"/><stop offset="0.38" stopColor="var(--colorway-tortoise-2)"/><stop offset="0.62" stopColor="var(--colorway-tortoise-3)"/><stop offset="1" stopColor="var(--colorway-tortoise-2)"/></linearGradient></defs>}
-      <rect x="6" y="10" width="34" height="26" rx="8" fill={fill} stroke="rgba(255,255,255,.18)" strokeWidth="2"/>
-      <rect x="56" y="10" width="34" height="26" rx="8" fill={fill} stroke="rgba(255,255,255,.18)" strokeWidth="2"/>
-      <path d="M40 23.5 C44 20.5 52 20.5 56 23.5" stroke={fill} strokeWidth="5" strokeLinecap="round"/>
-      <path d="M6 22 L0 18 M90 22 L96 18" stroke={fill} strokeWidth="5" strokeLinecap="round"/>
-      <circle cx="20" cy="22" r="2.5" fill="rgba(255,255,255,.2)"/>
-      <circle cx="70" cy="22" r="2.5" fill="rgba(255,255,255,.2)"/>
-    </svg>
-  );
-}
-
-function ProofIcon({ type }) {
-  if (type === "flag") return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 4v16"/><path d="M4 5h14l-2 4 2 4H4"/><path d="M7 8h5"/></svg>;
-  if (type === "box") return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 8l8-4 8 4-8 4-8-4Z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>;
-  if (type === "lock") return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>;
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 12a8 8 0 0 1-13.6 5.7"/><path d="M4 12A8 8 0 0 1 17.6 6.3"/><path d="M17 2v5h-5"/><path d="M7 22v-5h5"/></svg>;
-}
-
-function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=false}){
-  const VW=400,VH=300,cx=200,cy=150,rx=78,ry=108;
-  const h=((rx-ry)/(rx+ry))**2;
-  const circ=Math.PI*(rx+ry)*(1+(3*h)/(10+Math.sqrt(4-3*h)));
-  const bo=facePresent?.62:.2;
-  const activeFill=clamp(done?0:fill,0,1);
-  return (
-    <svg className="face-guide" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      {!done&&autoStartPct>0&&autoStartPct<1&&(
-        <ellipse cx={cx} cy={cy} rx={rx+11} ry={ry+11} fill="none"
-          stroke="rgba(255,255,255,.1)" strokeWidth="2"
-          strokeDasharray={`${autoStartPct*circ*1.1} 9999`}
-          strokeLinecap="round" transform={`rotate(-90 ${cx} ${cy})`}/>
-      )}
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
-        stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" vectorEffect="non-scaling-stroke" style={{transition:"stroke .4s ease"}}/>
-      {activeFill>0&&<path
-        d={`M ${cx} ${cy-ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy+ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy-ry}`}
-        fill="none" stroke="#4caf7d" strokeWidth="3" strokeLinecap="round"
-        strokeDasharray={circ} strokeDashoffset={circ*(1-activeFill)}
-        vectorEffect="non-scaling-stroke"
-        style={{transition:"stroke-dashoffset .1s linear"}}/>}
-      {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
-        fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
-      {!done&&showCard&&(
-        <g opacity=".92">
-          <rect x="90" y="205" width="220" height="139" rx="6" fill="rgba(0,0,0,.18)" stroke="#4caf7d" strokeWidth="2" strokeDasharray="7 6" style={{animation:"cardPulse 1.4s ease-in-out infinite"}}/>
-          <text x="200" y="274" textAnchor="middle" fill="rgba(255,255,255,.82)"
-            fontSize="11" fontFamily="'Geist Mono',monospace" letterSpacing="1">CARD</text>
-        </g>
-      )}
-    </svg>
-  );
-}
-
-const MEASURE_FIELDS = [
-  { key:"pd", label:"PD", hint:"Distance between pupils. Typical range 56-74mm.", min:52, max:80 },
-  { key:"bridge", label:"Bridge", hint:"Bridge width above your nose. Typical range 14-24mm.", min:10, max:28 },
-  { key:"faceH", label:"Face H", hint:"Vertical face height used to scale the custom frame.", min:80, max:170 },
-  { key:"temple", label:"Temple", hint:"Arm length from hinge to tip. Typical range 130-155mm.", min:120, max:170 },
+// ─── Data ─────────────────────────────────────────────────────────────────────
+const FRAMES = [
+  { id:"thin-round",  label:"Thin Round",     desc:"Wire. Circular. Timeless.",      tags:["minimal","soft","retro","classic","clean"] },
+  { id:"bold-square", label:"Bold Square",    desc:"Thick. Structured. Presence.",   tags:["bold","statement","modern","confident"] },
+  { id:"cat-eye",     label:"Cat Eye",        desc:"Upswept. Distinct. Playful.",    tags:["vintage","expressive","retro","statement"] },
+  { id:"navigator",   label:"Navigator",      desc:"Teardrop. Works on most faces.", tags:["classic","clean","modern","adjustable"] },
+  { id:"rectangle",   label:"Slim Rectangle", desc:"Low profile. Understated.",      tags:["minimal","sleek","modern","clean","slim"] },
+  { id:"round-thick", label:"Round Thick",    desc:"Wide. Retro. Confident.",        tags:["bold","retro","statement","vintage"] },
+  { id:"sporty-wrap", label:"Sporty Wrap",    desc:"Curved. Active. Polished.",      tags:["sporty","practical","adjustable","bold"] },
+  { id:"geometric",   label:"Geometric",      desc:"Angular. Unconventional.",       tags:["editorial","modern","statement","bold"] },
 ];
 
-function isSane(value, field) {
-  if (value === "" || value == null) return null;
-  const n = parseFloat(value);
-  if (!Number.isFinite(n)) return false;
-  return n >= field.min && n <= field.max;
+const STYLE_QUESTIONS = [
+  { id:"fit",      q:"How do glasses usually feel on you?", options:[
+    { label:"Too tight at my temples",           tags:["slim","minimal","soft"] },
+    { label:"They slide down constantly",        tags:["adjustable","sporty","practical"] },
+    { label:"I've never found a pair that fits", tags:["adjustable","bold","sporty"] },
+    { label:"Fine mostly, just never perfect",   tags:["classic","clean","modern"] },
+  ]},
+  { id:"vibe",     q:"What's your visual instinct?", options:[
+    { label:"Quiet. Clean lines, nothing extra",    tags:["minimal","clean","soft"] },
+    { label:"Present. Something people notice",     tags:["bold","statement","confident"] },
+    { label:"Timeless. Classic shapes, no trends",  tags:["retro","classic","vintage"] },
+    { label:"Relaxed. Comfortable over everything", tags:["sporty","practical","soft"] },
+  ]},
+  { id:"use",      q:"Where will you wear them most?", options:[
+    { label:"At a desk, most of the day",        tags:["minimal","sleek","clean"] },
+    { label:"Out and about, always on",          tags:["sporty","practical","bold"] },
+    { label:"Both - they need to do everything", tags:["clean","modern","classic"] },
+    { label:"Special occasions only",            tags:["bold","expressive","statement"] },
+  ]},
+  { id:"priority", q:"What matters most in a frame?", options:[
+    { label:"It disappears on my face",       tags:["minimal","soft","clean"] },
+    { label:"It says something about me",     tags:["bold","statement","editorial"] },
+    { label:"It holds up to daily use",       tags:["sporty","practical","modern"] },
+    { label:"It fits without any adjustment", tags:["classic","adjustable","clean"] },
+  ]},
+];
+
+const DEFAULT_LENS = { id:"bluelight", label:"Blue Light", price:0 };
+
+const SCAN_SEQ = [
+  { holdMs:1500, fill:0.08 },
+  { holdMs:3000, fill:0.35 },
+  { holdMs:3000, fill:0.65 },
+  { holdMs:2500, fill:0.88 },
+  { holdMs:1500, fill:1.00 },
+];
+const PRE_SCAN_SETTLE_MS = 1000;
+const SCAN_DURATION_SECONDS_PLACEHOLDER = 12;
+
+// ─── CSS ──────────────────────────────────────────────────────────────────────
+const css = `
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  :root{
+    --bg:#0a0c0b;--bg2:#11110f;--surface:#161615;--surface2:#1d1d1b;--panel:#141413;
+    --border:#2b2b28;--border2:#3a3a35;--text:#f2f0e8;--mid:#b0ada2;--dim:#858176;--soft:#555249;
+    --accent:#4caf7d;--accent2:#73d7a0;--accent-bg:#0d2117;--red:#ff5a52;--amber:#e5a64a;--scan:#030303;
+  }
+  html,body{height:100%;}
+  html{background:var(--bg);}
+  body{color:var(--text);font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior:none;}
+  button,input{-webkit-tap-highlight-color:transparent;}
+  a{color:inherit;text-decoration:none;}
+  .app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);opacity:0;}
+  .app.app-ready{animation:pageFade .4s ease-out forwards;}
+  @keyframes pageFade{from{opacity:0}to{opacity:1}}
+  .app.intro-active .site-header .logo{opacity:0;}
+  .intro-logo{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);pointer-events:none;animation:logoCollapse .6s cubic-bezier(.4,0,.2,1) forwards;}
+  @keyframes logoCollapse{to{left:max(18px,calc(50% - 213px));top:27px;transform:none;font-size:15px;font-weight:500;letter-spacing:-.02em;}}
+  .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:flex-start;}
+  .logo{font:inherit;font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1;cursor:pointer;background:transparent;border:0;padding:0;}
+  .logo:hover{color:#fff;}
+  .logo-dot{color:var(--accent);}
+  .container{width:100%;max-width:462px;padding:0 18px;}
+  .section{margin-top:20px;padding:22px 18px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.25);animation:fu .34s cubic-bezier(.4,0,.2,1) both;}
+  @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
+  .display{font-size:34px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.02;margin-bottom:12px;max-width:330px;}
+  .display em{font-style:normal;color:var(--accent);}
+  .step-head{font-size:26px;font-weight:600;color:var(--text);letter-spacing:-.035em;line-height:1.08;margin-bottom:6px;}
+  .body-lg{font-size:14px;color:var(--dim);line-height:1.62;font-weight:300;margin-bottom:24px;max-width:360px;}
+  .step-sub{font-size:13px;color:var(--dim);line-height:1.6;font-weight:300;margin-bottom:18px;letter-spacing:-.01em;}
+  .privacy-inline{display:flex;align-items:flex-start;justify-content:center;gap:6px;max-width:300px;margin-top:2px;color:var(--soft);font-size:11px;font-weight:300;line-height:1.45;}
+  .privacy-inline svg{flex:0 0 auto;margin-top:1px;opacity:.7;}
+  .logo-large{display:inline-block;font-size:34px;letter-spacing:-.04em;margin-bottom:18px;}
+  .about-list{border-top:1px solid var(--border);margin-top:20px;}
+  .about-row{padding:15px 0;border-bottom:1px solid var(--border);}
+  .about-row h2{font-size:13px;font-weight:500;color:var(--text);margin-bottom:5px;letter-spacing:-.01em;}
+  .about-row p{font-size:12px;color:var(--dim);line-height:1.55;font-weight:300;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:12px 18px;font-family:'Geist',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:none;border-radius:9px;transition:background .16s,border-color .16s,color .16s,transform .16s;white-space:nowrap;touch-action:manipulation;}
+  .btn-primary{background:var(--text);color:#0d0d0d;}
+  .btn-primary:hover{background:#ffffff;transform:translateY(-1px);}
+  .btn-accent{background:var(--accent);color:#07110b;}
+  .btn-accent:hover{background:var(--accent2);transform:translateY(-1px);}
+  .btn-ghost{background:transparent;color:var(--dim);border:1px solid var(--border2);}
+  .btn-ghost:hover{border-color:var(--dim);color:var(--text);}
+  .btn:disabled{opacity:.28;cursor:not-allowed;transform:none!important;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .btn-row .btn{flex:1;min-width:128px;}
+  .cam-outer{width:100%;border-radius:12px;overflow:hidden;background:var(--scan);position:relative;margin-bottom:18px;border:1px solid var(--border2);}
+  .cam-inner{width:100%;aspect-ratio:4/3;position:relative;}
+  .cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;}
+  .cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none;z-index:1;}
+  .cam-vignette{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at center,transparent 54%,rgba(0,0,0,.34) 100%);}
+  .face-guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;filter:drop-shadow(0 0 7px rgba(76,175,125,.55));}
+  @keyframes ovalPulse{0%,100%{opacity:0.28;}50%{opacity:0.5;}}
+  .oval-waiting{animation:ovalPulse 2.2s ease-in-out infinite;}
+  .cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:5;padding:28px 16px 15px;background:linear-gradient(transparent,rgba(0,0,0,.68));display:flex;flex-direction:column;align-items:center;gap:4px;}
+  @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
+  @keyframes lockIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}
+  .face-intro{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s ease both;}
+  .face-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;line-height:1.08;}
+  .face-intro-sub{margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);font-weight:300;}
+  @keyframes introFade{0%{opacity:0}12%{opacity:1}72%{opacity:1}100%{opacity:0}}
+  .settle-intro{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.1);pointer-events:none;animation:settleFade 1s ease both;}
+  .settle-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;}
+  @keyframes settleFade{0%{opacity:0}18%{opacity:1}82%{opacity:1}100%{opacity:0}}
+  .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s ease both;}
+  .scan-note{font-size:12px;color:var(--dim);line-height:1.55;text-align:center;margin:-4px auto 16px;max-width:310px;font-weight:300;}
+  .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--dim);}
+  .calibration-strip strong{color:var(--accent);font-weight:500;}
+  .cam-placeholder{width:100%;min-height:260px;border-radius:12px;background:var(--surface2);border:1px dashed var(--border2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:28px 24px;margin-bottom:18px;text-align:center;}
+  .pre-scan-card{align-items:flex-start;text-align:left;border-style:solid;gap:13px;background:#111312;border-color:rgba(255,255,255,0.07);border-radius:18px;}
+  .pre-scan-line{font-size:13px;color:var(--text);font-weight:400;line-height:1.45;}
+  .pre-scan-support{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;}
+  .setup-diagram{width:100%;aspect-ratio:1.85/1;border:1px solid var(--border);border-radius:14px;background:radial-gradient(85% 90% at 50% 32%, #15201b, #0c0e0d);overflow:hidden;color:var(--soft);}
+  .setup-diagram svg{display:block;width:100%;height:100%;}
+  .setup-diagram circle{stroke:rgba(255,255,255,0.55);}
+  .setup-diagram rect{fill:rgba(76,175,125,0.06);}
+  .setup-list{display:grid;gap:6px;width:100%;font-size:12px;color:var(--dim);line-height:1.45;}
+  .pre-scan-card .privacy-inline{align-self:center;text-align:center;margin-top:4px;}
+  .cam-icon{width:42px;height:42px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;color:var(--dim);}
+  .cam-label{font-size:14px;color:var(--text);font-weight:500;}
+  .cam-sub{font-size:12px;color:var(--dim);line-height:1.6;max-width:250px;font-weight:300;}
+  .err-box{padding:11px 14px;background:#23190d;border:1px solid #4d3820;border-radius:8px;font-size:12px;color:var(--amber);line-height:1.65;max-width:286px;}
+  .quality-card{margin-top:2px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;}
+  .quality-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .quality-title{font-size:13px;font-weight:500;color:var(--text);}
+  .quality-pill{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:5px 8px;border-radius:999px;background:var(--accent-bg);color:var(--accent);}
+  .quality-pill.bad{background:#24110f;color:var(--red);}
+  .quality-copy{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;margin-bottom:12px;}
+  .measure-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+  .measure-field label{display:block;font-size:10px;color:var(--soft);font-family:'Geist Mono',monospace;letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px;}
+  .measure-input{width:100%;min-height:44px;padding:10px 9px;background:var(--panel);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;outline:none;font-family:'Geist Mono',monospace;font-weight:300;-webkit-appearance:none;}
+  .measure-input:focus{border-color:var(--accent);}
+  .measure-help{font-size:11px;color:var(--soft);font-weight:300;line-height:1.45;margin-bottom:12px;}
+  .q-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .q-counter{font-family:'Geist Mono',monospace;font-size:11px;color:var(--soft);letter-spacing:.06em;}
+  .q-label{font-size:19px;font-weight:500;color:var(--text);letter-spacing:-.025em;line-height:1.28;margin-bottom:16px;}
+  .choices{display:flex;flex-direction:column;gap:8px;}
+  .choice{min-height:48px;padding:14px 16px;border:1px solid var(--border2);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:left;font-family:'Geist',sans-serif;font-size:14px;color:var(--text);font-weight:300;line-height:1.4;width:100%;transition:border-color .12s,background .12s,color .12s,transform .12s;}
+  .choice:active{transform:scale(.985);}
+  .choice.chosen{border-color:var(--accent);background:var(--accent-bg);color:var(--text);}
+  .lens-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:22px;}
+  .lens-row{min-height:126px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);transition:border-color .12s,background .12s,transform .12s;}
+  .lens-row:active{transform:scale(.985);}
+  .lens-row.sel{border-color:var(--accent);background:var(--accent-bg);}
+  .lens-info{flex:1;}
+  .lens-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;}
+  .lens-desc{font-size:11px;color:var(--dim);font-weight:300;line-height:1.45;}
+  .lens-price{font-family:'Geist Mono',monospace;font-size:11px;color:var(--accent);}
+  .rx-block{padding:15px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:18px;}
+  .rx-lbl{font-size:10px;font-family:'Geist Mono',monospace;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;}
+  .rx-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .rx-item label{display:block;font-size:10px;color:var(--soft);margin-bottom:5px;}
+  .rx-input{width:100%;padding:10px 9px;background:var(--panel);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:16px;outline:none;font-family:'Geist Mono',monospace;font-weight:300;-webkit-appearance:none;}
+  .rx-input:focus{border-color:var(--accent);}
+  .vto-note{display:flex;align-items:flex-start;gap:9px;padding:12px 13px;border:1px solid var(--border);border-radius:10px;margin-bottom:16px;background:var(--surface2);}
+  .vto-note-icon{color:var(--accent);flex-shrink:0;padding-top:1px;}
+  .vto-note-text{font-size:11px;color:var(--dim);font-weight:300;line-height:1.5;}
+  .vto-note-text strong{color:var(--text);font-weight:400;}
+  .frame-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+  .frame-tile{min-height:138px;padding:16px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:center;transition:border-color .14s,background .14s,box-shadow .14s,transform .12s;position:relative;}
+  .frame-tile:active{transform:scale(.985);}
+  .frame-tile:hover{border-color:var(--border2);}
+  .frame-tile.sel{border-color:var(--accent);background:var(--accent-bg);box-shadow:0 0 0 1px rgba(76,175,125,.18) inset;}
+  .frame-tile-icon{display:flex;justify-content:center;align-items:center;margin:8px 0 11px;min-height:28px;color:var(--dim);}
+  .frame-tile-name{font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px;}
+  .frame-tile.sel .frame-tile-name{color:var(--text);}
+  .frame-tile-desc{font-size:11px;color:var(--dim);font-weight:300;line-height:1.4;}
+  .frame-fit-note{font-size:10px;color:var(--accent);font-family:'Geist Mono',monospace;line-height:1.35;margin-top:8px;}
+  .best-badge{position:absolute;top:9px;right:9px;font-size:8px;padding:3px 7px;background:var(--accent);color:#07110b;border-radius:4px;font-family:'Geist Mono',monospace;letter-spacing:.06em;text-transform:uppercase;}
+  .receipt{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px;}
+  .receipt-head{padding:13px 16px;border-bottom:1px solid var(--border);font-size:10px;font-family:'Geist Mono',monospace;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
+  .receipt-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--dim);font-weight:300;}
+  .receipt-total{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;border-top:1px solid var(--border);font-size:15px;font-weight:500;color:var(--text);}
+  .field{width:100%;min-height:46px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:16px;font-family:'Geist',sans-serif;outline:none;margin-bottom:8px;font-weight:300;transition:border-color .15s;-webkit-appearance:none;}
+  .field::placeholder{color:var(--soft);}
+  .field:focus{border-color:var(--dim);}
+  .trust-line{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:13px;font-size:11px;color:var(--soft);font-weight:300;}
+  .confirm-id{font-family:'Geist Mono',monospace;font-size:11px;color:var(--soft);letter-spacing:.06em;margin-bottom:18px;}
+  .confirm-greeting{font-size:30px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.06;margin-bottom:12px;}
+  .confirm-body{font-size:13px;color:var(--dim);line-height:1.65;font-weight:300;margin-bottom:26px;}
+  .confirm-body strong{color:var(--text);font-weight:400;}
+  .next-steps{border-top:1px solid var(--border);}
+  .next-step{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border);}
+  .next-step-num{font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);padding-top:2px;min-width:18px;}
+  .next-step-label{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;}
+  .next-step-desc{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;}
+  .confirm-footer{margin-top:24px;font-size:11px;color:var(--soft);text-align:center;font-family:'Geist Mono',monospace;letter-spacing:.04em;}
+  .processing-card{width:100%;padding:18px 16px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:18px;}
+  .processing-logo{font-size:16px;font-weight:500;color:var(--text);letter-spacing:-.02em;}
+  .processing-copy{font-size:13px;color:var(--dim);font-weight:300;}
+  .processing-track{width:100%;height:4px;border-radius:999px;background:var(--border);overflow:hidden;}
+  .processing-fill{height:100%;width:100%;background:var(--accent);border-radius:999px;transform-origin:left center;animation:processFill 2s ease-in-out both;}
+  @keyframes processFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  .verification-strip{width:100%;max-width:420px;margin:22px auto 0;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;color:var(--soft);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.45;text-transform:uppercase;letter-spacing:.06em;}
+  .geo-footer{width:100%;max-width:420px;margin:24px auto 0;border-top:1px solid var(--border);padding-top:8px;}
+  .geo-block{border-bottom:1px solid var(--border);}
+  .geo-block summary{list-style:none;cursor:pointer;padding:12px 0;font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
+  .geo-block summary::-webkit-details-marker{display:none;}
+  .geo-block summary::after{content:'+';float:right;color:var(--soft);}
+  .geo-block[open] summary::after{content:'-';}
+  .geo-content{padding:0 0 14px;font-size:12px;color:var(--dim);line-height:1.58;font-weight:300;}
+  .geo-content p{margin-bottom:9px;}
+  .geo-content p:last-child{margin-bottom:0;}
+  .geo-content strong{color:var(--text);font-weight:400;}
+  .debug-overlay{position:absolute;top:9px;left:9px;z-index:7;padding:8px 9px;border-radius:7px;background:rgba(0,0,0,.68);color:rgba(255,255,255,.78);font-family:'Geist Mono',monospace;font-size:9px;line-height:1.45;text-align:left;pointer-events:none;}
+  @media (max-width:390px){
+    .site-header{padding-left:14px;padding-right:14px;}
+    .container{padding-left:14px;padding-right:14px;}
+    .section{padding:20px 16px;border-radius:14px;}
+    .display{font-size:31px;}
+    .step-head{font-size:24px;}
+    .lens-list,.frame-grid{gap:7px;}
+    .lens-row{min-height:132px;padding:14px 12px;}
+    .frame-tile{min-height:142px;padding-left:10px;padding-right:10px;}
+    .rx-grid{grid-template-columns:1fr 1fr;}
+    .btn-row .btn{min-width:112px;}
+  }
+`;
+
+// ─── Camera error ─────────────────────────────────────────────────────────────
+function classifyCamError(err) {
+  const n = err?.name||"";
+  const local = location.hostname==="localhost"||location.hostname==="127.0.0.1";
+  if (!local&&location.protocol!=="https:") return {type:"https",headline:"HTTPS required",detail:"Camera requires a secure connection.",fix:null};
+  if (n==="NotFoundError"||n==="DevicesNotFoundError") return {type:"nohardware",headline:"No camera found",detail:"No camera detected on this device.",fix:null};
+  if (n==="NotReadableError"||n==="TrackStartError")   return {type:"inuse",headline:"Camera in use",detail:"Another app is using the camera. Close it and try again.",fix:"retry"};
+  if (n==="NotAllowedError"||n==="PermissionDeniedError") {
+    const safari=/Safari/.test(navigator.userAgent)&&!/Chrome/.test(navigator.userAgent);
+    return {type:"denied",headline:"Camera access blocked",fix:"reload",
+      detail:safari?"Safari > Settings for this Website > Camera > Allow > reload.":"Tap the camera icon in your address bar > Allow > reload."};
+  }
+  return {type:"unknown",headline:"Camera unavailable",detail:`${err?.message||"Unknown error"}. Try reloading.`,fix:"reload"};
 }
 
-function sanitizeText(value, max=160) {
-  return value.trim().replace(/[<>"'&]/g, "").slice(0, max);
-}
+// ─── useCamera ────────────────────────────────────────────────────────────────
+function useCamera() {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [ready, setReady]   = useState(false);
+  const [requesting,setRequesting] = useState(false);
+  const [camErr,setCamErr]  = useState(null);
 
-// --- Why Section ---
-function WhySection() {
-  return (
-    <section className="why-section">
-      <p className="why-lead">glasses are built for an average face. most of us aren't average.</p>
-      <p className="why-body">FitFrame exists for the person who gave up without realizing it. one browser-based scan maps your face to real millimeter measurements. a carbon fiber nylon frame gets printed to those numbers — zero inventory, zero waste, built to your geometry. <span className="why-emph">not adjusted. not approximated. yours.</span></p>
-    </section>
-  );
-}
+  const attachStream = useCallback(async (stream=streamRef.current) => {
+    const v=videoRef.current;
+    if (!v||!stream) return false;
+    if (v.srcObject!==stream) v.srcObject=stream;
+    v.setAttribute("playsinline","");
+    v.setAttribute("autoplay","");
+    v.muted=true;
+    v.play().catch(()=>{});
+    return true;
+  }, []);
 
-// --- Process Photography Slots ---
-function ProcessSection() {
-  return (
-    <section className="process-section">
-      <div className="eyebrow">how we build it</div>
-      <p className="process-body">every pair starts with your scan. the measurements go directly into the print file — no averaging, no standardizing. PA12 carbon fiber nylon is printed layer by layer to those numbers, finished by hand, and shipped from the US. nothing is made until you order.</p>
-    </section>
-  );
-}
+  const start = useCallback(async () => {
+    setCamErr(null);
+    setRequesting(true);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setRequesting(false);
+      setCamErr({type:"https",headline:"Camera unavailable",detail:"Ensure you're on https://",fix:null});
+      return;
+    }
+    try {
+      let stream;
+      try   { stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640},height:{ideal:480},aspectRatio:{ideal:1.333}},audio:false}); }
+      catch { stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false}); }
+      streamRef.current=stream;
+      setReady(true);
+      await attachStream(stream);
+    } catch(e) {
+      streamRef.current?.getTracks().forEach(t=>t.stop());
+      streamRef.current=null;
+      setReady(false);
+      setCamErr(classifyCamError(e));
+    } finally {
+      setRequesting(false);
+    }
+  }, [attachStream]);
 
-// --- FAQ Page (standalone route) ---
-function FAQPage() {
   useEffect(()=>{
-    document.title = "FAQ | FitFrame";
-    const existing = document.getElementById("fitframe-faq-schema");
-    if (existing) existing.remove();
-    const script = document.createElement("script");
-    script.id = "fitframe-faq-schema";
-    script.type = "application/ld+json";
-    script.textContent = JSON.stringify({
-      "@context":"https://schema.org",
-      "@type":"FAQPage",
-      mainEntity:FAQS.map(item=>({
-        "@type":"Question",
-        name:item.q,
-        acceptedAnswer:{ "@type":"Answer", text:item.a }
-      }))
+    if (ready) attachStream();
+  },[attachStream,ready]);
+
+  const stop = useCallback(() => {
+    const v=videoRef.current;
+    const stream=streamRef.current||v?.srcObject;
+    if (stream) stream.getTracks().forEach(t=>t.stop());
+    streamRef.current=null;
+    if (v) v.srcObject=null;
+    setReady(false);
+    setRequesting(false);
+  }, []);
+
+  return { videoRef, ready, requesting, camErr, start, stop };
+}
+
+// ─── useFaceScan ──────────────────────────────────────────────────────────────
+const HOLD_FRAMES = 18;
+function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, debugScan=false, onCardLocked, onCardSkipped, onAutoStart, onScanAbort }) {
+  const fmRef          = useRef(null);
+  const workCanvasRef  = useRef(null);
+  const [mpReady,      setMpReady]      = useState(false);
+  const [cvReady,      setCvReady]      = useState(false);
+  const samplesRef     = useRef([]);
+  const scaleHistoryRef= useRef([]);
+  const noseXRef       = useRef([]);
+  const validRef       = useRef(0);
+  const totalRef       = useRef(0);
+  const facePresentFramesRef = useRef(0);
+  const poseValidFramesRef = useRef(0);
+  const faceLostRef    = useRef(0);
+  const poseLostRef    = useRef(0);
+  const discardRef     = useRef({});
+  const cardStableRef  = useRef(0);
+  const lastCardRef    = useRef(null);
+  const cardLockedRef  = useRef(false);
+  const cardLoadFailedRef = useRef(false);
+  const cardStartedRef = useRef(null);
+  const loopRef        = useRef(null);
+  const procRef        = useRef(false);
+  const scanningRef    = useRef(false);
+  const doneRef        = useRef(false);
+  const scaleRef       = useRef(scaleMmPerPx);
+  const scaleSourceRef = useRef(scaleSource);
+  const holdRef        = useRef(0);
+  const autoStarted    = useRef(false);
+  const fillRef        = useRef(0);
+  const abortingRef    = useRef(false);
+
+  const [seqIdx,       setSeqIdx]       = useState(-1);
+  const [fill,         setFill]         = useState(0);
+  const [done,         setDone]         = useState(false);
+  const [measurements, setMeasurements] = useState(null);
+  const [autoStartPct, setAutoStartPct] = useState(0);
+  const [facePresent,  setFacePresent]  = useState(false);
+  const [poseHint,     setPoseHint]     = useState(null);
+  const [quality,      setQuality]      = useState(null);
+  const [validPct,     setValidPct]     = useState(0);
+  const [cardStatus,   setCardStatus]   = useState({label:"scale — iris reference",stablePct:0,reason:""});
+  const [debugInfo,    setDebugInfo]    = useState(null);
+
+  useEffect(()=>{ scanningRef.current=scanning; },[scanning]);
+  useEffect(()=>{ doneRef.current=done; },[done]);
+  useEffect(()=>{ scaleRef.current=scaleMmPerPx; scaleSourceRef.current=scaleSource; },[scaleMmPerPx,scaleSource]);
+  useEffect(()=>{ if (!needsCard) cardStartedRef.current=null; },[needsCard]);
+
+  const clearScanCanvas=useCallback(()=>{
+    const canvas=canvasRef.current;
+    const video=videoRef.current;
+    if (!canvas) return;
+    const W=video?.videoWidth||canvas.width||640;
+    const H=video?.videoHeight||canvas.height||480;
+    canvas.width=W; canvas.height=H;
+    canvas.getContext("2d")?.clearRect(0,0,W,H);
+  },[canvasRef,videoRef]);
+
+  const markDiscard=useCallback((reason)=>{
+    const key=reason||"unknown";
+    discardRef.current[key]=(discardRef.current[key]||0)+1;
+  },[]);
+
+  const logScanDebug=useCallback((label,extra={})=>{
+    const payload={
+      validFrames:validRef.current,
+      totalFrames:totalRef.current,
+      faceFrames:facePresentFramesRef.current,
+      poseFrames:poseValidFramesRef.current,
+      samples:samplesRef.current.length,
+      discarded:{...discardRef.current},
+      scaleSource:scaleSourceRef.current,
+      ...extra,
+    };
+    if (debugScan) console.debug(`[FitFrame scan] ${label}`, payload);
+    if (label==="complete") console.info("[FitFrame scan] complete", payload);
+  },[debugScan]);
+
+  const resetSampleState=useCallback(()=>{
+    samplesRef.current=[]; noseXRef.current=[]; scaleHistoryRef.current=[];
+    validRef.current=0; totalRef.current=0;
+    facePresentFramesRef.current=0; poseValidFramesRef.current=0;
+    faceLostRef.current=0; poseLostRef.current=0;
+    discardRef.current={};
+  },[]);
+
+  const abortActiveScan=useCallback((reason="scan lost. position your face and tap start again.")=>{
+    if (abortingRef.current) return;
+    abortingRef.current=true;
+    clearScanCanvas();
+    setSeqIdx(-1); setFill(0); fillRef.current=0;
+    setDone(false); setMeasurements(null); setQuality(null);
+    setValidPct(0); setAutoStartPct(0); setPoseHint(null); setFacePresent(false);
+    setDebugInfo(null);
+    setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
+    resetSampleState();
+    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
+    holdRef.current=0; autoStarted.current=false;
+    onScanAbort?.(reason);
+    requestAnimationFrame(()=>{ abortingRef.current=false; });
+  },[clearScanCanvas,onScanAbort,resetSampleState]);
+
+  useEffect(()=>{
+    if (done) clearScanCanvas();
+  },[clearScanCanvas,done]);
+
+  const processCardFrame=useCallback((drawOverlay=true)=>{
+    const video=videoRef.current, canvas=canvasRef.current;
+    if (!video||(!canvas&&drawOverlay)||cardLockedRef.current) return;
+    const W=video.videoWidth||640, H=video.videoHeight||480;
+    let ctx=null;
+    if (drawOverlay){
+      canvas.width=W; canvas.height=H;
+      ctx=canvas.getContext("2d");
+      ctx.clearRect(0,0,W,H);
+      setFacePresent(false);
+      setPoseHint(null);
+      setAutoStartPct(0);
+    }
+
+    if (!cardStartedRef.current) cardStartedRef.current=performance.now();
+    const timedOut=performance.now()-cardStartedRef.current>CARD_FALLBACK_MS;
+    if (cardLoadFailedRef.current||timedOut){
+      cardLockedRef.current=true;
+      scaleSourceRef.current="iris-fallback";
+      setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
+      onCardSkipped?.();
+      return;
+    }
+    if (!cvReady){
+      setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
+      return;
+    }
+
+    const workCanvas=workCanvasRef.current||(workCanvasRef.current=document.createElement("canvas"));
+    const detection=detectCardOutline(video,W,H,workCanvas);
+    if (detection){
+      const similar=detectionSimilarity(detection,lastCardRef.current)<26;
+      const highConfidence=detection.confidence>=CARD_MIN_CONFIDENCE;
+      const flatEnough=detection.angle<=CARD_MAX_ROTATION_DEG;
+      cardStableRef.current=similar&&highConfidence&&flatEnough?Math.min(CARD_STABLE_FRAMES,cardStableRef.current+1):1;
+      lastCardRef.current=detection;
+      const stablePct=cardStableRef.current/CARD_STABLE_FRAMES;
+      if (ctx) drawDetectedCard(ctx,detection,stablePct);
+      const reason=!highConfidence?"both long sides visible, card facing the camera.":!flatEnough?"hold the card flatter.":"";
+      setCardStatus({label:stablePct>=1?"scale — card reference":"scale — iris reference",stablePct,reason,confidence:detection.confidence});
+      if (stablePct>=1&&!cardLockedRef.current){
+        cardLockedRef.current=true;
+        scaleRef.current=detection.mmPerPx;
+        scaleSourceRef.current="credit-card";
+        setCardStatus({label:"scale — card reference",stablePct:1,reason:"",confidence:detection.confidence});
+        onCardLocked?.({
+          mmPerPx:detection.mmPerPx,
+          cardWidthMm:CREDIT_CARD_WIDTH_MM,
+          cardHeightMm:CREDIT_CARD_HEIGHT_MM,
+          cardWidthPx:Math.round(detection.width),
+          cardHeightPx:Math.round(detection.height),
+          confidence:Number(detection.confidence.toFixed(2)),
+          corners:detection.quad.map(p=>({x:Math.round(p.x),y:Math.round(p.y)})),
+          timestamp:new Date().toISOString(),
+        });
+      }
+    } else {
+      cardStableRef.current=0;
+      lastCardRef.current=null;
+      setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
+    }
+  },[canvasRef,cvReady,onCardLocked,onCardSkipped,videoRef]);
+
+  useEffect(()=>{
+    loadOpenCv().then(()=>setCvReady(true)).catch(()=>{
+      cardLoadFailedRef.current=true;
+      setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     });
+  },[]);
+
+  const handleResults=useCallback((results)=>{
+    const video=videoRef.current, canvas=canvasRef.current;
+    if (!canvas||!video) return;
+    const W=video.videoWidth||640, H=video.videoHeight||480;
+    canvas.width=W; canvas.height=H;
+    const ctx=canvas.getContext("2d");
+    ctx.clearRect(0,0,W,H);
+    if (doneRef.current||abortingRef.current) { clearScanCanvas(); return; }
+
+    if (!results.multiFaceLandmarks?.length){
+      holdRef.current=0; setFacePresent(false); setPoseHint(null);
+      if (!autoStarted.current) setAutoStartPct(0);
+      if (scanningRef.current){
+        totalRef.current++;
+        faceLostRef.current++;
+        poseLostRef.current++;
+        markDiscard("no-face");
+        if (totalRef.current%15===0) logScanDebug("sampling");
+        if (faceLostRef.current>=FACE_ABORT_FRAMES) abortActiveScan();
+      }
+      return;
+    }
+
+    setFacePresent(true);
+    const lm=results.multiFaceLandmarks[0];
+    const pts=lm.map(p=>({x:p.x*W,y:p.y*H}));
+    const d=(a,b)=>Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
+    const pose=validatePose(lm);
+    const iris=calcIrisMetrics(pts,d);
+    const yawRatio=calcYawRatio(pts,d);
+    const yawValid=yawRatio<FACE_YAW_MAX;
+    const debugScale=(scaleRef.current || (iris.valid ? IRIS_MM / iris.avgDiam : null));
+    setDebugInfo({
+      lIrisPx:iris.lId?Number(iris.lId.toFixed(1)):null,
+      rIrisPx:iris.rId?Number(iris.rId.toFixed(1)):null,
+      scaleFactor:debugScale?Number(debugScale.toFixed(4)):null,
+      rawPd:debugScale?Number((d(468,473)*debugScale).toFixed(1)):null,
+      yawRatio:Number(yawRatio.toFixed(3)),
+      validFrames:validRef.current,
+      totalFrames:totalRef.current,
+      discarded:{...discardRef.current},
+      scaleSource:scaleSourceRef.current,
+    });
+    const tiltHint=iris.valid&&iris.isTilted&&!autoStarted.current&&!scanningRef.current?"Level your head":null;
+    setPoseHint(pose.valid?(yawValid?tiltHint:"Face the camera"):pose.reason);
+
+    if (onAutoStart&&!autoStarted.current&&!scanningRef.current){
+      pose.valid&&yawValid?holdRef.current++:(holdRef.current=Math.max(0,holdRef.current-2));
+      const pct=Math.min(holdRef.current/HOLD_FRAMES,1);
+      setAutoStartPct(pct);
+      if (pct>=1){ autoStarted.current=true; onAutoStart?.(); }
+    }
+
+    if (scanningRef.current){
+      totalRef.current++;
+      facePresentFramesRef.current++;
+      faceLostRef.current=0;
+      if (needsCard&&!cardLockedRef.current) processCardFrame(false);
+      if (!pose.valid||!yawValid){
+        poseLostRef.current++;
+        markDiscard(pose.valid?"yaw":"pose");
+        if (poseLostRef.current>=FACE_ABORT_FRAMES) abortActiveScan();
+        return;
+      }
+      poseValidFramesRef.current++;
+      poseLostRef.current=0;
+    }
+
+    const lId=iris.lId||0;
+    const rId=iris.rId||0;
+    if (scanningRef.current&&iris.valid){
+      const ink="#4caf7d"; // LOCKED — must match --accent
+      [[pts[468],lId],[pts[473],rId]].forEach(([c,diam])=>{
+        ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
+        ctx.strokeStyle=ink; ctx.lineWidth=1.5; ctx.stroke();
+      });
+      ctx.beginPath(); ctx.moveTo(pts[468].x,pts[468].y); ctx.lineTo(pts[473].x,pts[473].y);
+      ctx.strokeStyle=ink; ctx.lineWidth=.75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    if (scanningRef.current){
+      if (!iris.valid){
+        markDiscard(iris.reason);
+      } else {
+        const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef);
+        if (m){
+          samplesRef.current.push({...m,scaleSource:scaleSourceRef.current});
+          noseXRef.current.push(lm[1].x);
+          validRef.current++;
+        } else {
+          markDiscard("measurement-null");
+        }
+      }
+      if (totalRef.current%15===0) {
+        logScanDebug("sampling",{
+          lIrisPx:iris.lId?Number(iris.lId.toFixed(1)):null,
+          rIrisPx:iris.rId?Number(iris.rId.toFixed(1)):null,
+          irisDelta:iris.irisDelta?Number(iris.irisDelta.toFixed(3)):null,
+          tiltRatio:iris.tiltRatio?Number(iris.tiltRatio.toFixed(3)):null,
+        });
+      }
+    }
+  },[abortActiveScan,canvasRef,clearScanCanvas,logScanDebug,markDiscard,needsCard,onAutoStart,processCardFrame,videoRef]);
+
+  useEffect(()=>{
+    Promise.all([
+      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"),
+      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"),
+      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"),
+    ]).then(()=>{
+      function init(retry){
+        if (!window.FaceMesh){ if(retry) setTimeout(()=>init(false),800); return; }
+        const fm=new window.FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+        fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
+        fm.onResults(handleResults);
+        fm.initialize().then(()=>{ fmRef.current=fm; setMpReady(true); });
+      }
+      init(true);
+    }).catch(e=>console.error("MediaPipe:",e));
+  },[handleResults]);
+
+  useEffect(()=>{
+    const loop=async()=>{
+      const v=videoRef.current;
+      if (doneRef.current||abortingRef.current){
+        clearScanCanvas();
+      } else if (faceEnabled&&fmRef.current&&v&&v.readyState>=2&&!procRef.current){
+        procRef.current=true;
+        try { await fmRef.current.send({image:v}); } catch { /* frame processing can skip while MediaPipe warms up */ }
+        procRef.current=false;
+      }
+      loopRef.current=requestAnimationFrame(loop);
+    };
+    loopRef.current=requestAnimationFrame(loop);
+    return ()=>{ if(loopRef.current) cancelAnimationFrame(loopRef.current); };
+  },[clearScanCanvas,faceEnabled,videoRef]);
+
+  useEffect(()=>{
+    if (scanning&&!done){
+      abortingRef.current=false;
+      resetSampleState();
+      cardStartedRef.current=null; cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false;
+      setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
+      setSeqIdx(0);
+    }
+  },[done,resetSampleState,scanning]);
+
+  useEffect(()=>{
+    if (seqIdx<0||seqIdx>=SCAN_SEQ.length) return;
+    const step=SCAN_SEQ[seqIdx], start=fillRef.current, end=step.fill, t0=performance.now();
+    let raf;
+    const animate=now=>{
+      const t=Math.min((now-t0)/step.holdMs,1);
+      const v=start+(end-start)*t;
+      fillRef.current=v; setFill(v);
+      if (t<1){ raf=requestAnimationFrame(animate); }
+      else if (seqIdx<SCAN_SEQ.length-1){ setSeqIdx(i=>i+1); }
+      else {
+        setDone(true);
+        clearScanCanvas();
+        const s=samplesRef.current;
+        const vp=totalRef.current>0?validRef.current/totalRef.current:0;
+        const facePct=totalRef.current>0?facePresentFramesRef.current/totalRef.current:0;
+        const posePct=totalRef.current>0?poseValidFramesRef.current/totalRef.current:0;
+        setValidPct(Math.round(vp*100));
+        if (s.length<MIN_VALID_SAMPLES){
+          setQuality({label:"scan lost",rescan:true,reason:"scan lost. position your face and tap start again."});
+          setMeasurements(null);
+          logScanDebug("complete",{
+            sampleCount:s.length,
+            quality:"scan lost",
+            facePct:Number(facePct.toFixed(2)),
+            posePct:Number(posePct.toFixed(2)),
+          });
+        } else {
+          const cardSamples=s.filter(m=>m.scaleSource==="credit-card");
+          const sourceSamples=cardSamples.length>=MIN_VALID_SAMPLES?cardSamples:s;
+          const finalScaleSource=cardSamples.length>=MIN_VALID_SAMPLES?"credit-card":sourceSamples[0]?.scaleSource||scaleSourceRef.current;
+          const sorted=[...sourceSamples].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
+          const trim=Math.floor(sorted.length*.15);
+          const good=trim>0&&sorted.length>(trim*2+MIN_VALID_SAMPLES-1)
+            ?sorted.slice(trim,sorted.length-trim)
+            :sorted;
+          const weightedAvg=k=>{
+            const total=good.reduce((sum,m)=>sum+parseFloat(m[k])*(m.sampleWeight||1),0);
+            const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
+            return total/weights;
+          };
+          const weightedStd=k=>{
+            const vals=good.map(m=>parseFloat(m[k]));
+            const mean=weightedAvg(k);
+            const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
+            const variance=vals.reduce((sum,v,i)=>sum+((v-mean)**2)*(good[i].sampleWeight||1),0)/weights;
+            return Math.sqrt(variance);
+          };
+          const pd=weightedAvg("pd"),br=weightedAvg("bridge"),face=weightedAvg("faceW");
+          const lMono=weightedAvg("pdLeft"),rMono=weightedAvg("pdRight");
+          const monoSum=lMono+rMono;
+          const directPdSane=pd>=PD_ADULT_MIN&&pd<=PD_ADULT_MAX;
+          const monoSumSane=monoSum>=PD_ADULT_MIN&&monoSum<=PD_ADULT_MAX;
+          const finalPd=Math.abs(monoSum-pd)>2&&monoSumSane?monoSum:pd;
+          const pdStd=weightedStd("pd");
+          const bridgeStd=weightedStd("bridge");
+          const stable=pdStd<=2.0&&bridgeStd<=1.5;
+          const hardOutOfRange=!directPdSane&&!monoSumSane;
+          const reviewRangeIssue=br<BRIDGE_MIN||br>BRIDGE_MAX||Math.abs(lMono-rMono)>MONOCULAR_SYMMETRY;
+          setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:finalScaleSource});
+          const nextQuality=hardOutOfRange
+            ?{label:"Out of range",rescan:false,reason:"The PD landed outside the frame-fitting range. Review before continuing."}
+            :s.length<MIN_VALID_SAMPLES||vp<.25
+              ?{label:"Double-check these",rescan:false,reason:"We captured a small sample. Double-check the numbers below."}
+              :reviewRangeIssue||pdStd>4.5||bridgeStd>3
+                ?{label:"Review your numbers",rescan:false,reason:"Usable scan with some movement. Review the numbers below."}
+                :stable&&vp>=.6
+                  ?{label:"Clean scan",rescan:false,reason:"The scan had steady tracking and enough usable frames."}
+                  :{label:"Fair scan",rescan:false,reason:"Usable scan with natural movement. Review the numbers below."};
+          setQuality(nextQuality);
+          logScanDebug("complete",{
+            finalPd:Number(finalPd.toFixed(1)),
+            pdStd:Number(pdStd.toFixed(2)),
+            bridgeStd:Number(bridgeStd.toFixed(2)),
+            sampleCount:s.length,
+            facePct:Number(facePct.toFixed(2)),
+            posePct:Number(posePct.toFixed(2)),
+            quality:nextQuality.label,
+          });
+        }
+      }
+    };
+    raf=requestAnimationFrame(animate);
+    return ()=>cancelAnimationFrame(raf);
+  },[clearScanCanvas,logScanDebug,seqIdx]);
+
+  const reset=useCallback(()=>{
+    setSeqIdx(-1); setFill(0); fillRef.current=0;
+    setDone(false); setMeasurements(null); setQuality(null);
+    setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
+    setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
+    resetSampleState();
+    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
+    holdRef.current=0; autoStarted.current=false; abortingRef.current=false;
+  },[resetSampleState]);
+
+  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset};
+}
+
+// ─── FaceGuide ────────────────────────────────────────────────────────────────
+function FaceGuide({fill,poseHint,done=false}){
+  const VW=400,VH=300,cx=200,cy=150,rx=78,ry=108;
+  const activeFill=clamp(done?0:fill,0,1);
+  const waiting=!done&&activeFill<=0;
+  return (
+    <svg className="face-guide" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <filter id="scanGlow">
+          <feGaussianBlur stdDeviation="2.5" result="b"/>
+          <feMerge>
+            <feMergeNode in="b"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+      <ellipse
+        className={waiting?"oval-waiting":undefined}
+        cx={cx} cy={cy} rx={rx} ry={ry}
+        fill="none"
+        stroke="rgba(255,255,255,0.28)"
+        strokeWidth="1.5"
+      />
+      <path
+        d={`M${cx},${cy+ry} A${rx},${ry} 0 0,1 ${cx},${cy-ry}`}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="3"
+        strokeLinecap="round"
+        pathLength="1"
+        strokeDasharray="1"
+        strokeDashoffset={1 - activeFill}
+        filter="url(#scanGlow)"
+      />
+      <path
+        d={`M${cx},${cy+ry} A${rx},${ry} 0 0,0 ${cx},${cy-ry}`}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="3"
+        strokeLinecap="round"
+        pathLength="1"
+        strokeDasharray="1"
+        strokeDashoffset={1 - activeFill}
+        filter="url(#scanGlow)"
+      />
+      {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
+        fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
+    </svg>
+  );
+}
+
+function ScanSetupDiagram(){
+  return (
+    <div className="setup-diagram" aria-hidden="true">
+      <svg viewBox="0 0 360 195" fill="none">
+        <path d="M58 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
+        <path d="M220 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
+        <circle cx="180" cy="78" r="43" stroke="rgba(242,240,232,.72)" strokeWidth="2"/>
+        <path d="M156 86c11 9 37 9 48 0" stroke="rgba(242,240,232,.5)" strokeWidth="1.5" strokeLinecap="round"/>
+        <rect x="116" y="133" width="128" height="50" rx="7" stroke="#4caf7d" strokeWidth="2"/>
+        <path d="M180 121v12" stroke="#4caf7d" strokeWidth="2" strokeLinecap="round"/>
+        <text x="180" y="164" textAnchor="middle" fill="rgba(242,240,232,.72)" fontSize="10" fontFamily="'Geist Mono',monospace">CARD</text>
+      </svg>
+    </div>
+  );
+}
+
+// ─── Padlock ──────────────────────────────────────────────────────────────────
+function Padlock(){
+  return <svg width="11" height="12" viewBox="0 0 11 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1" y="5" width="9" height="7" rx="1.5"/>
+    <path d="M3 5V3.5a2.5 2.5 0 0 1 5 0V5"/>
+  </svg>;
+}
+
+function useFitFrameJsonLd(){
+  useEffect(()=>{
+    document.getElementById("fitframe-json-ld")?.remove();
+    const script=document.createElement("script");
+    script.id="fitframe-json-ld";
+    script.type="application/ld+json";
+    script.textContent=JSON.stringify([
+      {
+        "@context":"https://schema.org",
+        "@type":"Product",
+        name:"FitFrame Custom Eyewear",
+        description:"Browser-based face scan measuring PD, bridge, lens height, temple, and face width in millimeters. Frames 3D printed in PA12 nylon to exact measurements. Ships 7-10 days.",
+        brand:{ "@type":"Brand", name:"FitFrame" },
+        url:DOMAIN_URL,
+        audience:{
+          "@type":"PeopleAudience",
+          audienceType:"people who have never found glasses that fit",
+        },
+        offers:{
+          "@type":"Offer",
+          price:"89",
+          priceCurrency:"USD",
+          availability:"https://schema.org/InStock",
+          url:DOMAIN_URL,
+        },
+      },
+      {
+        "@context":"https://schema.org",
+        "@type":"WebSite",
+        url:DOMAIN_URL,
+        potentialAction:{
+          "@type":"SearchAction",
+          target:`${DOMAIN_URL}/?q={search_term_string}`,
+          "query-input":"required name=search_term_string",
+        },
+      },
+      {
+        "@context":"https://schema.org",
+        "@type":"Organization",
+        name:"FitFrame",
+        founder:{
+          "@type":"Person",
+          name:"Lorenzo",
+          jobTitle:"Founder",
+        },
+        address:{
+          "@type":"PostalAddress",
+          addressCountry:"US",
+        },
+        email:MAKER_EMAIL,
+        url:DOMAIN_URL,
+        sameAs:[
+          "https://github.com/Embezzlemnt/fitframe",
+        ],
+      },
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        mainEntity:FITFRAME_FAQ.map(([name,text])=>({
+          "@type":"Question",
+          name,
+          acceptedAnswer:{
+            "@type":"Answer",
+            text,
+          },
+        })),
+      },
+    ]);
     document.head.appendChild(script);
     return ()=>script.remove();
   },[]);
+}
 
+function Logo(){
+  return <a className="logo" aria-label="About FitFrame" href="/about">fitframe<span className="logo-dot">.</span></a>;
+}
+
+function VerificationStrip(){
   return (
-    <div className="app" style={{"--accent":ACCENT_COLOR}}>
-      <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/">Scan</a><div className="header-tag">FAQ</div></div></header>
-      <main className="container">
-        <section className="section faq-page">
-          <div className="eyebrow">common questions</div>
-          <h1 className="step-head">FitFrame faq.</h1>
-          <p className="step-sub">straight answers about materials, lenses, the scan, and how orders work.</p>
-          <div className="faq-list">
-            {FAQS.map((item,index)=><details className="faq-item" key={item.q} open={index===0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
-          </div>
-          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">scan your face</a></div>
-        </section>
-      </main>
-      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a><span className="footer-dot">·</span><a href="/privacy" className="footer-link">Privacy</a></div>
-    </div>
+    <section className="verification-strip" aria-label="Verification">
+      <span>American made</span>
+      <span>Zero-waste to order</span>
+      <span>One-time reprint guarantee</span>
+    </section>
   );
 }
 
-// --- Waitlist Gate (replaces order/checkout at result step) ---
-function ReturnsPage() {
-  useEffect(()=>{ document.title = "Returns & Reprints | FitFrame"; },[]);
+function GeoFooter(){
   return (
-    <div className="app" style={{"--accent":ACCENT_COLOR}}>
-      <header className="site-header"><a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a><div className="header-nav"><a className="header-link" href="/faq">FAQ</a><div className="header-tag">Returns</div></div></header>
-      <main className="container">
-        <section className="section faq-page">
-          <div className="eyebrow">returns, plainly.</div>
-          <h1 className="step-head">returns, plainly.</h1>
-          <div className="returns-copy">
-            <p>if your frames don't fit the way they should, we reprint them. one time, at no cost. email us at <a href="mailto:hello@fitframe.store" style={{color:"var(--accent)"}}>hello@fitframe.store</a> with your order ID and a description of the fit issue. we'll sort it out.</p>
-            <p>if your frames arrive damaged, that's on us. same process — email us, we'll make it right.</p>
-            <p>if something feels wrong — fit, finish, anything — email us. we'd rather understand what happened than leave you with something you're not happy with.</p>
-            <p><a href="mailto:hello@fitframe.store" style={{color:"var(--accent)",textDecoration:"none"}}>hello@fitframe.store</a></p>
-          </div>
-          <div className="btn-row" style={{marginTop:24}}><a className="btn btn-primary checkout-submit" href="/">scan your face</a></div>
-        </section>
-      </main>
-      <div className="site-footer"><span>{DOMAIN}</span><span className="footer-dot">·</span><a href="/" className="footer-link">Start scan</a><span className="footer-dot">·</span><a href="/privacy" className="footer-link">Privacy</a></div>
-    </div>
-  );
-}
-function WaitlistGate({ measurements, frameId, colorwayId }) {
-  const [email, setEmail] = useState(() => {
-    try { return localStorage.getItem("ff_waitlist_email") || ""; } catch { return ""; }
-  });
-  const [status, setStatus] = useState(() => {
-    try { return localStorage.getItem("ff_waitlist_joined") === "1" ? "joined" : null; } catch { return null; }
-  });
-  const [position, setPosition] = useState(null);
-  const [error, setError] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("ff_waitlist_joined") === "1") setStatus("joined");
-    } catch { /* ignore */ }
-  }, []);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const trimmed = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setError("Enter a valid email address.");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: trimmed,
-          measurements: measurements || null,
-          frame_id: frameId || null,
-          colorway_id: colorwayId || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Could not join the list.");
-      setStatus("joined");
-      setPosition(data.position || null);
-      try {
-        localStorage.setItem("ff_waitlist_email", trimmed);
-        localStorage.setItem("ff_waitlist_joined", "1");
-      } catch { /* ignore */ }
-    } catch {
-      setError("something went wrong. try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (status === "joined") {
-    const m = measurements || {};
-    const returning = !position;
-    return (
-      <div className="waitlist-gate">
-        <div className="wg-confirmed">
-          <div className="wg-head" style={{textAlign:"center"}}>
-            {returning ? "you're on the list." : `you're in. #${position} on the list.`}
-          </div>
-          {!returning && (
-            <>
-              <div className="wg-spec-summary">
-                <span className="wg-spec-item">{FRAMES.find(f=>f.id===frameId)?.label || frameId || "—"}</span>
-                <span className="wg-spec-item">{COLORWAYS.find(c=>c.id===colorwayId)?.label || colorwayId || "—"}</span>
-                <span className="wg-spec-item">pd: {m.pd || "—"} mm</span>
-              </div>
-              <p className="wg-sub" style={{textAlign:"center",marginTop:14,marginBottom:0}}>we'll reach out when your batch opens.</p>
-            </>
-          )}
+    <footer className="geo-footer">
+      <details className="geo-block">
+        <summary>FAQ</summary>
+        <div className="geo-content">
+          {FITFRAME_FAQ.map(([q,a])=>(
+            <p key={q}><strong>{q}</strong> {a}</p>
+          ))}
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="waitlist-gate">
-      <div className="wg-head">orders open in limited batches.</div>
-      <p className="wg-sub">be first. drop your email and we'll reach out when your batch is ready. your scan result and frame selection are saved.</p>
-      <form className="wg-form" onSubmit={handleSubmit} noValidate>
-        <input
-          type="text"
-          name="website"
-          style={{ display:"none", position:"absolute", left:"-9999px" }}
-          tabIndex={-1}
-          autoComplete="off"
-          value=""
-          onChange={() => {}}
-        />
-        <input
-          className="wg-input"
-          type="email"
-          placeholder="your email"
-          autoComplete="email"
-          value={email}
-          onChange={e => { setEmail(e.target.value); setError(null); }}
-        />
-        <button className="btn btn-primary wg-submit" disabled={submitting}>
-          {submitting ? "saving…" : "join the list →"}
-        </button>
-      </form>
-      {error && (
-        <div className="submit-error wg-error">
-          {error}
-          <button className="btn btn-ghost" style={{marginTop:10,width:"100%"}} onClick={()=>setError(null)}>try again</button>
+      </details>
+      <details className="geo-block">
+        <summary>About</summary>
+        <div className="geo-content">
+          <p>FitFrame started as a frustration with glasses that never fit right. Every pair built here is measured from your actual face, printed to those measurements, and shipped directly to you. No middleman, no standard sizing, no compromise. It's a small operation built on the belief that fit shouldn't be a luxury.</p>
         </div>
-      )}
-      <p className="wg-note">no spam. one email when your batch opens.</p>
-    </div>
+      </details>
+    </footer>
   );
 }
 
+// Main ─────────────────────────────────────────────────────────────────────
 export default function FramesSite(){
-  const path = window.location.pathname;
-  if (path === "/faq") return <FAQPage/>;
-  if (path === "/returns" || path === "/return-policy") return <ReturnsPage/>;
-  return <FitFrameApp/>;
-}
-
-function FitFrameApp(){
+  useFitFrameJsonLd();
   const saved=loadSession()||{};
-  const [step, setStep] = useState(saved.step??0);
+
+  const savedStep = Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 4 ? saved.step : 0;
+  const [step,          setStep]          = useState(savedStep);
   const [confirmedMeas, setConfirmedMeas] = useState(saved.confirmedMeas??null);
-  const [styleAnswers, setStyleAnswers] = useState(saved.styleAnswers??{});
-  const [styleQIdx, setStyleQIdx] = useState(saved.styleQIdx??0);
-  const [tapped, setTapped] = useState(null);
-  const [lensChoice, setLensChoice] = useState(saved.lensChoice??null);
-  const [rxForm] = useState(saved.rxForm??{odSphere:"",odCyl:"",odAxis:"",osSphere:"",osCyl:"",osAxis:""});
+  const [calibration,   setCalibration]   = useState(saved.calibration??null);
+  const [styleAnswers,  setStyleAnswers]  = useState(saved.styleAnswers??{});
+  const [styleQIdx,     setStyleQIdx]     = useState(saved.styleQIdx??0);
+  const [tapped,        setTapped]        = useState(null);
   const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
-  const [selectedColorway, setSelectedColorway] = useState(saved.selectedColorway??"matte-black");
-  const [scanning, setScanning] = useState(false);
-  const [waitlistCount, setWaitlistCount] = useState(null);
-  const [cardCalibrating, setCardCalibrating] = useState(false);
-  const [calibration, setCalibration] = useState(saved.calibration??null);
-  const [calDwell, setCalDwell] = useState(0);
-  const [calMoved, setCalMoved] = useState(false);
-  const [calCapturedFlash, setCalCapturedFlash] = useState(false);
-  const [scanSettling, setScanSettling] = useState(false);
+  const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{name:"",email:""});
+  const [scanning,      setScanning]      = useState(false);
+  const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
+  const [cameraIntro,   setCameraIntro]   = useState(false);
+  const [scanSettling,  setScanSettling]  = useState(false);
+  const [scanRestartCopy,setScanRestartCopy] = useState("");
+  const [introReady,    setIntroReady]    = useState(false);
+  const [introDone,     setIntroDone]     = useState(false);
+  const [scanProcessing,setScanProcessing] = useState(false);
+  const [submitting,    setSubmitting]    = useState(false);
+  const [sent,          setSent]          = useState(false);
+  const [orderId]                         = useState(()=>saved.orderId??genOrderId());
+  const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
+  const scanHistorySavedRef                = useRef(false);
+  const processingTimerRef                 = useRef(null);
+  const settleTimerRef                     = useRef(null);
 
   const canvasRef=useRef(null);
-  const scanCountedRef=useRef(false);
-  const settleTimerRef=useRef(null);
-  const { videoRef, ready:camReady, camErr, start:startCamera, stop:stopCamera }=useCamera();
-  const scan=useFaceScan({
+  const {
     videoRef,
-    scanning,
-    canvasRef,
-    scaleMmPerPx:calibration?.mmPerPx || null,
-    scaleSource:calibration?.skippedCard ? "iris-fallback" : calibration ? "credit-card" : "iris-fallback",
-    needsCard:step===1&&camReady&&!calibration&&!scanning&&!scanSettling,
-    faceEnabled:step===1&&camReady&&(!!calibration||scanning||scanSettling),
-    debugScan:new URLSearchParams(window.location.search).get("debug")==="1",
-    onCardLocked:handleCardLocked,
-    onCardSkipped:skipCardScan,
-  });
-  const currentMeas=confirmedMeas||scan.measurements;
-
-  const suggestedTags=Object.values(styleAnswers).flatMap(a=>a?.tags||[]);
-  const topFrames=[...FRAMES].map(f=>({...f,score:f.tags.filter(t=>suggestedTags.includes(t)).length})).sort((a,b)=>b.score-a.score);
-  const maxScore=Math.max(1,...topFrames.map(f=>f.score));
-  const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
-  const chosenColorway=COLORWAYS.find(c=>c.id===selectedColorway)||COLORWAYS[0];
-
-  async function recordScanComplete() {
-    if (scanCountedRef.current) return;
-    scanCountedRef.current = true;
-    try {
-      const res = await fetch("/api/scan-complete", { method:"POST" });
-      const data = await res.json();
-      if (res.ok && data?.count) { /* scan count tracked server-side */ }
-    } catch {
-      scanCountedRef.current = false;
-    }
-  }
-
-  useEffect(()=>{
-    fetch("/api/waitlist-count")
-      .then(res=>res.ok?res.json():null)
-      .then(data=>{ if (data?.count != null) setWaitlistCount(data.count); })
-      .catch(()=>{});
-  },[]);
-
-  useEffect(()=>{
-    if (step===0) return;
-    saveSession({step,confirmedMeas,calibration,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway});
-  },[step,confirmedMeas,calibration,styleAnswers,styleQIdx,lensChoice,rxForm,selectedFrame,selectedColorway]);
-
-  useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
-  useEffect(()=>{
-    const handleVisibility=()=>{ if(document.hidden&&step===1) stopCamera(); };
-    document.addEventListener("visibilitychange",handleVisibility);
-    return ()=>document.removeEventListener("visibilitychange",handleVisibility);
-  },[step,stopCamera]);
-  useEffect(()=>{ if(scan.done) setScanning(false); },[scan.done]);
-  useEffect(()=>{ if(scan.scanLost) setScanning(false); },[scan.scanLost]);
-  useEffect(()=>{ if(scan.scanError) setScanning(false); },[scan.scanError]);
-  useEffect(()=>{ setTapped(null); },[styleQIdx]);
-  useEffect(()=>()=>{
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-  },[]);
-  useEffect(()=>{
-    if (scan.measurements&&!scan.quality?.rescan){
-      recordScanComplete();
-      const t=setTimeout(()=>{ setConfirmedMeas(scan.measurements); setStep(2); },1400);
-      return ()=>clearTimeout(t);
-    }
-  },[scan.measurements,scan.quality]);
-
+    ready: camReady,
+    requesting: camRequesting,
+    camErr,
+    start: startCamera,
+    stop: stopCamera,
+  } = useCamera();
   const startSettledScan=useCallback(()=>{
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    setScanRestartCopy("");
     setScanSettling(true);
     setScanning(false);
     settleTimerRef.current=setTimeout(()=>{
@@ -416,433 +1267,672 @@ function FitFrameApp(){
       settleTimerRef.current=null;
     },PRE_SCAN_SETTLE_MS);
   },[]);
-
-  function handleCardLocked(card){
-    setCalibration(card);
-    setCardCalibrating(false);
-    setCalDwell(1);
-    setCalMoved(false);
-    setCalCapturedFlash(true);
-    setTimeout(()=>setCalCapturedFlash(false),1000);
-    startSettledScan();
-  }
-
-  function skipCardScan(){
-    setCardCalibrating(false);
+  const handleCardLocked=useCallback((card)=>{
+    setCalibration({
+      source:"credit-card",
+      cardWidthMm:card.cardWidthMm,
+      cardHeightMm:card.cardHeightMm,
+      cardWidthPx:card.cardWidthPx,
+      cardHeightPx:card.cardHeightPx,
+      mmPerPx:card.mmPerPx,
+      confidence:card.confidence,
+      corners:card.corners,
+      timestamp:card.timestamp,
+    });
+  },[]);
+  const handleCardSkipped=useCallback(()=>{
     setCalibration({
       source:"iris-fallback",
       skippedCard:true,
-      capturedAt:new Date().toISOString(),
+      timestamp:new Date().toISOString(),
     });
-    startSettledScan();
+  },[]);
+  const handleScanAbort=useCallback((message)=>{
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    processingTimerRef.current=null;
+    settleTimerRef.current=null;
+    setScanProcessing(false);
+    setConfirmedMeas(null);
+    setCalibration(null);
+    setScanning(false);
+    setScanSettling(false);
+    setCameraIntro(false);
+    setScanPrepDismissed(true);
+    setScanRestartCopy(message||"scan lost. position your face and tap start again.");
+    scanHistorySavedRef.current=false;
+  },[]);
+  const scan=useFaceScan({
+    videoRef,
+    scanning,
+    canvasRef,
+    scaleMmPerPx:calibration?.mmPerPx||null,
+    scaleSource:calibration?.source||"iris-fallback",
+    needsCard:step===1&&camReady&&!cameraIntro&&scanning,
+    faceEnabled:step===1&&camReady&&!cameraIntro,
+    debugScan:debugEnabled,
+    onCardLocked:handleCardLocked,
+    onCardSkipped:handleCardSkipped,
+    onAutoStart:startSettledScan,
+    onScanAbort:handleScanAbort,
+  });
+  const currentMeas=confirmedMeas||(scan.quality?.rescan?scan.measurements:null);
+
+  // Persist
+  useEffect(()=>{
+    if (step===0||sent) return;
+    saveSession({step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,customerInfo,orderId});
+  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,customerInfo,orderId]);
+
+  // Frame scoring
+  const suggestedTags=Object.values(styleAnswers).flatMap(a=>a?.tags||[]);
+  const geometryScore=(frame)=>{
+    const m=currentMeas;
+    if (!m) return {score:0,note:""};
+    const faceW=parseFloat(m.faceW), pd=parseFloat(m.pd), bridge=parseFloat(m.bridge);
+    let score=0;
+    let note="Balanced fit";
+    if (faceW>=145){
+      if (["bold-square","navigator","round-thick","sporty-wrap"].includes(frame.id)) score+=2;
+      if (["thin-round","rectangle"].includes(frame.id)) { score-=1; note="May sit narrow"; }
+      else note="Width match";
+    } else if (faceW&&faceW<=128){
+      if (["thin-round","rectangle","cat-eye","geometric"].includes(frame.id)) score+=2;
+      if (["bold-square","sporty-wrap","round-thick"].includes(frame.id)) { score-=1; note="May feel wide"; }
+      else note="Compact fit";
+    }
+    if (bridge>=20&&["navigator","sporty-wrap","bold-square"].includes(frame.id)){ score+=1; note="Bridge fit strong"; }
+    if (bridge&&bridge<=15&&["thin-round","rectangle","cat-eye"].includes(frame.id)){ score+=1; note="Bridge fit strong"; }
+    if (pd>=66&&["bold-square","navigator","sporty-wrap","round-thick"].includes(frame.id)) score+=1;
+    if (pd&&pd<=58&&["thin-round","rectangle","cat-eye"].includes(frame.id)) score+=1;
+    return {score,note};
+  };
+  const topFrames=[...FRAMES].map(f=>{
+    const styleScore=f.tags.filter(t=>suggestedTags.includes(t)).length;
+    const fit=geometryScore(f);
+    return {...f,score:styleScore+fit.score,styleScore,fitScore:fit.score,fitNote:fit.note};
+  }).sort((a,b)=>b.score-a.score);
+  const lensData=DEFAULT_LENS;
+  const totalPrice=BASE_PRICE+(lensData?.price||0);
+  const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
+
+  useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
+  useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); } },[scan.done]);
+  useEffect(()=>{ setTapped(null); },[styleQIdx]);
+  useEffect(()=>()=>{ 
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+  },[]);
+  useEffect(()=>{
+    requestAnimationFrame(()=>setIntroReady(true));
+    const timer=setTimeout(()=>setIntroDone(true),720);
+    return ()=>clearTimeout(timer);
+  },[]);
+  useEffect(()=>{
+    if (!scan.done) return;
+    const ctx=canvasRef.current?.getContext("2d");
+    if (ctx) ctx.clearRect(0,0,canvasRef.current.width,canvasRef.current.height);
+  },[scan.done]);
+  useEffect(()=>{
+    if (!camReady||!cameraIntro) return;
+    const timer=setTimeout(()=>setCameraIntro(false),2000);
+    return ()=>clearTimeout(timer);
+  },[camReady,cameraIntro]);
+
+  // Keep the user on scan review until they accept the measured spec.
+  useEffect(()=>{
+    if (scan.done&&scan.measurements&&scan.quality&&!scan.quality.rescan&&!confirmedMeas&&!scanProcessing&&!processingTimerRef.current){
+      setScanProcessing(true);
+      processingTimerRef.current=setTimeout(()=>{
+        setConfirmedMeas({
+          ...scan.measurements,
+          scanQuality:scan.quality?.label||"Review",
+          scanReason:scan.quality?.reason||"",
+          validPct:scan.validPct,
+        });
+        if (!scanHistorySavedRef.current){
+          appendScanHistory({
+            timestamp:new Date().toISOString(),
+            pd:scan.measurements.pd,
+            bridge:scan.measurements.bridge,
+            face:scan.measurements.faceW,
+            scaleSource:scan.measurements.scaleSource,
+            quality:scan.quality?.label||"Review",
+            validPct:scan.validPct,
+          });
+          scanHistorySavedRef.current=true;
+        }
+        setScanProcessing(false);
+        processingTimerRef.current=null;
+      },2000);
+    }
+  },[confirmedMeas,scan.done,scan.measurements,scan.quality,scan.validPct,scanProcessing]);
+
+  function acceptMeasurements(){
+    const m=currentMeas||scan.measurements;
+    if (!m) return;
+    const accepted={
+      ...m,
+      scanQuality:m.scanQuality||scan.quality?.label||"Review your numbers",
+      scanReason:m.scanReason||scan.quality?.reason||"",
+      validPct:m.validPct??scan.validPct,
+    };
+    setConfirmedMeas(accepted);
+    if (!scanHistorySavedRef.current){
+      appendScanHistory({
+        timestamp:new Date().toISOString(),
+        pd:accepted.pd,
+        bridge:accepted.bridge,
+        face:accepted.faceW,
+        scaleSource:accepted.scaleSource,
+        quality:accepted.scanQuality,
+        validPct:accepted.validPct,
+      });
+      scanHistorySavedRef.current=true;
+    }
+    setStep(2);
   }
 
   function selectOption(opt){
     setTapped(opt.label);
     const qId=STYLE_QUESTIONS[styleQIdx].id;
     setStyleAnswers(prev=>({...prev,[qId]:opt}));
-    if (styleQIdx<STYLE_QUESTIONS.length-1) setTimeout(()=>setStyleQIdx(i=>i+1),220);
-    else setTimeout(()=>setStep(3),300);
+    if (styleQIdx<STYLE_QUESTIONS.length-1){ setTimeout(()=>setStyleQIdx(i=>i+1),220); }
+    else { setTimeout(()=>setStep(3),300); }
   }
 
-  function resetScanFlow(){
+  function startFreshScan(){
+    clearSession();
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    processingTimerRef.current=null;
     settleTimerRef.current=null;
-    scan.reset();
-    setScanning(false);
+    setScanProcessing(false);
     setScanSettling(false);
+    setScanRestartCopy("");
     setConfirmedMeas(null);
     setCalibration(null);
+    setStyleAnswers({});
+    setStyleQIdx(0);
+    setSelectedFrame(null);
+    scan.reset();
+    setScanning(false);
+    setCameraIntro(false);
+    scanHistorySavedRef.current=false;
+    setScanPrepDismissed(false);
+    setStep(1);
   }
 
-  function captureCalibration(){
-    setCalDwell(0);
-    setCalMoved(false);
-    setCardCalibrating(true);
+  function rescan(){
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    processingTimerRef.current=null;
+    settleTimerRef.current=null;
+    setScanProcessing(false);
+    setScanSettling(false);
+    setScanRestartCopy("");
+    scan.reset();
+    setScanning(false);
+    setCameraIntro(false);
+    setConfirmedMeas(null);
+    setCalibration(null);
+    scanHistorySavedRef.current=false;
+    setScanPrepDismissed(false);
+    stopCamera();
   }
 
-  function flowStepLabel(stepNum){
-    if (stepNum===1) return "step 1 of 4 — face scan";
-    if (stepNum===2) return "step 2 of 4 — style";
-    if (stepNum===3||stepNum===4||stepNum===5) return "step 3 of 4 — frame";
-    if (stepNum===6) return "step 4 of 4 — waitlist";
-    return "";
+  function beginScanSetup(){
+    setScanRestartCopy("");
+    setScanPrepDismissed(true);
+    setCameraIntro(true);
+    startCamera();
   }
 
-  function flowProgressIndex(){
-    if (step<=0) return 0;
-    if (step===1) return 1;
-    if (step===2) return 2;
-    if (step>=3&&step<=5) return 3;
-    return 4;
+  function updateMeasurement(key,value){
+    const cleaned=value.replace(/[^\d.]/g,"").replace(/(\..*)\./g,"$1");
+    const range=MEASUREMENT_RANGES[key];
+    let next=cleaned;
+    if (range&&cleaned){
+      const n=Number(cleaned);
+      if (Number.isFinite(n)) next=String(clamp(n,range[0],range[1]));
+    }
+    setConfirmedMeas(prev=>({
+      ...(prev||scan.measurements||{}),
+      [key]:next,
+      scaleSource:(prev||scan.measurements)?.scaleSource||"manual-review",
+    }));
   }
 
-  // Steps: 0=hero, 1=scan, 2=style, 3=lenses, 4=frames, 5=colorway, 6=result+waitlist
-  const flowStep=flowProgressIndex();
-  const dots=[1,2,3,4].map(i=>({done:flowStep>i,active:flowStep===i}));
+  function buildMakerSpec(payload,{includeProductionNotes=true}={}){
+    const lines=[
+      "FITFRAME MAKER SPEC",
+      "",
+      `Order ID: ${payload.order_id}`,
+      `Customer: ${payload.customer_name}`,
+      `Customer email: ${payload.customer_email}`,
+      `Created: ${payload.timestamp}`,
+      "",
+      "FRAME",
+      `Style: ${payload.frame}`,
+      `Frame ID: ${payload.frame_id}`,
+      `Lens: ${payload.lens}`,
+      `Material recommendation: ${payload.material}`,
+      "",
+      "MEASUREMENTS_MM",
+      `Binocular PD: ${payload.pd_binocular}`,
+      `Left PD: ${payload.pd_left}`,
+      `Right PD: ${payload.pd_right}`,
+      `Bridge: ${payload.bridge_mm}`,
+      `Lens height: ${payload.lens_height_mm}`,
+      `Face width: ${payload.face_width_mm}`,
+      `Temple length: ${payload.temple_mm}`,
+      "",
+      "SCAN",
+      `Scale source: ${payload.scale_source}`,
+      `Card reference: ${payload.card_reference}`,
+      `Quality: ${payload.scan_quality}`,
+      `Valid frames: ${payload.valid_frames_pct}%`,
+      "",
+      "FIT_ANSWERS",
+      `Fit history: ${payload.style_fit}`,
+      `Visual instinct: ${payload.style_vibe}`,
+      `Use case: ${payload.style_use}`,
+      `Priority: ${payload.style_priority}`,
+    ];
+    if (includeProductionNotes) {
+      lines.push(
+        "",
+        "PRODUCTION_NOTES",
+        "Use the matching STL for the selected frame ID. Scale front geometry to face width, set bridge to measured bridge, keep adjustable nose pad allowance, and use PD to center optical openings. PA12 nylon is the default launch material.",
+      );
+    }
+    return lines.join("\n");
+  }
+
+  async function submitOrder(){
+    setSubmitting(true);
+    const m=currentMeas;
+    const payload={
+      _replyto:customerInfo.email,
+      _subject:`FitFrame Order ${orderId}`,
+      order_id:orderId,
+      customer_name:customerInfo.name,
+      customer_email:customerInfo.email,
+      timestamp:new Date().toISOString(),
+      frame:chosenFrame?.label||"Custom frame",
+      frame_id:chosenFrame?.id||"custom",
+      lens:lensData?.label||"Blue Light",
+      lens_price:lensData?.price||0,
+      total:totalPrice,
+      material:"PA12 nylon, matte finish, adjustable nose pads",
+      style_fit:styleAnswers.fit?.label||"-",
+      style_vibe:styleAnswers.vibe?.label||"-",
+      style_use:styleAnswers.use?.label||"-",
+      style_priority:styleAnswers.priority?.label||"-",
+      pd_binocular:m?.pd||"-",
+      pd_left:m?.pdLeft||"-",
+      pd_right:m?.pdRight||"-",
+      bridge_mm:m?.bridge||"-",
+      temple_mm:m?.temple||"-",
+      lens_height_mm:m?.lensH||"-",
+      face_width_mm:m?.faceW||"-",
+      scale_source:m?.scaleSource||"iris-fallback",
+      card_reference:calibration?.source==="credit-card"?`${calibration.cardWidthMm}x${calibration.cardHeightMm}mm card / ${calibration.cardWidthPx}x${calibration.cardHeightPx}px / confidence ${calibration.confidence ?? "-"}`:calibration?.skippedCard?"skipped - iris reference only":"not captured",
+      scan_quality:m?.scanQuality||scan.quality?.label||"-",
+      valid_frames_pct:m?.validPct??(scan.validPct||"-"),
+      user_agent:navigator.userAgent,
+    };
+    try {
+      const spec=buildMakerSpec(payload);
+      await navigator.clipboard?.writeText(spec).catch(()=>{});
+      const subject=encodeURIComponent(`FitFrame Spec ${orderId}`);
+      const fullBody=encodeURIComponent(spec);
+      const emailSpec=fullBody.length>1800?buildMakerSpec(payload,{includeProductionNotes:false}):spec;
+      const body=encodeURIComponent(emailSpec);
+      window.location.assign(`mailto:${MAKER_EMAIL}?subject=${subject}&body=${body}`);
+      clearSession();
+      setSent(true);
+    } catch { alert(`Email ${MAKER_EMAIL} and paste the copied spec.`); }
+    finally { setSubmitting(false); }
+  }
+
+  const firstName=customerInfo.name.trim().split(" ")[0]||"there";
+  const cameraActive=camReady||camRequesting;
+  const showScanPrep=!scanPrepDismissed&&!scan.done&&!currentMeas&&!camErr&&!cameraActive;
+  const scanState=scanRestartCopy?"lost":scan.done||confirmedMeas?"complete":scanning||scanSettling?"scanning":"idle";
+  const scaleIndicator=calibration?.source==="credit-card"?"scale — card reference":"scale — iris reference";
+  const scanTitle=scanProcessing
+    ?"Scan complete."
+    :scanState==="scanning"
+      ?scanSettling?"Find your spot.":"Stay still."
+    :cameraIntro
+      ?"Look straight ahead."
+    :scanState==="complete"
+      ?"Scan complete."
+    :scanState==="lost"
+      ?scanRestartCopy
+    :showScanPrep
+      ?"Take a quick calibrated face scan to begin."
+    :camRequesting||!camReady
+      ?"Opening camera."
+      :"Ready to measure.";
+  const scanCopy=scanProcessing
+    ?""
+    :scanState==="scanning"
+      ?scanSettling?"Hold still for a second before measuring.":""
+    :cameraIntro
+      ?"Fill the oval with your face."
+    :scanState==="complete"
+      ?"Review the scan before continuing."
+    :scanState==="lost"
+      ?""
+    :showScanPrep
+      ?""
+    :camRequesting
+      ?"Allow camera access to continue."
+    :camReady
+      ?"Position your face in the oval, then start the scan."
+      :"";
 
   return (
-    <div className="app" style={{"--accent":ACCENT_COLOR}}>
-      <header className="site-header">
-        <a className="logo" href="/">FitFrame<span className="logo-dot">.</span></a>
-        <div className="header-nav">
-          <a className="header-link" href="/faq">FAQ</a>
-          <div className="header-tag">{DOMAIN}</div>
-        </div>
-      </header>
-      {step>0&&<div className="prog-strip">{dots.map((d,i)=><div key={i} className={`prog-dot ${d.done?"done":d.active?"active":""}`}/>)}</div>}
+    <>
+      <style>{css}</style>
+      <div className={`app ${introReady?"app-ready":""} ${introDone?"intro-done":"intro-active"}`}>
+        {!introDone&&<div className="intro-logo">fitframe<span className="logo-dot">.</span></div>}
 
-      <div className="container">
+        <header className="site-header">
+          <Logo/>
+        </header>
 
-        {/* STEP 0 — HERO + WHY + PROCESS + PILLARS + FAQ PREVIEW */}
-        {step===0&&<>
-          <div className="section">
-            <div className="eyebrow">made-to-measure eyewear</div>
-            <div className="display">frames built<br/>for <em>your</em> face.</div>
-            <p className="body-lg">scan your face. answer four questions. get frames built to your exact measurements.</p>
-            <div className="hero-meta">
-              {waitlistCount!=null&&<div className="scan-count">{waitlistCount.toLocaleString()} faces scanned</div>}
-              <a className="hero-faq-link" href="/faq">questions? →</a>
+        <div className="container">
+
+          {/* ── 0: Hero ── */}
+          {step===0&&(
+            <div className="section">
+              <div className="eyebrow">Made-to-measure eyewear</div>
+              <div className="display">Frames built<br/>for <em>your</em> face.</div>
+              <p className="body-lg">A calibrated phone scan, four quick answers, and a frame spec ready for 3D printing. No app. No optician visit.</p>
+              <div className="btn-row">
+                <button className="btn btn-primary" onClick={startFreshScan}>Start fit scan</button>
+              </div>
             </div>
-            <div className="btn-row" style={{marginBottom:8}}>
-              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>scan your face →</button>
-            </div>
-            <div className="proof-strip">
-              <span className="proof-item"><ProofIcon type="flag"/>made in america</span>
-              <span className="proof-item"><ProofIcon type="box"/>ships in ~10 days</span>
-              <span className="proof-item"><ProofIcon type="refresh"/>fit guarantee</span>
-            </div>
-          </div>
+          )}
 
-          <WhySection/>
+          {/* ── 1: Scan ── */}
+          {step===1&&(
+            <div className="section">
+              <div className="eyebrow">Face scan</div>
+              <div className="step-head">{scanTitle}</div>
+              {scanCopy&&<p className="step-sub">{scanCopy}</p>}
 
-          <div className="section" style={{paddingTop:8}}>
-            <div className="features">
-              {[
-                ["01","your phone does what an optician does. no appointment."],
-                ["02","custom geometry. not a size medium with adjustments."],
-                ["03","carbon fiber nylon. printed once. to your numbers."],
-                ["04","first batch is limited. you're early."],
-              ].map(([n,t])=><div className="feature-row" key={n}><span className="feature-num">{n}</span><span className="feature-text">{t}</span></div>)}
-            </div>
-          </div>
-
-          <ProcessSection/>
-
-          <div className="section faq-preview" style={{paddingTop:0}}>
-            <div className="eyebrow">common questions</div>
-            <div className="faq-list">
-              {FAQS.slice(0,3).map((item,i)=><details className="faq-item" key={item.q} open={i===0}><summary>{item.q}</summary><p>{item.a}</p></details>)}
-            </div>
-            <div className="btn-row" style={{marginTop:14}}>
-              <a className="btn btn-ghost" href="/faq">all questions →</a>
-              <button className="btn btn-primary" style={{flex:1}} onClick={()=>setStep(1)}>scan your face →</button>
-            </div>
-          </div>
-        </>}
-
-        {/* STEP 1 — SCAN */}
-        {step===1&&(
-          <div className="section">
-            <div className="eyebrow">{flowStepLabel(1)}</div>
-            <div className="step-head">
-              {scanning?"stay still."
-                :scanSettling?"find your spot."
-                :scan.done?"scan complete."
-                :!camReady?"position your face."
-                :!calibration?"hold a card to your face."
-                :"ready to measure."}
-            </div>
-            <p className="step-sub">
-              {scanning?"keep your face forward while we capture your measurements."
-                :scanSettling?"settle into the oval before we start measuring."
-                :scan.done?"reviewing your scan."
-                :!camReady?"your camera is used only for measurement. nothing stored or transmitted."
-                :!calibration?"any standard card. hold it flat against your cheek, level with the outer corner of your eye."
-                :"card reference saved. keep your face in the oval and start the measurement."}
-            </p>
-
-            {!camReady&&!camErr&&!currentMeas&&(
-              <div className="cam-placeholder">
-                <video ref={videoRef} autoPlay playsInline muted aria-hidden="true" style={{position:"absolute",width:1,height:1,opacity:0,pointerEvents:"none"}}/>
-                <div className="cam-icon">
-                  <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
-                  </svg>
+              {showScanPrep&&(
+                <div className="cam-placeholder pre-scan-card">
+                  <div className="pre-scan-line">this scan takes about {SCAN_DURATION_SECONDS_PLACEHOLDER} seconds.</div>
+                  <div className="pre-scan-line">have a credit or ID card ready.</div>
+                  <ScanSetupDiagram/>
+                  <div className="pre-scan-support">hold a card flat under your chin, facing the camera.</div>
+                  <div className="pre-scan-support">this gives the scan a much better size reference.</div>
+                  <div className="pre-scan-support">no card? just hold still — we'll measure from your iris.</div>
+                  <div className="setup-list">
+                    <div>arm's length from your phone</div>
+                    <div>good overhead light, face it directly</div>
+                  </div>
+                  <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>i'm ready →</button>
+                  <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
                 </div>
-                <div className="cam-label">we need your camera.</div>
-                <div className="cam-sub">measured on your device. nothing stored, nothing transmitted.</div>
-                <button className="btn btn-primary" style={{marginTop:4}} onClick={startCamera}>allow camera →</button>
-              </div>
-            )}
+              )}
 
-            {camErr&&(
-              <div className="cam-placeholder">
-                <div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>
-                {camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}
-                {camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>try again</button>}
-                {camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>reload page</button>}
-              </div>
-            )}
-
-            {scan.mpLoadError&&(
-              <div className="cam-placeholder">
-                <div className="cam-label" style={{color:"var(--red)"}}>face scan couldn't load.</div>
-                <div className="cam-sub">check your connection and reload the page.</div>
-                <button className="btn btn-ghost" onClick={()=>window.location.reload()}>reload page</button>
-              </div>
-            )}
-
-            {camReady&&!scan.done&&(
-              <div className="cam-outer">
-                <div className="cam-inner">
-                  <video ref={videoRef} autoPlay playsInline muted/>
-                  <canvas ref={canvasRef}/>
-                  <div className="cam-vignette"/>
-                  <FaceGuide fill={scan.fill} autoStartPct={scan.autoStartPct} facePresent={scan.facePresent} poseHint={!scanning&&!scanSettling?scan.poseHint:null} showCard={!calibration&&!scanning&&!scanSettling} done={scan.done}/>
-                  {scanSettling&&(
-                    <div className="settle-intro">
-                      <div className="settle-intro-main">find your spot</div>
+              {cameraActive&&!scan.done&&(
+                <div className="cam-outer">
+                  <div className="cam-inner">
+                    <video ref={videoRef} autoPlay playsInline muted/>
+                    <canvas ref={canvasRef}/>
+                    <div className="cam-vignette"/>
+                    <FaceGuide fill={scan.fill} poseHint={!scanning&&!scanSettling?scan.poseHint:null} done={scan.done}/>
+                    {cameraIntro&&(
+                      <div className="face-intro">
+                        <div className="face-intro-main">Look straight ahead</div>
+                        <div className="face-intro-sub">Fill the oval with your face</div>
+                      </div>
+                    )}
+                    {scanSettling&&(
+                      <div className="settle-intro">
+                        <div className="settle-intro-main">Find your spot</div>
+                      </div>
+                    )}
+                    {debugEnabled&&(
+                      <div className="debug-overlay">
+                        <div>L iris: {scan.debugInfo?.lIrisPx ?? "-"}px</div>
+                        <div>R iris: {scan.debugInfo?.rIrisPx ?? "-"}px</div>
+                        <div>Scale: {scan.debugInfo?.scaleFactor ?? "-"}</div>
+                        <div>Raw PD: {scan.debugInfo?.rawPd ?? "-"}mm</div>
+                        <div>Frames: {scan.debugInfo?.validFrames ?? 0}/{scan.debugInfo?.totalFrames ?? 0}</div>
+                        <div>Source: {scan.debugInfo?.scaleSource ?? "iris-fallback"}</div>
+                        <div>Discard: {scan.debugInfo?.discarded ? Object.entries(scan.debugInfo.discarded).map(([k,v])=>`${k}:${v}`).join(", ") : "-"}</div>
+                      </div>
+                    )}
+                    <div className="cam-bottom">
+                      {scanning
+                        ?<div className="scan-inst">Hold steady</div>
+                        :scanSettling
+                          ?<div className="scan-inst">Find your spot</div>
+                        :scan.poseHint
+                          ?<div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
+                          :scan.autoStartPct>0&&scan.autoStartPct<1
+                            ?<div className="scan-inst">Hold still...</div>
+                            :<div className="scan-inst">Look directly at the camera.</div>}
                     </div>
-                  )}
-                  <div className="cam-bottom">
-                    {scanning
-                      ? scan.seqIdx>=0
-                        ? <div className="scan-inst">{SCAN_SEQ[Math.min(scan.seqIdx,SCAN_SEQ.length-1)].instruction}</div>
-                        : <div className="scan-inst">hold still.</div>
-                      : scanSettling
-                        ? <div className="scan-inst">find your spot</div>
-                      : !calibration
-                        ? <div className="scan-inst">look straight ahead.</div>
-                        : scan.poseHint
-                          ? <div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
-                          : scan.autoStartPct>0&&scan.autoStartPct<1
-                            ? <div className="scan-inst">hold still.</div>
-                            : <div className="scan-inst">look straight ahead.</div>}
-                    {scan.pauseWarning&&<div className="pause-warning">hold still — scan paused</div>}
-                    {scan.lightWarning&&<div className="light-warning">{scan.lightWarning}</div>}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
+              {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
 
-            {cardCalibrating&&!calibration&&(
-              <>
-                <div className={`cal-status ${calMoved?"warn":""}`}>{scan.cardStatus?.reason||"hold still — scanning the card"}</div>
-                <div className="cal-dwell-bar"><div className="cal-dwell-fill" style={{width:`${Math.round((scan.cardStatus?.stablePct||calDwell)*100)}%`}}/></div>
-              </>
-            )}
-            {calCapturedFlash&&<div className="cal-status good">✓ card captured</div>}
+              {scanProcessing&&(
+                <div className="processing-card">
+                  <div className="processing-logo">fitframe<span className="logo-dot">.</span></div>
+                  <div className="processing-copy">Analyzing measurements</div>
+                  <div className="processing-track"><div className="processing-fill"/></div>
+                </div>
+              )}
 
-            {camReady&&!scan.done&&!scanning&&!scanSettling&&(
-              <div style={{textAlign:"center",marginTop:14}}>
-                {!calibration?(
-                  <>
-                    <div className="calibration-strip">
-                      <span>{scan.cardStatus?.label||"position card"}</span>
-                      {scan.cardStatus?.stablePct>0&&<strong>{Math.round(scan.cardStatus.stablePct*100)}%</strong>}
-                    </div>
-                    <p className="scan-note">
-                      for a more precise fit, hold a standard card flat against
-                      your cheek before scanning. or skip and we'll use your
-                      iris as the scale reference.
-                    </p>
-                    <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
-                      <button
-                        className="btn btn-primary"
-                        disabled={!scan.cvReady}
-                        onClick={captureCalibration}
-                      >
-                        {scan.cvReady?"use card →":"loading card detector..."}
+              {camErr&&(
+                <div className="cam-placeholder">
+                  <div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>
+                  {camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}
+                  {camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>Try again</button>}
+                  {camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>Reload page</button>}
+                </div>
+              )}
+
+              {camReady&&!scan.done&&(
+                <div style={{textAlign:"center",marginTop:14}}>
+                  <div className="calibration-strip"><span>{scaleIndicator}</span></div>
+                  {!scanning&&!scanSettling&&(
+                      <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent||scanSettling} onClick={startSettledScan}>
+                        {scan.mpReady?scan.facePresent?"start scan →":"find your face first":"loading..."}
                       </button>
-                      <button
-                        className="btn btn-ghost"
-                        disabled={!scan.mpReady}
-                        onClick={skipCardScan}
-                        style={{fontSize:13}}
-                      >
-                        {scan.mpReady?"skip card →":"loading face scan..."}
-                      </button>
-                    </div>
-                  </>
-                ):(
-                  <>
-                    <div className="calibration-strip"><span>scale</span><strong>{calibration.skippedCard?"iris reference":"set from card"}</strong></div>
-                    <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={startSettledScan}>
-                      {scan.mpReady?scan.facePresent?"start scan →":"find your face first":"loading..."}
-                    </button>
-                  </>
+                  )}
+                </div>
+              )}
+
+              {scan.done&&!scanProcessing&&!currentMeas&&(
+                <div className="cam-placeholder" style={{marginTop:0}}>
+                  <div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label||"No face data captured."}</div>
+                  <div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div>
+                  <button className="btn btn-ghost" style={{marginTop:4}} onClick={rescan}>Try again</button>
+                </div>
+              )}
+
+              {currentMeas&&!scanProcessing&&scan.quality?.rescan&&(
+                <div className="cam-placeholder" style={{marginTop:0}}>
+                  <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{scan.quality?.label||"Rescan"}</div>
+                  <div className="cam-label">Let's try that again.</div>
+                  <div className="cam-sub">{scan.quality?.reason||"Face the camera straight on in good light and hold still."}</div>
+                  <div className="btn-row" style={{marginTop:4}}>
+                    <button className="btn btn-primary" onClick={rescan}>Rescan</button>
+                    <button className="btn btn-ghost" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
+                  </div>
+                </div>
+              )}
+
+              {(scan.done||confirmedMeas)&&currentMeas&&!scanProcessing&&!scan.quality?.rescan&&(
+                <div className="quality-card">
+                  <div className="quality-head">
+                    <div className="quality-title">Measurement review</div>
+                    <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{currentMeas.scanQuality||scan.quality?.label||"Review"}</div>
+                  </div>
+                  <p className="quality-copy">
+                    {currentMeas.scanReason||scan.quality?.reason||"Review the measured spec before continuing."} Valid frames: {currentMeas.validPct??scan.validPct}%.
+                  </p>
+                  <div className="measure-grid">
+                    {[
+                      ["PD","pd"],["Left PD","pdLeft"],["Right PD","pdRight"],
+                      ["Bridge","bridge"],["Face width","faceW"],["Temple","temple"],["Lens height","lensH"],
+                    ].map(([label,key])=>(
+                      <div className="measure-field" key={key}>
+                        <label>{label}</label>
+                        <input className="measure-input" inputMode="decimal" value={currentMeas[key]||""}
+                          onChange={e=>updateMeasurement(key,e.target.value)}/>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="measure-help">If the user already knows a measurement, correct it here. These values are what the maker receives.</div>
+                  <div className="btn-row">
+                    <button className="btn btn-primary" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
+                    <button className="btn btn-ghost" onClick={rescan}>Rescan</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── 2: Style ── */}
+          {step===2&&(()=>{
+            const q=STYLE_QUESTIONS[styleQIdx];
+            return (
+              <div className="section" key={styleQIdx}>
+                <div className="eyebrow">Style</div>
+                <div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div>
+                <div className="q-label">{q.q}</div>
+                <div className="choices">
+                  {q.options.map((opt,i)=>(
+                    <button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`}
+                      onClick={()=>selectOption(opt)}>{opt.label}</button>
+                  ))}
+                </div>
+                {styleQIdx>0&&(
+                  <div style={{marginTop:20}}>
+                    <button className="btn btn-ghost" onClick={()=>{
+                      const prev={...styleAnswers};
+                      delete prev[STYLE_QUESTIONS[styleQIdx-1].id];
+                      setStyleAnswers(prev); setStyleQIdx(i=>i-1);
+                    }}>← Back</button>
+                  </div>
                 )}
               </div>
-            )}
+            );
+          })()}
 
-            {scan.scanError&&(
-              <div className="cam-placeholder" style={{marginTop:0}}>
-                <div className="cam-label" style={{color:"var(--red)"}}>scan stalled.</div>
-                <div className="cam-sub">{scan.scanError}</div>
-                <button className="btn btn-ghost" onClick={resetScanFlow}>retry scan</button>
+          {/* Frame */}
+          {step===3&&(
+            <div className="section">
+              <div className="eyebrow">Frame</div>
+              <div className="step-head">Pick your shape.</div>
+              <p className="step-sub">Your top match is highlighted based on your answers. Choose the one that feels right.</p>
+              <div className="vto-note">
+                <div className="vto-note-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                </div>
+                <div className="vto-note-text"><strong>Virtual try-on coming soon.</strong> Select the shape that matches your style for now.</div>
               </div>
-            )}
-            {scan.scanLost&&(
-              <div className="cam-placeholder" style={{marginTop:0}}>
-                <div className="cam-label" style={{color:"var(--amber)"}}>scan lost.</div>
-                <div className="cam-sub">position your face and tap start again.</div>
-                <button className="btn btn-ghost" onClick={resetScanFlow}>try again</button>
+              <div className="frame-grid">
+                {topFrames.map((f,i)=>(
+                  <div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`}
+                    onClick={()=>setSelectedFrame(f.id)}>
+                    {i===0&&<div className="best-badge">best match</div>}
+                    <div className="frame-tile-icon">
+                      <FrameSVG id={f.id} size={52}
+                        color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/>
+                    </div>
+                    <div className="frame-tile-name">{f.label}</div>
+                    <div className="frame-tile-desc">{f.desc}</div>
+                    {currentMeas&&<div className="frame-fit-note">{f.fitNote}</div>}
+                  </div>
+                ))}
               </div>
-            )}
-            {scan.done&&!currentMeas&&(
-              <div className="cam-placeholder" style={{marginTop:0}}>
-                <div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label==="Low"?"let's try that again.":"no face data captured."}</div>
-                <div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div>
-                <button className="btn btn-ghost" style={{marginTop:4}} onClick={resetScanFlow}>try again</button>
+              <div className="btn-row" style={{marginTop:8}}>
+                <button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(4);}}>
+                  Review my spec
+                </button>
+                <button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button>
               </div>
-            )}
-            {currentMeas&&scan.quality?.rescan&&(
-              <div className="cam-placeholder" style={{marginTop:0}}>
-                <div className="cam-label">let's try that again.</div>
-                <div className="cam-sub">{scan.quality.reason||"Face the camera straight on in good light and hold still."}</div>
-                <button className="btn btn-primary" style={{marginTop:4}} onClick={resetScanFlow}>rescan</button>
-              </div>
-            )}
-            {currentMeas&&!scan.quality?.rescan&&<div className="scan-ok">measurements captured. moving forward…</div>}
-          </div>
-        )}
-
-        {/* STEP 2 — STYLE */}
-        {step===2&&(()=>{ const q=STYLE_QUESTIONS[styleQIdx]; return <div className="section" key={styleQIdx}><div className="eyebrow">{flowStepLabel(2)}</div><div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div><div className="q-label">{q.q}</div><div className="choices">{q.options.map((opt,i)=><button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`} onClick={()=>selectOption(opt)}>{opt.label}</button>)}</div>{styleQIdx>0&&<div style={{marginTop:20}}><button className="btn btn-ghost" onClick={()=>{const prev={...styleAnswers};delete prev[STYLE_QUESTIONS[styleQIdx-1].id];setStyleAnswers(prev);setStyleQIdx(i=>i-1);}}>← back</button></div>}</div>; })()}
-
-        {/* STEP 3 — LENSES */}
-        {step===3&&<div className="section">
-          <div className="eyebrow">{flowStepLabel(3)}</div>
-          <div className="step-head">choose your lens.</div>
-          <p className="step-sub">blue light polycarbonate lenses are included with every pair. designed for screen use — comfortable for all-day wear.</p>
-          <div className="lens-list">
-            {LENS_OPTIONS.map(l=><div key={l.id} className={`lens-row ${lensChoice===l.id?"sel":""}`} onClick={()=>setLensChoice(l.id)}><div className="lens-info"><div className="lens-name">{l.label}</div><div className="lens-desc">{l.desc}</div>{l.spec&&<div className="lens-spec">{l.spec}</div>}</div><div className="lens-price">included</div></div>)}
-          </div>
-          <div className="lens-disclaimer">prescription is something we're working toward. founding pairs ship with blue light polycarbonate lenses.</div>
-          <div className="btn-row">
-            <button className="btn btn-primary" disabled={!lensChoice} onClick={()=>setStep(4)}>choose your frame →</button>
-            <button className="btn btn-ghost" onClick={()=>setStep(2)}>back</button>
-          </div>
-        </div>}
-
-        {/* STEP 4 — FRAMES */}
-        {step===4&&<div className="section">
-          <div className="eyebrow">{flowStepLabel(4)}</div>
-          <div className="step-head">pick your shape.</div>
-          <p className="step-sub">your top match is highlighted based on your answers. choose the one that feels right.</p>
-          <div className="frame-grid">
-            {topFrames.map((f,i)=><div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`} onClick={()=>setSelectedFrame(f.id)}>{i===0&&<div className="best-badge">best match</div>}<div className="frame-tile-icon"><FrameSVG id={f.id} size={52} color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/></div><div className="frame-tile-name">{f.label}</div><div className="frame-tile-desc">{f.desc}</div>{f.score>0&&<div className="frame-tile-bar" style={{width:`${Math.round((f.score/maxScore)*100)}%`}}/>}</div>)}
-          </div>
-          <div className="btn-row" style={{marginTop:8}}>
-            <button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(5);}}>choose colorway →</button>
-            <button className="btn btn-ghost" onClick={()=>setStep(3)}>back</button>
-          </div>
-        </div>}
-
-        {/* STEP 5 — COLORWAY */}
-        {step===5&&<div className="section">
-          <div className="eyebrow">{flowStepLabel(5)}</div>
-          <div className="step-head">choose the finish.</div>
-          <p className="step-sub">one decision, three finishes. matte black is the default recommendation for most face shapes.</p>
-          <div className="colorway-grid">
-            {COLORWAYS.map(c=><button key={c.id} className={`colorway-card ${selectedColorway===c.id?"sel":""}`} onClick={()=>setSelectedColorway(c.id)}>{c.recommended&&<span className="colorway-badge">recommended for your face shape</span>}<div className="colorway-preview"><ColorwaySVG colorway={c}/></div><div><div className="colorway-name">{c.label}</div><div className="colorway-desc">{c.desc}</div></div></button>)}
-          </div>
-          <div className="btn-row">
-            <button className="btn btn-primary checkout-submit" onClick={()=>setStep(6)}>see your result →</button>
-            <button className="btn btn-ghost" onClick={()=>setStep(4)}>back</button>
-          </div>
-        </div>}
-
-        {/* STEP 6 — RESULT + WAITLIST GATE */}
-        {step===6&&<div className="section">
-          <div className="eyebrow">your face. measured.</div>
-          <div className="step-head">these numbers build your frame.</div>
-          <p className="step-sub">your measurements are saved. join the founding list and we'll reach out when your batch opens.</p>
-
-          {/* Measurements spec card */}
-          <div className="spec-card">
-            <div className="spec-card-id">{genOrderId()}</div>
-            {(()=>{
-              const m = currentMeas || {};
-              return <>
-                <div className="spec-row">
-                  <span className="spec-label">pd</span>
-                  <span className="spec-value">{m.pd}<span className="spec-unit">mm</span></span>
-                </div>
-                <div className="spec-row spec-row-indent">
-                  <span className="spec-label">left</span>
-                  <span className="spec-value">{m.pdLeft}<span className="spec-unit">mm</span></span>
-                </div>
-                <div className="spec-row spec-row-indent">
-                  <span className="spec-label">right</span>
-                  <span className="spec-value">{m.pdRight}<span className="spec-unit">mm</span></span>
-                </div>
-                <div className="spec-row">
-                  <span className="spec-label">bridge</span>
-                  <span className="spec-value">{m.bridge}<span className="spec-unit">mm</span></span>
-                </div>
-                <div className="spec-row">
-                  <span className="spec-label">lens height</span>
-                  <span className="spec-value">{m.lensH}<span className="spec-unit">mm</span></span>
-                </div>
-                <div className="spec-row">
-                  <span className="spec-label">face width</span>
-                  <span className="spec-value">{m.faceW}<span className="spec-unit">mm</span></span>
-                </div>
-                <div className="spec-row">
-                  <span className="spec-label">temple</span>
-                  <span className="spec-value">{m.temple}<span className="spec-unit">mm</span></span>
-                </div>
-              </>;
-            })()}
-          </div>
-
-          {/* Frame summary */}
-          <div className="result-frame-summary">
-            <div className="rfs-row">
-              <span className="rfs-label">frame</span>
-              <span className="rfs-value">{chosenFrame?.label || "—"}</span>
             </div>
-            <div className="rfs-row">
-              <span className="rfs-label">colorway</span>
-              <span className="rfs-value">{chosenColorway?.label || "—"}</span>
+          )}
+
+          {/* Send spec */}
+          {step===4&&!sent&&(
+            <div className="section">
+              <div className="eyebrow">Send</div>
+              <div className="step-head">Send your maker spec.</div>
+              <p className="step-sub">Your calibrated measurements and frame choice are ready. This opens a pre-filled email to the maker.</p>
+              <div className="receipt">
+                <div className="receipt-head">Spec summary - {orderId}</div>
+                <div className="receipt-row"><span>Custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
+                {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price===0?"Included":`+$${lensData.price}`}</span></div>}
+                <div className="receipt-total"><span>Total</span><span>${totalPrice}</span></div>
+              </div>
+              <input className="field" placeholder="Full name" autoComplete="name"
+                value={customerInfo.name} onChange={e=>setCustomerInfo(p=>({...p,name:e.target.value}))}/>
+              <input className="field" placeholder="Email address" type="email" autoComplete="email"
+                value={customerInfo.email} onChange={e=>setCustomerInfo(p=>({...p,email:e.target.value}))}/>
+              <div className="btn-row" style={{marginTop:10}}>
+                <button className="btn btn-accent"
+                  disabled={!customerInfo.name.trim()||!customerInfo.email.trim()||submitting}
+                  onClick={submitOrder}>
+                  {submitting?"Opening...":"Open email to send"}
+                </button>
+                <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
+              </div>
+              <div className="trust-line"><Padlock/><span>No images are sent. The maker receives measurements only.</span></div>
             </div>
-            <div className="rfs-row">
-              <span className="rfs-label">lenses</span>
-              <span className="rfs-value">Blue Light (included)</span>
+          )}
+
+          {/* ── Confirmation ── */}
+          {sent&&(
+            <div className="section">
+              <div className="confirm-id">{orderId}</div>
+              <div className="confirm-greeting">Spec ready,<br/>{firstName}.</div>
+              <p className="confirm-body">
+                Your maker email opened with the full frame spec. Tap send in your mail app so it reaches <strong>{MAKER_EMAIL}</strong>.
+              </p>
+              <div className="next-steps">
+                {[
+                  ["01","Send the email","Your spec is also copied to your clipboard as a backup."],
+                  ["02","We confirm details","You'll hear back within 24 hours with payment and shipping next steps."],
+                  ["03","We print your frames",`Estimated delivery target: ${getETA()}.`],
+                ].map(([n,label,desc])=>(
+                  <div className="next-step" key={n}>
+                    <span className="next-step-num">{n}</span>
+                    <div>
+                      <div className="next-step-label">{label}</div>
+                      <div className="next-step-desc">{desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="confirm-footer">{orderId} - {DOMAIN_HOST} {/* LOCKED: fitframe.store */}</div>
             </div>
-          </div>
+          )}
 
-          {/* Waitlist gate — replaces checkout */}
-          <WaitlistGate
-            measurements={currentMeas}
-            frameId={chosenFrame?.id}
-            colorwayId={chosenColorway?.id}
-          />
+          <VerificationStrip/>
+          <GeoFooter/>
 
-          <div className="btn-row" style={{marginTop:20}}>
-            <button className="btn btn-ghost" onClick={()=>setStep(5)}>back</button>
-            <a className="btn btn-ghost" href="/faq">faq →</a>
-          </div>
-        </div>}
-
+        </div>
+        <div style={{height:60}}/>
       </div>
-
-      <div className="site-footer">
-        <span>{DOMAIN}</span>
-        <span className="footer-dot">·</span>
-        <a href="/faq" className="footer-link">FAQ</a>
-        <span className="footer-dot">·</span>
-        <a href="/returns" className="footer-link">Returns</a>
-        <span className="footer-dot">·</span>
-        <a href="/privacy" className="footer-link">Privacy</a>
-        <span className="footer-dot">·</span>
-        <a href={`mailto:hello@${DOMAIN}`} className="footer-link">hello@{DOMAIN}</a>
-      </div>
-    </div>
+    </>
   );
 }

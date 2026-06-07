@@ -16,12 +16,7 @@ export default function useCamera() {
     node.play().catch(() => {});
   }, []);
 
-  const videoRef = useCallback((node) => {
-    videoElRef.current = node;
-    videoRef.current = node;
-    attachStream(node);
-  }, [attachStream]);
-  videoRef.current = videoElRef.current;
+  const videoRef = videoElRef;
 
   const start = useCallback(async () => {
     setCamErr(null);

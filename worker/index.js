@@ -412,7 +412,7 @@ async function waitlist(request, env) {
   const colorwayId = sanitized.colorway_id || null;
 
   const key = `waitlist:${email}`;
-  let duplicate = false;
+  let duplicate;
   let position = 1;
 
   if (env.FITFRAME_KV) {
