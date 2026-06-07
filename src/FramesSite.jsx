@@ -76,10 +76,12 @@ function FaceGuide({fill,autoStartPct,facePresent,poseHint,showCard=false,done=f
       )}
       <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none"
         stroke={`rgba(255,255,255,${bo})`} strokeWidth="2" vectorEffect="non-scaling-stroke" style={{transition:"stroke .4s ease"}}/>
-      {activeFill>0&&<ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke="#4caf7d" strokeWidth="3"
-        pathLength="1" strokeDasharray="1" strokeDashoffset={1-activeFill}
-        strokeLinecap="round" strokeOpacity="1" vectorEffect="non-scaling-stroke"
-        transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dashoffset .1s linear"}}/>}
+      {activeFill>0&&<path
+        d={`M ${cx} ${cy-ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy+ry} A ${rx} ${ry} 0 1 1 ${cx} ${cy-ry}`}
+        fill="none" stroke="#4caf7d" strokeWidth="3" strokeLinecap="round"
+        strokeDasharray={circ} strokeDashoffset={circ*(1-activeFill)}
+        vectorEffect="non-scaling-stroke"
+        style={{transition:"stroke-dashoffset .1s linear"}}/>}
       {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
         fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
       {!done&&showCard&&(
