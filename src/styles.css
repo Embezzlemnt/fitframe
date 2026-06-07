@@ -3,7 +3,7 @@
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --bg:#0d0d0d;--surface:#151515;--surface2:#1d1d1d;--border:#292929;--border2:#3a3a3a;
+  --bg:#0a0c0b;--surface:#151515;--surface2:#1d1d1d;--border:#292929;--border2:#3a3a3a;
   --panel:#141414;
   --text:#f5f3ee;--mid:#c4c0b7;--dim:#928e86;--soft:#68645d;
   --accent:#4caf7d;--aclt:rgba(76,175,125,.12);--acmd:#3f966c;
@@ -85,6 +85,10 @@ body{background:var(--bg);color:var(--text);font-family:'Geist',-apple-system,sa
 .light-warning{font-size:11px;color:rgba(229,166,74,.78);font-weight:300;margin-top:2px;}
 .pause-warning{font-size:14px;color:var(--amber);text-align:center;animation:pulse 1s ease-in-out infinite;}
 .cam-placeholder{width:100%;aspect-ratio:4/3;border-radius:16px;background:var(--surface);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:28px 24px;margin-bottom:20px;text-align:center;}
+.pre-scan-card{background:#111312;border-color:rgba(255,255,255,0.07);border-radius:18px;}
+.setup-diagram{background:radial-gradient(85% 90% at 50% 32%, #15201b, #0c0e0d);border-radius:14px;}
+.setup-diagram circle{stroke:rgba(255,255,255,0.55);}
+.setup-diagram rect{fill:rgba(76,175,125,0.06);}
 .cam-placeholder.loading{animation:pulse 1.6s ease-in-out infinite;}
 .cam-icon{width:44px;height:44px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--dim);}
 .cam-label{font-size:14px;color:var(--text);font-weight:400;}
