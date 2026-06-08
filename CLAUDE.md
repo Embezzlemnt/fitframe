@@ -61,7 +61,7 @@ defined in CLAUDE.md. Work screen by screen in flow order.
 
 ### Screen 1: Landing / entry
 - One clear action above the fold: "Scan your face" CTA
-- The value proposition (custom fit, 3D printed, $89) visible without scrolling
+- The value proposition (custom fit, 3D printed, $119) visible without scrolling
 - Background must have depth — consider a subtle gradient mesh, grain texture, or dark surface
 - The CTA button must be large, full-width on mobile, with a satisfying press animation
 

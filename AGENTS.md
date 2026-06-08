@@ -31,7 +31,7 @@ Optional secrets in `.dev.vars` (gitignored): `STRIPE_SECRET_KEY`, `STRIPE_WEBHO
 ### Lint / build / tests
 
 ```bash
-npm run lint    # ESLint — currently has pre-existing errors in FramesSite.jsx
+npm run lint    # ESLint — clean (.wrangler/dist/node_modules are ignored)
 npm run build   # outputs to dist/
 ```
 
@@ -43,6 +43,6 @@ No `npm test` script. Manual browser verification is the test path.
 
 ### Key files
 
-- `src/FramesSite.jsx` — main app flow (landing → scan → style → frames → checkout/waitlist)
-- `src/hooks/useFaceScan.js` — MediaPipe face scan
-- `worker/index.js` — `/api/*` routes (scan-count, waitlist, Stripe checkout)
+- `src/FramesSite.jsx` — the live app: full flow (landing → scan → style → frame → lens → maker spec email) with the MediaPipe scan, camera, and measurement logic all inline
+- `src/hooks/`, `src/utils.js`, `src/data.js`, `src/styles.css`, `src/styles/` — UNUSED legacy modular refactor. Not imported by `main.jsx`/`FramesSite.jsx`; editing these has no effect on the running app. Safe to delete pending review.
+- `worker/index.js` — `/api/*` routes (scan-count, waitlist, and a dormant Stripe checkout path that the live flow does not use)

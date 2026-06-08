@@ -1,10 +1,12 @@
 # FitFrame
 
-FitFrame is a browser-based custom eyewear flow: face scan, style selection, frame selection, shipping details, and Stripe Checkout for a fixed $89 order.
+FitFrame is a browser-based custom eyewear flow: face scan, style selection, a single made-to-measure frame, lens selection, and a pre-filled maker spec email that finalizes the $119 order.
 
-## Stripe Checkout Setup
+> **Current flow:** the live customer path ends in a pre-filled maker spec email (mailto) to `hello@fitframe.store` — there is no card payment at checkout. The Stripe path below is dormant infrastructure kept in the Worker for a possible future paid checkout; it is not part of the live flow.
 
-Task 1 is scaffolded to run through Cloudflare Workers with no new npm packages.
+## Stripe Checkout Setup (dormant)
+
+This payment path is scaffolded in the Worker but not used by the live flow.
 
 Required Cloudflare secrets:
 
@@ -38,7 +40,7 @@ checkout.session.completed
 Checkout flow:
 
 1. The app posts the order payload to `/api/create-checkout-session`.
-2. The Worker creates a Stripe hosted Checkout Session for `$89.00 USD`.
+2. The Worker creates a Stripe hosted Checkout Session for `$119.00 USD`.
 3. Stripe redirects back to `/?checkout=success&session_id=...` after payment.
 4. Stripe sends `checkout.session.completed` to `/api/stripe-webhook`.
 5. The webhook verifies the Stripe signature and emails the structured order spec to `hello@fitframe.store` through Resend.

@@ -1,8 +1,10 @@
 # Email Delivery Notes
 
-FitFrame order email is now sent from the Cloudflare Worker after Stripe confirms payment.
+**Live flow:** at the final step ("claim your founding pair") the app opens a pre-filled maker spec email (mailto) from the customer's own mail client, addressed to `hello@fitframe.store`. The body is the structured maker spec (frame, lens, price, measurements, fit answers). There is no card payment and no server-side send in the live path.
 
-## Current Checkout Email Flow
+The Worker + Stripe + Resend automated flow below is **dormant** — kept for a possible future paid checkout, not used today.
+
+## Dormant Automated Email Flow (Stripe + Resend)
 
 1. The customer completes Stripe Checkout.
 2. Stripe sends `checkout.session.completed` to `/api/stripe-webhook`.
@@ -119,9 +121,9 @@ TTL: Auto
 Proxy: DNS only
 ```
 
-## Verification
+## Verification (dormant Stripe path)
 
-1. Create a Stripe test Checkout Session from the live app or `wrangler dev`.
+1. Create a Stripe test Checkout Session from `wrangler dev`.
 2. Complete payment with Stripe test card `4242 4242 4242 4242`.
 3. Confirm the customer returns to the FitFrame confirmation screen.
 4. Confirm Stripe emits `checkout.session.completed`.
