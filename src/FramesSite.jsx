@@ -69,7 +69,6 @@ const MEASUREMENT_RANGES = {
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
   ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $119 is the honest price for what this is."],
-  ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. FitFrame is an independent adult custom-fit eyewear workflow for non-Rx frames, direct from the maker to the customer."],
   ["Who is behind FitFrame?","FitFrame is built and operated by its founder, who designs the frames, runs the scans, and fulfills every order personally. It's a small operation by choice - every pair gets real attention."],
   ["How accurate is the FitFrame scan?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
   ["What if my FitFrame frames don't fit?","FitFrame includes one free reprint if the first pair does not fit."],
@@ -360,9 +359,6 @@ const css = `
   .app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px);opacity:0;}
   .app.app-ready{animation:pageFade .4s ease-out forwards;}
   @keyframes pageFade{from{opacity:0}to{opacity:1}}
-  .app.intro-active .site-header .logo{opacity:0;}
-  .intro-logo{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);pointer-events:none;animation:logoCollapse .6s cubic-bezier(.4,0,.2,1) forwards;}
-  @keyframes logoCollapse{to{left:max(18px,calc(50% - 213px));top:27px;transform:none;font-size:15px;font-weight:500;letter-spacing:-.02em;}}
   .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .header-nav{display:flex;align-items:center;gap:16px;font-size:12px;font-weight:400;}
   .header-nav a{color:var(--dim);transition:color .15s;}
@@ -376,7 +372,7 @@ const css = `
   @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
   .display{font-size:34px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.02;margin-bottom:12px;max-width:330px;}
-  .display em{font-style:normal;color:#7fe0a8;background:linear-gradient(135deg,rgba(76,175,125,0.40),rgba(76,175,125,0.16));padding:0.04em 0.22em;border-radius:10px;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
+  .display em{font-style:normal;color:#6ee7a8;background:linear-gradient(90deg,rgba(76,175,125,0.42) 0%,rgba(76,175,125,0.0) 100%);padding:0.02em 0.16em;border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
   .step-head{font-size:26px;font-weight:600;color:var(--text);letter-spacing:-.035em;line-height:1.08;margin-bottom:6px;}
   .body-lg{font-size:14px;color:var(--dim);line-height:1.62;font-weight:300;margin-bottom:24px;max-width:360px;}
   .hero-headline{margin-bottom:14px;}
@@ -535,6 +531,14 @@ const css = `
   .processing-fill{height:100%;width:100%;background:var(--accent);border-radius:999px;transform-origin:left center;animation:processFill 2s ease-in-out both;}
   @keyframes processFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
   .verification-strip{width:100%;max-width:420px;margin:22px auto 0;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px 14px;color:var(--soft);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.45;text-transform:uppercase;letter-spacing:.06em;}
+  .faq-section{margin-top:30px;padding-top:24px;border-top:1px solid var(--border);}
+  .faq-list{display:flex;flex-direction:column;}
+  .faq-item{border-bottom:1px solid var(--border);}
+  .faq-q{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 0;font-size:14px;color:var(--text);font-weight:400;text-transform:lowercase;}
+  .faq-q::-webkit-details-marker{display:none;}
+  .faq-chevron{color:var(--dim);flex:0 0 auto;transition:transform .2s ease;}
+  .faq-item[open] .faq-chevron{transform:rotate(180deg);}
+  .faq-a{padding:0 0 16px 16px;border-left:2px solid rgba(76,175,125,0.3);font-size:13px;color:var(--dim);font-weight:300;line-height:1.6;}
   .geo-footer{width:100%;max-width:420px;margin:24px auto 0;border-top:1px solid var(--border);padding-top:8px;}
   .geo-block{border-bottom:1px solid var(--border);}
   .geo-block summary{list-style:none;cursor:pointer;padding:12px 0;font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
@@ -1211,10 +1215,16 @@ function Logo({onRestart}){
   return <button className="logo" type="button" aria-label="Restart FitFrame" onClick={onRestart}>fitframe<span className="logo-dot">.</span></button>;
 }
 
-function TrustIcon(){
+const TRUST_ICONS = {
+  flag:(<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></>),
+  box:(<><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></>),
+  refresh:(<><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></>),
+  shield:(<><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></>),
+};
+function TrustIcon({type}){
   return (
-    <svg className="trust-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5"/>
+    <svg className="trust-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {TRUST_ICONS[type]}
     </svg>
   );
 }
@@ -1241,17 +1251,28 @@ function FooterLinks(){
   );
 }
 
+function FaqAccordion(){
+  return (
+    <section className="faq-section" id="faq" aria-label="FAQ">
+      <div className="eyebrow build-eyebrow">faq</div>
+      <div className="faq-list">
+        {FITFRAME_FAQ.map(([q,a])=>(
+          <details className="faq-item" key={q}>
+            <summary className="faq-q">
+              <span>{q}</span>
+              <svg className="faq-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </summary>
+            <div className="faq-a">{a}</div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function GeoFooter(){
   return (
     <footer className="geo-footer">
-      <details className="geo-block" id="faq">
-        <summary>FAQ</summary>
-        <div className="geo-content">
-          {FITFRAME_FAQ.map(([q,a])=>(
-            <p key={q}><strong>{q}</strong> {a}</p>
-          ))}
-        </div>
-      </details>
       <details className="geo-block" id="about">
         <summary>About</summary>
         <div className="geo-content">
@@ -1698,8 +1719,6 @@ export default function FramesSite(){
     <>
       <style>{css}</style>
       <div className={`app ${introReady?"app-ready":""} ${introDone?"intro-done":"intro-active"}`}>
-        {!introDone&&<div className="intro-logo">fitframe<span className="logo-dot">.</span></div>}
-
         <header className="site-header">
           <Logo onRestart={restartFlow}/>
           <nav className="header-nav" aria-label="Site">
@@ -1724,10 +1743,10 @@ export default function FramesSite(){
               </div>
 
               <div className="trust-row">
-                <div className="trust-item"><TrustIcon/><span>made in america</span></div>
-                <div className="trust-item"><TrustIcon/><span>ships in ~10 days</span></div>
-                <div className="trust-item"><TrustIcon/><span>one-time reprint guarantee</span></div>
-                <div className="trust-item"><TrustIcon/><span>fit guarantee</span></div>
+                <div className="trust-item"><TrustIcon type="flag"/><span>made in america</span></div>
+                <div className="trust-item"><TrustIcon type="box"/><span>ships in ~10 days</span></div>
+                <div className="trust-item"><TrustIcon type="refresh"/><span>one-time reprint guarantee</span></div>
+                <div className="trust-item"><TrustIcon type="shield"/><span>fit guarantee</span></div>
               </div>
 
               <div className="price-block">
@@ -1751,6 +1770,8 @@ export default function FramesSite(){
                 <div className="eyebrow build-eyebrow">how we build it</div>
                 <p className="build-body">every pair starts with your scan. the measurements go directly into the print file — no averaging, no standardizing. carbon fiber nylon is printed layer by layer to those numbers, finished by hand, and shipped from the US. nothing is made until you order.</p>
               </div>
+
+              <FaqAccordion/>
             </div>
           )}
 
