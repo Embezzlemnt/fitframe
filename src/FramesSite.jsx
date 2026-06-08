@@ -283,10 +283,18 @@ function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) 
 function genOrderId() { return "FF-"+Math.random().toString(36).substring(2,8).toUpperCase(); }
 function getETA()     { const d=new Date(); d.setDate(d.getDate()+10); return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}); }
 
-// ─── Frame SVGs ───────────────────────────────────────────────────────────────
-const FrameSVG = ({ size=56, color="currentColor" }) => {
-  const p = { fill:"none", stroke:color, strokeLinecap:"round", strokeLinejoin:"round" };
-  return <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><rect x="4" y="10" width="30" height="18" rx="2"/><rect x="46" y="10" width="30" height="18" rx="2"/><line x1="34" y1="19" x2="46" y2="19"/><line x1="0" y1="14" x2="4" y2="18"/><line x1="80" y1="14" x2="76" y2="18"/></svg>;
+// ─── Frame SVG (refined interim silhouette — replace with CAD render later) ─────
+const FrameSVG = ({ size=120 }) => {
+  const lens = "rgba(255,255,255,0.85)";
+  return (
+    <svg width={size} height={size*0.42} viewBox="0 0 200 84" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M27,33 L7,26" stroke={lens} strokeWidth="1.8"/>
+      <path d="M173,33 L193,26" stroke={lens} strokeWidth="1.8"/>
+      <path d="M40,18 L72,18 Q86,18 86,34 L85,50 Q84,64 70,64 L42,64 Q28,64 27,50 L26,34 Q26,18 40,18 Z" stroke={lens} strokeWidth="1.8"/>
+      <path d="M160,18 L128,18 Q114,18 114,34 L115,50 Q116,64 130,64 L158,64 Q172,64 173,50 L174,34 Q174,18 160,18 Z" stroke={lens} strokeWidth="1.8"/>
+      <path d="M86,30 Q100,21 114,30" stroke="var(--accent)" strokeWidth="2"/>
+    </svg>
+  );
 };
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -321,9 +329,9 @@ const STYLE_QUESTIONS = [
 
 const DEFAULT_LENS = { id:"bluelight", label:"blue light", price:0 };
 const LENS_OPTIONS = [
-  { id:"bluelight", label:"blue light", desc:"screen-comfort polycarbonate lenses.", status:"included", selectable:true },
-  { id:"transition", label:"transition lenses", desc:"adaptive tint for bright days.", status:"coming soon", selectable:false },
-  { id:"prescription", label:"prescription", desc:"rx lens support after launch.", status:"coming soon", selectable:false },
+  { id:"bluelight", label:"blue light", desc:"screen-comfort polycarbonate lenses.", price:0, status:"included", selectable:true },
+  { id:"transition", label:"transition lenses", desc:"adaptive tint for bright days.", price:40, status:"coming soon", selectable:false },
+  { id:"prescription", label:"prescription", desc:"rx lens support after launch.", price:70, status:"coming soon", selectable:false },
 ];
 
 const SCAN_SEQ = [
@@ -472,16 +480,21 @@ const css = `
   .choice:active{transform:scale(.985);}
   .choice.chosen{border-color:var(--accent);background:var(--accent-bg);color:var(--text);}
   .lens-list{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px;}
-  .lens-row{min-height:126px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);transition:border-color .12s,background .12s,transform .12s;}
+  .lens-row{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:14px;padding:15px 16px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:left;transition:border-color .12s,background .12s,transform .12s;}
   .lens-row:active{transform:scale(.985);}
   .lens-row.sel{border-color:var(--accent);background:var(--accent-bg);}
   .lens-row.disabled{opacity:0.45;pointer-events:none;}
   .lens-info{flex:1;}
   .lens-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;}
   .lens-desc{font-size:11px;color:var(--dim);font-weight:300;line-height:1.45;}
-  .lens-price{font-family:'Geist Mono',monospace;font-size:11px;color:var(--accent);}
+  .lens-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto;}
+  .lens-price-tag{font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);letter-spacing:.02em;}
   .lens-tag{font-family:'Geist Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.06em;text-transform:uppercase;}
-  .lens-roadmap-note{font-size:12px;color:var(--soft);font-weight:300;line-height:1.5;margin:2px 0 20px;text-align:center;}
+  .spec-readout{margin-top:18px;display:grid;gap:10px;font-family:'Geist Mono',monospace;}
+  .spec-readout-row{display:flex;align-items:baseline;justify-content:space-between;font-size:13px;}
+  .spec-readout-label{color:var(--dim);letter-spacing:.01em;}
+  .spec-readout-value{color:var(--text);}
+  .spec-readout-unit{color:var(--dim);font-size:11px;margin-left:4px;}
   .rx-block{padding:15px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:18px;}
   .rx-lbl{font-size:10px;font-family:'Geist Mono',monospace;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;}
   .rx-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
@@ -538,7 +551,7 @@ const css = `
     .display{font-size:31px;}
     .step-head{font-size:24px;}
     .lens-list{gap:7px;}
-    .lens-row{min-height:132px;padding:14px 12px;}
+    .lens-row{padding:14px 13px;}
     .rx-grid{grid-template-columns:1fr 1fr;}
     .btn-row .btn{min-width:112px;}
   }
@@ -1557,10 +1570,10 @@ export default function FramesSite(){
       `Created: ${payload.timestamp}`,
       "",
       "FRAME",
-      `Style: ${payload.frame}`,
+      `Frame: custom frame — ${payload.frame} — $${BASE_PRICE}`,
       `Frame ID: ${payload.frame_id}`,
-      `Lens: ${payload.lens}`,
-      `Price: $${payload.total}`,
+      `Lens: ${payload.lens} — ${payload.lens_price?`+$${payload.lens_price}`:"included"}`,
+      `Total: $${payload.total}`,
       `Material recommendation: ${payload.material}`,
       "",
       "MEASUREMENTS_MM",
@@ -1914,25 +1927,23 @@ export default function FramesSite(){
           {/* Frame */}
           {step===3&&(
             <div className="section">
-              <div className="eyebrow">Frame</div>
               <div className="step-head">your frame.</div>
-              <p className="step-sub">one shape, built to your measurements. your answers guide the finish and fit notes, not a fake menu of options.</p>
+              <p className="step-sub">one shape, built to your measurements.</p>
               <div className="single-frame-card">
                 <div className="single-frame-icon">
-                  <FrameSVG size={120} color="var(--accent)"/>
+                  <FrameSVG size={150}/>
                 </div>
                 <div className="single-frame-name">{chosenFrame.label}</div>
-                <div className="single-frame-desc">{chosenFrame.desc}</div>
               </div>
-              <div className="vto-note">
-                <div className="vto-note-icon">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                </div>
-                <div className="vto-note-text"><strong>your measurements drive the build.</strong> the bridge, width, and temple geometry come from your scan.</div>
+              <div className="spec-readout">
+                {[["pd","pd"],["bridge","bridge"],["temple","temple"],["lens height","lensH"],["face width","faceW"]].map(([label,key])=>(
+                  <div className="spec-readout-row" key={key}>
+                    <span className="spec-readout-label">{label}</span>
+                    <span className="spec-readout-value">{(confirmedMeas||currentMeas)?.[key]??"—"}<span className="spec-readout-unit">mm</span></span>
+                  </div>
+                ))}
               </div>
-              <div className="btn-row" style={{marginTop:8}}>
+              <div className="btn-row" style={{marginTop:18}}>
                 <button className="btn btn-primary" onClick={()=>{setSelectedFrame(FITFRAME_FRAME.id);setStep(4);}}>
                   choose lenses →
                 </button>
@@ -1944,7 +1955,6 @@ export default function FramesSite(){
           {/* Lenses */}
           {step===4&&!sent&&(
             <div className="section">
-              <div className="eyebrow">Lenses</div>
               <div className="step-head">lens options.</div>
               <p className="step-sub">blue light is included for founding pairs. more options are on the roadmap.</p>
               <div className="lens-list">
@@ -1960,11 +1970,13 @@ export default function FramesSite(){
                       <div className="lens-name">{option.label}</div>
                       <div className="lens-desc">{option.desc}</div>
                     </div>
-                    <div className="lens-tag">{option.status}</div>
+                    <div className="lens-meta">
+                      <div className="lens-price-tag">{option.price?`+$${option.price}`:"included"}</div>
+                      {!option.selectable&&<div className="lens-tag">coming soon</div>}
+                    </div>
                   </button>
                 ))}
               </div>
-              <div className="lens-roadmap-note">more lens options coming soon.</div>
               <div className="btn-row" style={{marginTop:8}}>
                 <button className="btn btn-primary" onClick={()=>setStep(5)}>review my spec →</button>
                 <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
@@ -1975,13 +1987,12 @@ export default function FramesSite(){
           {/* Send spec */}
           {step===5&&!sent&&(
             <div className="section">
-              <div className="eyebrow">Send</div>
-              <div className="step-head">Send your maker spec.</div>
-              <p className="step-sub">Your calibrated measurements and frame choice are ready. This opens a pre-filled email to the maker.</p>
+              <div className="step-head">claim your founding pair.</div>
+              <p className="step-sub">your measurements and frame are ready. this opens a pre-filled email to the maker.</p>
               <div className="receipt">
                 <div className="receipt-head">Spec summary - {orderId}</div>
                 <div className="receipt-row"><span>custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
-                {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price===0?"included":`+$${lensData.price}`}</span></div>}
+                {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price?`+$${lensData.price}`:"included"}</span></div>}
                 <div className="receipt-total"><span>Total</span><span>${totalPrice}</span></div>
               </div>
               <input className="field" placeholder="Full name" autoComplete="name"
