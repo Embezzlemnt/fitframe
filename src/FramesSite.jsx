@@ -3,8 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 // ─── Config ───────────────────────────────────────────────────────────────────
 const MAKER_EMAIL = "hello@fitframe.store";
 const DOMAIN_URL = "https://fitframe.store"; // LOCKED
-const DOMAIN_HOST = "fitframe.store"; // LOCKED
-const BASE_PRICE  = 89;
+const BASE_PRICE  = 119;
 
 // ─── localStorage persistence ─────────────────────────────────────────────────
 const STORE_KEY = "fitframe_session_v1";
@@ -69,7 +68,7 @@ const MEASUREMENT_RANGES = {
 };
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
-  ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $89 is the honest price for what this is."],
+  ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $119 is the honest price for what this is."],
   ["How is FitFrame different from Fitz Frames?","FitFrame is not Fitz Frames. FitFrame is an independent adult custom-fit eyewear workflow for non-Rx frames, direct from the maker to the customer."],
   ["Who is behind FitFrame?","FitFrame is built and operated by its founder, who designs the frames, runs the scans, and fulfills every order personally. It's a small operation by choice - every pair gets real attention."],
   ["How accurate is the FitFrame scan?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
@@ -285,32 +284,13 @@ function genOrderId() { return "FF-"+Math.random().toString(36).substring(2,8).t
 function getETA()     { const d=new Date(); d.setDate(d.getDate()+10); return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}); }
 
 // ─── Frame SVGs ───────────────────────────────────────────────────────────────
-const FrameSVG = ({ id, size=56, color="currentColor" }) => {
+const FrameSVG = ({ size=56, color="currentColor" }) => {
   const p = { fill:"none", stroke:color, strokeLinecap:"round", strokeLinejoin:"round" };
-  const s = {
-    "thin-round":  <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><circle cx="20" cy="20" r="14"/><circle cx="60" cy="20" r="14"/><line x1="34" y1="20" x2="46" y2="20"/><line x1="0" y1="16" x2="6" y2="20"/><line x1="80" y1="16" x2="74" y2="20"/></svg>,
-    "bold-square": <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="4"><rect x="4" y="6" width="30" height="26" rx="3"/><rect x="46" y="6" width="30" height="26" rx="3"/><line x1="34" y1="19" x2="46" y2="19"/><line x1="0" y1="12" x2="4" y2="16"/><line x1="80" y1="12" x2="76" y2="16"/></svg>,
-    "cat-eye":     <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><path d="M6 26 Q8 8 26 6 Q36 5 34 20 Q32 32 18 32 Q8 32 6 26Z"/><path d="M74 26 Q72 8 54 6 Q44 5 46 20 Q48 32 62 32 Q72 32 74 26Z"/><line x1="34" y1="19" x2="46" y2="19"/><line x1="0" y1="16" x2="6" y2="20"/><line x1="80" y1="16" x2="74" y2="20"/></svg>,
-    "navigator":   <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><path d="M6 10 Q8 6 20 6 Q32 6 34 16 Q36 28 20 32 Q6 32 6 22Z"/><path d="M74 10 Q72 6 60 6 Q48 6 46 16 Q44 28 60 32 Q74 32 74 22Z"/><line x1="34" y1="18" x2="46" y2="18"/><line x1="0" y1="14" x2="6" y2="18"/><line x1="80" y1="14" x2="74" y2="18"/></svg>,
-    "rectangle":   <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><rect x="4" y="10" width="30" height="18" rx="2"/><rect x="46" y="10" width="30" height="18" rx="2"/><line x1="34" y1="19" x2="46" y2="19"/><line x1="0" y1="14" x2="4" y2="18"/><line x1="80" y1="14" x2="76" y2="18"/></svg>,
-    "round-thick": <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="4"><circle cx="20" cy="20" r="13"/><circle cx="60" cy="20" r="13"/><line x1="33" y1="20" x2="47" y2="20" strokeWidth="3"/><line x1="0" y1="16" x2="7" y2="20" strokeWidth="3"/><line x1="80" y1="16" x2="73" y2="20" strokeWidth="3"/></svg>,
-    "sporty-wrap": <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><path d="M2 20 Q4 8 20 8 Q36 8 40 20 Q44 8 60 8 Q76 8 78 20 Q76 32 60 30 Q44 28 40 20 Q36 28 20 30 Q4 32 2 20Z"/><line x1="0" y1="16" x2="2" y2="20"/><line x1="80" y1="16" x2="78" y2="20"/></svg>,
-    "geometric":   <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><polygon points="20,5 34,12 34,26 20,33 6,26 6,12"/><polygon points="60,5 74,12 74,26 60,33 46,26 46,12"/><line x1="34" y1="19" x2="46" y2="19"/><line x1="0" y1="14" x2="6" y2="18"/><line x1="80" y1="14" x2="74" y2="18"/></svg>,
-  };
-  return s[id] || s["rectangle"];
+  return <svg width={size} height={size*.5} viewBox="0 0 80 40" {...p} strokeWidth="2"><rect x="4" y="10" width="30" height="18" rx="2"/><rect x="46" y="10" width="30" height="18" rx="2"/><line x1="34" y1="19" x2="46" y2="19"/><line x1="0" y1="14" x2="4" y2="18"/><line x1="80" y1="14" x2="76" y2="18"/></svg>;
 };
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
-const FRAMES = [
-  { id:"thin-round",  label:"Thin Round",     desc:"Wire. Circular. Timeless.",      tags:["minimal","soft","retro","classic","clean"] },
-  { id:"bold-square", label:"Bold Square",    desc:"Thick. Structured. Presence.",   tags:["bold","statement","modern","confident"] },
-  { id:"cat-eye",     label:"Cat Eye",        desc:"Upswept. Distinct. Playful.",    tags:["vintage","expressive","retro","statement"] },
-  { id:"navigator",   label:"Navigator",      desc:"Teardrop. Works on most faces.", tags:["classic","clean","modern","adjustable"] },
-  { id:"rectangle",   label:"Slim Rectangle", desc:"Low profile. Understated.",      tags:["minimal","sleek","modern","clean","slim"] },
-  { id:"round-thick", label:"Round Thick",    desc:"Wide. Retro. Confident.",        tags:["bold","retro","statement","vintage"] },
-  { id:"sporty-wrap", label:"Sporty Wrap",    desc:"Curved. Active. Polished.",      tags:["sporty","practical","adjustable","bold"] },
-  { id:"geometric",   label:"Geometric",      desc:"Angular. Unconventional.",       tags:["editorial","modern","statement","bold"] },
-];
+const FITFRAME_FRAME = { id:"fitframe-core", label:"fitframe core", desc:"one shape, built to your measurements." };
 
 const STYLE_QUESTIONS = [
   { id:"fit",      q:"How do glasses usually feel on you?", options:[
@@ -339,7 +319,12 @@ const STYLE_QUESTIONS = [
   ]},
 ];
 
-const DEFAULT_LENS = { id:"bluelight", label:"Blue Light", price:0 };
+const DEFAULT_LENS = { id:"bluelight", label:"blue light", price:0 };
+const LENS_OPTIONS = [
+  { id:"bluelight", label:"blue light", desc:"screen-comfort polycarbonate lenses.", status:"included", selectable:true },
+  { id:"transition", label:"transition lenses", desc:"adaptive tint for bright days.", status:"coming soon", selectable:false },
+  { id:"prescription", label:"prescription", desc:"rx lens support after launch.", status:"coming soon", selectable:false },
+];
 
 const SCAN_SEQ = [
   { holdMs:1500, fill:0.08 },
@@ -455,14 +440,17 @@ const css = `
   .choice{min-height:48px;padding:14px 16px;border:1px solid var(--border2);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:left;font-family:'Geist',sans-serif;font-size:14px;color:var(--text);font-weight:300;line-height:1.4;width:100%;transition:border-color .12s,background .12s,color .12s,transform .12s;}
   .choice:active{transform:scale(.985);}
   .choice.chosen{border-color:var(--accent);background:var(--accent-bg);color:var(--text);}
-  .lens-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:22px;}
+  .lens-list{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px;}
   .lens-row{min-height:126px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);transition:border-color .12s,background .12s,transform .12s;}
   .lens-row:active{transform:scale(.985);}
   .lens-row.sel{border-color:var(--accent);background:var(--accent-bg);}
+  .lens-row.disabled{opacity:0.45;pointer-events:none;}
   .lens-info{flex:1;}
   .lens-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;}
   .lens-desc{font-size:11px;color:var(--dim);font-weight:300;line-height:1.45;}
   .lens-price{font-family:'Geist Mono',monospace;font-size:11px;color:var(--accent);}
+  .lens-tag{font-family:'Geist Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.06em;text-transform:uppercase;}
+  .lens-roadmap-note{font-size:12px;color:var(--soft);font-weight:300;line-height:1.5;margin:2px 0 20px;text-align:center;}
   .rx-block{padding:15px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:18px;}
   .rx-lbl{font-size:10px;font-family:'Geist Mono',monospace;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;}
   .rx-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
@@ -473,17 +461,10 @@ const css = `
   .vto-note-icon{color:var(--accent);flex-shrink:0;padding-top:1px;}
   .vto-note-text{font-size:11px;color:var(--dim);font-weight:300;line-height:1.5;}
   .vto-note-text strong{color:var(--text);font-weight:400;}
-  .frame-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-  .frame-tile{min-height:138px;padding:16px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2);text-align:center;transition:border-color .14s,background .14s,box-shadow .14s,transform .12s;position:relative;}
-  .frame-tile:active{transform:scale(.985);}
-  .frame-tile:hover{border-color:var(--border2);}
-  .frame-tile.sel{border-color:var(--accent);background:var(--accent-bg);box-shadow:0 0 0 1px rgba(76,175,125,.18) inset;}
-  .frame-tile-icon{display:flex;justify-content:center;align-items:center;margin:8px 0 11px;min-height:28px;color:var(--dim);}
-  .frame-tile-name{font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px;}
-  .frame-tile.sel .frame-tile-name{color:var(--text);}
-  .frame-tile-desc{font-size:11px;color:var(--dim);font-weight:300;line-height:1.4;}
-  .frame-fit-note{font-size:10px;color:var(--accent);font-family:'Geist Mono',monospace;line-height:1.35;margin-top:8px;}
-  .best-badge{position:absolute;top:9px;right:9px;font-size:8px;padding:3px 7px;background:var(--accent);color:#07110b;border-radius:4px;font-family:'Geist Mono',monospace;letter-spacing:.06em;text-transform:uppercase;}
+  .single-frame-card{padding:22px 16px;border:1px solid var(--accent);border-radius:12px;background:var(--accent-bg);box-shadow:0 0 0 1px rgba(76,175,125,.18) inset;margin-bottom:14px;text-align:center;}
+  .single-frame-icon{display:flex;justify-content:center;align-items:center;margin:10px 0 16px;color:var(--accent);}
+  .single-frame-name{font-size:16px;font-weight:500;color:var(--text);letter-spacing:-.02em;margin-bottom:5px;}
+  .single-frame-desc{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;max-width:260px;margin:0 auto;}
   .receipt{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px;}
   .receipt-head{padding:13px 16px;border-bottom:1px solid var(--border);font-size:10px;font-family:'Geist Mono',monospace;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
   .receipt-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--dim);font-weight:300;}
@@ -501,7 +482,6 @@ const css = `
   .next-step-num{font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);padding-top:2px;min-width:18px;}
   .next-step-label{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px;}
   .next-step-desc{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;}
-  .confirm-footer{margin-top:24px;font-size:11px;color:var(--soft);text-align:center;font-family:'Geist Mono',monospace;letter-spacing:.04em;}
   .processing-card{width:100%;padding:18px 16px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:18px;}
   .processing-logo{font-size:16px;font-weight:500;color:var(--text);letter-spacing:-.02em;}
   .processing-copy{font-size:13px;color:var(--dim);font-weight:300;}
@@ -526,9 +506,8 @@ const css = `
     .section{padding:20px 16px;border-radius:14px;}
     .display{font-size:31px;}
     .step-head{font-size:24px;}
-    .lens-list,.frame-grid{gap:7px;}
+    .lens-list{gap:7px;}
     .lens-row{min-height:132px;padding:14px 12px;}
-    .frame-tile{min-height:142px;padding-left:10px;padding-right:10px;}
     .rx-grid{grid-template-columns:1fr 1fr;}
     .btn-row .btn{min-width:112px;}
   }
@@ -1129,7 +1108,7 @@ function useFitFrameJsonLd(){
         },
         offers:{
           "@type":"Offer",
-          price:"89",
+          price:"119",
           priceCurrency:"USD",
           availability:"https://schema.org/InStock",
           url:DOMAIN_URL,
@@ -1182,8 +1161,8 @@ function useFitFrameJsonLd(){
   },[]);
 }
 
-function Logo(){
-  return <a className="logo" aria-label="About FitFrame" href="/about">fitframe<span className="logo-dot">.</span></a>;
+function Logo({onRestart}){
+  return <button className="logo" type="button" aria-label="Restart FitFrame" onClick={onRestart}>fitframe<span className="logo-dot">.</span></button>;
 }
 
 function VerificationStrip(){
@@ -1222,7 +1201,7 @@ export default function FramesSite(){
   useFitFrameJsonLd();
   const saved=loadSession()||{};
 
-  const savedStep = Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 4 ? saved.step : 0;
+  const savedStep = Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 5 ? saved.step : 0;
   const [step,          setStep]          = useState(savedStep);
   const [confirmedMeas, setConfirmedMeas] = useState(saved.confirmedMeas??null);
   const [calibration,   setCalibration]   = useState(saved.calibration??null);
@@ -1230,6 +1209,7 @@ export default function FramesSite(){
   const [styleQIdx,     setStyleQIdx]     = useState(saved.styleQIdx??0);
   const [tapped,        setTapped]        = useState(null);
   const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
+  const [selectedLens,  setSelectedLens]  = useState(saved.selectedLens??DEFAULT_LENS.id);
   const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{name:"",email:""});
   const [scanning,      setScanning]      = useState(false);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
@@ -1241,7 +1221,7 @@ export default function FramesSite(){
   const [scanProcessing,setScanProcessing] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [sent,          setSent]          = useState(false);
-  const [orderId]                         = useState(()=>saved.orderId??genOrderId());
+  const [orderId,       setOrderId]       = useState(()=>saved.orderId??genOrderId());
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
   const processingTimerRef                 = useRef(null);
@@ -1321,40 +1301,12 @@ export default function FramesSite(){
   // Persist
   useEffect(()=>{
     if (step===0||sent) return;
-    saveSession({step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,customerInfo,orderId});
-  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,customerInfo,orderId]);
+    saveSession({step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId});
+  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId]);
 
-  // Frame scoring
-  const suggestedTags=Object.values(styleAnswers).flatMap(a=>a?.tags||[]);
-  const geometryScore=(frame)=>{
-    const m=currentMeas;
-    if (!m) return {score:0,note:""};
-    const faceW=parseFloat(m.faceW), pd=parseFloat(m.pd), bridge=parseFloat(m.bridge);
-    let score=0;
-    let note="Balanced fit";
-    if (faceW>=145){
-      if (["bold-square","navigator","round-thick","sporty-wrap"].includes(frame.id)) score+=2;
-      if (["thin-round","rectangle"].includes(frame.id)) { score-=1; note="May sit narrow"; }
-      else note="Width match";
-    } else if (faceW&&faceW<=128){
-      if (["thin-round","rectangle","cat-eye","geometric"].includes(frame.id)) score+=2;
-      if (["bold-square","sporty-wrap","round-thick"].includes(frame.id)) { score-=1; note="May feel wide"; }
-      else note="Compact fit";
-    }
-    if (bridge>=20&&["navigator","sporty-wrap","bold-square"].includes(frame.id)){ score+=1; note="Bridge fit strong"; }
-    if (bridge&&bridge<=15&&["thin-round","rectangle","cat-eye"].includes(frame.id)){ score+=1; note="Bridge fit strong"; }
-    if (pd>=66&&["bold-square","navigator","sporty-wrap","round-thick"].includes(frame.id)) score+=1;
-    if (pd&&pd<=58&&["thin-round","rectangle","cat-eye"].includes(frame.id)) score+=1;
-    return {score,note};
-  };
-  const topFrames=[...FRAMES].map(f=>{
-    const styleScore=f.tags.filter(t=>suggestedTags.includes(t)).length;
-    const fit=geometryScore(f);
-    return {...f,score:styleScore+fit.score,styleScore,fitScore:fit.score,fitNote:fit.note};
-  }).sort((a,b)=>b.score-a.score);
-  const lensData=DEFAULT_LENS;
+  const lensData=LENS_OPTIONS.find(lens=>lens.id===selectedLens&&lens.selectable)||DEFAULT_LENS;
   const totalPrice=BASE_PRICE+(lensData?.price||0);
-  const chosenFrame=FRAMES.find(f=>f.id===selectedFrame)||topFrames[0];
+  const chosenFrame=FITFRAME_FRAME;
 
   useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
   useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); } },[scan.done]);
@@ -1455,12 +1407,44 @@ export default function FramesSite(){
     setStyleAnswers({});
     setStyleQIdx(0);
     setSelectedFrame(null);
+    setSelectedLens(DEFAULT_LENS.id);
     scan.reset();
     setScanning(false);
     setCameraIntro(false);
+    setSent(false);
+    setSubmitting(false);
     scanHistorySavedRef.current=false;
     setScanPrepDismissed(false);
     setStep(1);
+  }
+
+  function restartFlow(){
+    clearSession();
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    processingTimerRef.current=null;
+    settleTimerRef.current=null;
+    setScanProcessing(false);
+    setScanSettling(false);
+    setScanRestartCopy("");
+    setConfirmedMeas(null);
+    setCalibration(null);
+    setStyleAnswers({});
+    setStyleQIdx(0);
+    setTapped(null);
+    setSelectedFrame(null);
+    setSelectedLens(DEFAULT_LENS.id);
+    setCustomerInfo({name:"",email:""});
+    setOrderId(genOrderId());
+    setSubmitting(false);
+    setSent(false);
+    scan.reset();
+    setScanning(false);
+    setCameraIntro(false);
+    setScanPrepDismissed(false);
+    scanHistorySavedRef.current=false;
+    stopCamera();
+    setStep(0);
   }
 
   function rescan(){
@@ -1516,6 +1500,7 @@ export default function FramesSite(){
       `Style: ${payload.frame}`,
       `Frame ID: ${payload.frame_id}`,
       `Lens: ${payload.lens}`,
+      `Price: $${payload.total}`,
       `Material recommendation: ${payload.material}`,
       "",
       "MEASUREMENTS_MM",
@@ -1641,7 +1626,7 @@ export default function FramesSite(){
         {!introDone&&<div className="intro-logo">fitframe<span className="logo-dot">.</span></div>}
 
         <header className="site-header">
-          <Logo/>
+          <Logo onRestart={restartFlow}/>
         </header>
 
         <div className="container">
@@ -1838,50 +1823,73 @@ export default function FramesSite(){
           {step===3&&(
             <div className="section">
               <div className="eyebrow">Frame</div>
-              <div className="step-head">Pick your shape.</div>
-              <p className="step-sub">Your top match is highlighted based on your answers. Choose the one that feels right.</p>
+              <div className="step-head">your frame.</div>
+              <p className="step-sub">one shape, built to your measurements. your answers guide the finish and fit notes, not a fake menu of options.</p>
+              <div className="single-frame-card">
+                <div className="single-frame-icon">
+                  <FrameSVG size={120} color="var(--accent)"/>
+                </div>
+                <div className="single-frame-name">{chosenFrame.label}</div>
+                <div className="single-frame-desc">{chosenFrame.desc}</div>
+              </div>
               <div className="vto-note">
                 <div className="vto-note-icon">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                   </svg>
                 </div>
-                <div className="vto-note-text"><strong>Virtual try-on coming soon.</strong> Select the shape that matches your style for now.</div>
-              </div>
-              <div className="frame-grid">
-                {topFrames.map((f,i)=>(
-                  <div key={f.id} className={`frame-tile ${selectedFrame?selectedFrame===f.id?"sel":"":i===0?"sel":""}`}
-                    onClick={()=>setSelectedFrame(f.id)}>
-                    {i===0&&<div className="best-badge">best match</div>}
-                    <div className="frame-tile-icon">
-                      <FrameSVG id={f.id} size={52}
-                        color={(selectedFrame?selectedFrame===f.id:i===0)?"var(--accent)":"var(--border2)"}/>
-                    </div>
-                    <div className="frame-tile-name">{f.label}</div>
-                    <div className="frame-tile-desc">{f.desc}</div>
-                    {currentMeas&&<div className="frame-fit-note">{f.fitNote}</div>}
-                  </div>
-                ))}
+                <div className="vto-note-text"><strong>your measurements drive the build.</strong> the bridge, width, and temple geometry come from your scan.</div>
               </div>
               <div className="btn-row" style={{marginTop:8}}>
-                <button className="btn btn-primary" onClick={()=>{if(!selectedFrame)setSelectedFrame(topFrames[0]?.id);setStep(4);}}>
-                  Review my spec
+                <button className="btn btn-primary" onClick={()=>{setSelectedFrame(FITFRAME_FRAME.id);setStep(4);}}>
+                  choose lenses →
                 </button>
                 <button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button>
               </div>
             </div>
           )}
 
-          {/* Send spec */}
+          {/* Lenses */}
           {step===4&&!sent&&(
+            <div className="section">
+              <div className="eyebrow">Lenses</div>
+              <div className="step-head">lens options.</div>
+              <p className="step-sub">blue light is included for founding pairs. more options are on the roadmap.</p>
+              <div className="lens-list">
+                {LENS_OPTIONS.map(option=>(
+                  <button
+                    key={option.id}
+                    className={`lens-row ${selectedLens===option.id?"sel":""} ${!option.selectable?"disabled":""}`}
+                    disabled={!option.selectable}
+                    onClick={()=>option.selectable&&setSelectedLens(option.id)}
+                    type="button"
+                  >
+                    <div className="lens-info">
+                      <div className="lens-name">{option.label}</div>
+                      <div className="lens-desc">{option.desc}</div>
+                    </div>
+                    <div className="lens-tag">{option.status}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="lens-roadmap-note">more lens options coming soon.</div>
+              <div className="btn-row" style={{marginTop:8}}>
+                <button className="btn btn-primary" onClick={()=>setStep(5)}>review my spec →</button>
+                <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
+              </div>
+            </div>
+          )}
+
+          {/* Send spec */}
+          {step===5&&!sent&&(
             <div className="section">
               <div className="eyebrow">Send</div>
               <div className="step-head">Send your maker spec.</div>
               <p className="step-sub">Your calibrated measurements and frame choice are ready. This opens a pre-filled email to the maker.</p>
               <div className="receipt">
                 <div className="receipt-head">Spec summary - {orderId}</div>
-                <div className="receipt-row"><span>Custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
-                {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price===0?"Included":`+$${lensData.price}`}</span></div>}
+                <div className="receipt-row"><span>custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
+                {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price===0?"included":`+$${lensData.price}`}</span></div>}
                 <div className="receipt-total"><span>Total</span><span>${totalPrice}</span></div>
               </div>
               <input className="field" placeholder="Full name" autoComplete="name"
@@ -1894,7 +1902,7 @@ export default function FramesSite(){
                   onClick={submitOrder}>
                   {submitting?"Opening...":"Open email to send"}
                 </button>
-                <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
+                <button className="btn btn-ghost" onClick={()=>setStep(4)}>Back</button>
               </div>
               <div className="trust-line"><Padlock/><span>No images are sent. The maker receives measurements only.</span></div>
             </div>
@@ -1923,7 +1931,6 @@ export default function FramesSite(){
                   </div>
                 ))}
               </div>
-              <div className="confirm-footer">{orderId} - {DOMAIN_HOST} {/* LOCKED: fitframe.store */}</div>
             </div>
           )}
 
