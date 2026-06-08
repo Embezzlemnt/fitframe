@@ -355,7 +355,11 @@ const css = `
   .app.intro-active .site-header .logo{opacity:0;}
   .intro-logo{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);font-size:48px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);pointer-events:none;animation:logoCollapse .6s cubic-bezier(.4,0,.2,1) forwards;}
   @keyframes logoCollapse{to{left:max(18px,calc(50% - 213px));top:27px;transform:none;font-size:15px;font-weight:500;letter-spacing:-.02em;}}
-  .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:flex-start;}
+  .site-header{width:100%;max-width:462px;padding:22px 18px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .header-nav{display:flex;align-items:center;gap:16px;font-size:12px;font-weight:400;}
+  .header-nav a{color:var(--dim);transition:color .15s;}
+  .header-nav a:hover{color:var(--text);}
+  .app.intro-active .site-header .header-nav{opacity:0;}
   .logo{font:inherit;font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;line-height:1;cursor:pointer;background:transparent;border:0;padding:0;}
   .logo:hover{color:#fff;}
   .logo-dot{color:var(--accent);}
@@ -367,6 +371,33 @@ const css = `
   .display em{font-style:normal;color:var(--accent);}
   .step-head{font-size:26px;font-weight:600;color:var(--text);letter-spacing:-.035em;line-height:1.08;margin-bottom:6px;}
   .body-lg{font-size:14px;color:var(--dim);line-height:1.62;font-weight:300;margin-bottom:24px;max-width:360px;}
+  .hero-headline{margin-bottom:14px;}
+  .uline{color:var(--accent);position:relative;white-space:nowrap;}
+  .uline::after{content:"";position:absolute;left:0;right:0;bottom:3px;height:2px;border-radius:2px;background:rgba(76,175,125,.4);}
+  .hero-sub{margin-bottom:16px;}
+  .hero-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;margin-bottom:18px;border:1px solid var(--border);border-radius:999px;background:var(--surface2);font-family:'Geist Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:.02em;}
+  .hero-cta{width:100%;}
+  .trust-row{display:flex;flex-wrap:wrap;gap:10px 18px;margin:18px 0 2px;}
+  .trust-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mid);font-weight:300;}
+  .trust-icon{color:var(--accent);flex:0 0 auto;}
+  .why-block{margin-top:30px;padding-top:24px;border-top:1px solid var(--border);}
+  .why-lead{font-size:22px;font-weight:500;letter-spacing:-.03em;color:var(--text);line-height:1.2;margin-bottom:14px;}
+  .why-body{font-size:14px;font-weight:300;color:var(--dim);line-height:1.7;}
+  .why-emph{color:var(--text);font-weight:500;}
+  .feature-list{list-style:none;margin:26px 0 0;padding:0;display:grid;gap:13px;}
+  .feature-list li{display:flex;gap:14px;align-items:baseline;}
+  .feature-num{font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);flex:0 0 auto;}
+  .feature-text{font-size:14px;color:var(--dim);font-weight:300;line-height:1.55;}
+  .feature-lead{color:var(--text);font-weight:400;}
+  .build-block{margin-top:30px;padding-top:24px;border-top:1px solid var(--border);}
+  .build-eyebrow{color:var(--accent);margin-bottom:10px;}
+  .build-body{font-size:14px;color:var(--dim);font-weight:300;line-height:1.7;}
+  .price-line{margin-top:24px;font-family:'Geist Mono',monospace;font-size:13px;color:var(--text);letter-spacing:.01em;}
+  .vs-dot{opacity:.5;}
+  .footer-links{width:100%;max-width:462px;margin:14px auto 0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;font-size:11px;color:var(--soft);font-weight:300;}
+  .footer-links a{color:var(--soft);transition:color .15s;}
+  .footer-links a:hover{color:var(--text);}
+  .footer-links span{color:var(--soft);opacity:.55;}
   .step-sub{font-size:13px;color:var(--dim);line-height:1.6;font-weight:300;margin-bottom:18px;letter-spacing:-.01em;}
   .privacy-inline{display:flex;align-items:flex-start;justify-content:center;gap:6px;max-width:300px;margin-top:2px;color:var(--soft);font-size:11px;font-weight:300;line-height:1.45;}
   .privacy-inline svg{flex:0 0 auto;margin-top:1px;opacity:.7;}
@@ -1165,20 +1196,40 @@ function Logo({onRestart}){
   return <button className="logo" type="button" aria-label="Restart FitFrame" onClick={onRestart}>fitframe<span className="logo-dot">.</span></button>;
 }
 
+function TrustIcon(){
+  return (
+    <svg className="trust-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5"/>
+    </svg>
+  );
+}
+
 function VerificationStrip(){
   return (
     <section className="verification-strip" aria-label="Verification">
-      <span>American made</span>
-      <span>Zero-waste to order</span>
-      <span>One-time reprint guarantee</span>
+      <span>AMERICAN MADE</span><span className="vs-dot">·</span>
+      <span>ZERO-WASTE TO ORDER</span><span className="vs-dot">·</span>
+      <span>ONE-TIME REPRINT GUARANTEE</span>
     </section>
+  );
+}
+
+function FooterLinks(){
+  return (
+    <nav className="footer-links" aria-label="Footer">
+      <a href="#faq">FAQ</a><span>·</span>
+      <a href="#about">ABOUT</a><span>·</span>
+      <a href="/returns">Returns</a><span>·</span>
+      <a href="/privacy">Privacy</a><span>·</span>
+      <a href="mailto:hello@fitframe.store">hello@fitframe.store</a>
+    </nav>
   );
 }
 
 function GeoFooter(){
   return (
     <footer className="geo-footer">
-      <details className="geo-block">
+      <details className="geo-block" id="faq">
         <summary>FAQ</summary>
         <div className="geo-content">
           {FITFRAME_FAQ.map(([q,a])=>(
@@ -1186,7 +1237,7 @@ function GeoFooter(){
           ))}
         </div>
       </details>
-      <details className="geo-block">
+      <details className="geo-block" id="about">
         <summary>About</summary>
         <div className="geo-content">
           <p>FitFrame started as a frustration with glasses that never fit right. Every pair built here is measured from your actual face, printed to those measurements, and shipped directly to you. No middleman, no standard sizing, no compromise. It's a small operation built on the belief that fit shouldn't be a luxury.</p>
@@ -1222,6 +1273,7 @@ export default function FramesSite(){
   const [submitting,    setSubmitting]    = useState(false);
   const [sent,          setSent]          = useState(false);
   const [orderId,       setOrderId]       = useState(()=>saved.orderId??genOrderId());
+  const [scanCount,     setScanCount]     = useState(null);
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
   const processingTimerRef                 = useRef(null);
@@ -1319,6 +1371,14 @@ export default function FramesSite(){
     requestAnimationFrame(()=>setIntroReady(true));
     const timer=setTimeout(()=>setIntroDone(true),720);
     return ()=>clearTimeout(timer);
+  },[]);
+  useEffect(()=>{
+    let cancelled=false;
+    fetch("/api/scan-count")
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(!cancelled&&d?.ok&&Number.isFinite(d.count)) setScanCount(d.count); })
+      .catch(()=>{});
+    return ()=>{ cancelled=true; };
   },[]);
   useEffect(()=>{
     if (!scan.done) return;
@@ -1627,19 +1687,51 @@ export default function FramesSite(){
 
         <header className="site-header">
           <Logo onRestart={restartFlow}/>
+          <nav className="header-nav" aria-label="Site">
+            <a href="#faq">FAQ</a>
+            <a href="/">fitframe.store</a>
+          </nav>
         </header>
 
         <div className="container">
 
           {/* ── 0: Hero ── */}
           {step===0&&(
-            <div className="section">
-              <div className="eyebrow">Made-to-measure eyewear</div>
-              <div className="display">Frames built<br/>for <em>your</em> face.</div>
-              <p className="body-lg">A calibrated phone scan, four quick answers, and a frame spec ready for 3D printing. No app. No optician visit.</p>
+            <div className="section hero">
+              <div className="eyebrow">made-to-measure eyewear</div>
+              <h1 className="display hero-headline">frames built for <span className="uline">your</span> face.</h1>
+              <p className="body-lg hero-sub">scan your face. answer four questions. get frames built to your exact measurements.</p>
+              {scanCount!=null&&(
+                <div className="hero-pill">{scanCount.toLocaleString()} faces scanned</div>
+              )}
               <div className="btn-row">
-                <button className="btn btn-primary" onClick={startFreshScan}>Start fit scan</button>
+                <button className="btn btn-primary hero-cta" onClick={startFreshScan}>scan your face →</button>
               </div>
+
+              <div className="trust-row">
+                <div className="trust-item"><TrustIcon/><span>made in america</span></div>
+                <div className="trust-item"><TrustIcon/><span>ships in ~10 days</span></div>
+                <div className="trust-item"><TrustIcon/><span>fit guarantee</span></div>
+              </div>
+
+              <div className="why-block">
+                <p className="why-lead">glasses are built for an average face. most of us aren't average.</p>
+                <p className="why-body">FitFrame exists for the person who gave up without realizing it. one browser-based scan maps your face to real millimeter measurements. a carbon fiber nylon frame gets printed to those numbers — zero inventory, zero waste, built to your geometry. <span className="why-emph">not adjusted. not approximated. yours.</span></p>
+              </div>
+
+              <ol className="feature-list">
+                <li><span className="feature-num">01</span><span className="feature-text"><span className="feature-lead">your phone does what an optician does.</span> no appointment, no store.</span></li>
+                <li><span className="feature-num">02</span><span className="feature-text"><span className="feature-lead">every measurement captured —</span> pd, bridge, temple, face width, face height.</span></li>
+                <li><span className="feature-num">03</span><span className="feature-text"><span className="feature-lead">3D printed to your spec in carbon fiber nylon.</span> light, precise, durable.</span></li>
+                <li><span className="feature-num">04</span><span className="feature-text"><span className="feature-lead">first batch is limited.</span> you're early.</span></li>
+              </ol>
+
+              <div className="build-block">
+                <div className="eyebrow build-eyebrow">how we build it</div>
+                <p className="build-body">every pair starts with your scan. the measurements go directly into the print file — no averaging, no standardizing. carbon fiber nylon is printed layer by layer to those numbers, finished by hand, and shipped from the US. nothing is made until you order.</p>
+              </div>
+
+              <div className="price-line">$119 · blue light lenses included</div>
             </div>
           )}
 
@@ -1936,6 +2028,7 @@ export default function FramesSite(){
 
           <VerificationStrip/>
           <GeoFooter/>
+          <FooterLinks/>
 
         </div>
         <div style={{height:60}}/>
