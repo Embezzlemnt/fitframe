@@ -372,12 +372,18 @@ const css = `
   @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
   .display{font-size:34px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.02;margin-bottom:12px;max-width:330px;}
-  .display em{font-style:normal;color:#6ee7a8;background:linear-gradient(90deg,rgba(76,175,125,0.42) 0%,rgba(76,175,125,0.0) 100%);padding:0.02em 0.16em;border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
+  .display em{font-style:normal;position:relative;color:#8af0bb;white-space:nowrap;padding:0 0.14em;border-radius:5px;background:linear-gradient(90deg,rgba(76,175,125,0.30) 0%,rgba(76,175,125,0.10) 55%,rgba(76,175,125,0) 100%);-webkit-box-decoration-break:clone;box-decoration-break:clone;}
+  .display em::after{content:"";position:absolute;left:0.14em;right:0.14em;bottom:0.02em;height:2px;border-radius:2px;pointer-events:none;background:linear-gradient(90deg,rgba(76,175,125,0.95) 0%,rgba(76,175,125,0.18) 100%);transform:scaleX(0);transform-origin:left center;animation:underlineIn .9s cubic-bezier(.22,1,.36,1) .5s forwards;}
+  @keyframes underlineIn{to{transform:scaleX(1);}}
+  @media (prefers-reduced-motion:reduce){.display em::after{transform:scaleX(1);animation:none;}.scan-stat{animation:none;}}
   .step-head{font-size:26px;font-weight:600;color:var(--text);letter-spacing:-.035em;line-height:1.08;margin-bottom:6px;}
   .body-lg{font-size:14px;color:var(--dim);line-height:1.62;font-weight:300;margin-bottom:24px;max-width:360px;}
   .hero-headline{margin-bottom:14px;}
   .hero-sub{margin-bottom:16px;}
-  .hero-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;margin-bottom:18px;border:1px solid var(--border);border-radius:999px;background:var(--surface2);font-family:'Geist Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:.02em;}
+  .scan-stat{display:inline-flex;align-items:baseline;gap:8px;margin-bottom:18px;padding:6px 13px;border-radius:999px;background:rgba(255,255,255,0.028);border:1px solid rgba(255,255,255,0.065);animation:statRise .6s cubic-bezier(.22,1,.36,1) .5s both;}
+  @keyframes statRise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  .scan-stat-num{font-family:'Geist Mono',monospace;font-size:15px;font-weight:500;letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:rgba(255,255,255,0.82);}
+  .scan-stat-label{font-size:12px;color:var(--dim);letter-spacing:.01em;}
   .hero-cta{width:100%;}
   .trust-row{display:flex;flex-wrap:wrap;gap:12px 16px;margin:20px 0 2px;}
   .trust-item{display:flex;flex:1 1 42%;align-items:center;gap:7px;font-size:12px;color:var(--mid);font-weight:300;}
@@ -1229,6 +1235,37 @@ function TrustIcon({type}){
   );
 }
 
+function ScanCounter({count}){
+  const target = Number.isFinite(count) ? count : null;
+  const [shown,setShown]=useState(0);
+  const fromRef=useRef(0);
+  useEffect(()=>{
+    if (target==null) return;
+    const reduce = typeof matchMedia==="function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce){ setShown(target); fromRef.current=target; return; }
+    const from=fromRef.current;
+    if (from===target) return;
+    const dur=1600, start=performance.now();
+    const ease=t=>1-Math.pow(1-t,3);
+    let raf;
+    const tick=now=>{
+      const p=Math.min(1,(now-start)/dur);
+      const v=Math.round(from+(target-from)*ease(p));
+      setShown(v); fromRef.current=v;
+      if (p<1) raf=requestAnimationFrame(tick);
+    };
+    raf=requestAnimationFrame(tick);
+    return ()=>cancelAnimationFrame(raf);
+  },[target]);
+  if (target==null) return null;
+  return (
+    <div className="scan-stat" role="status" aria-label={`${target.toLocaleString()} faces scanned`}>
+      <span className="scan-stat-num">{shown.toLocaleString()}</span>
+      <span className="scan-stat-label">faces scanned</span>
+    </div>
+  );
+}
+
 function VerificationStrip(){
   return (
     <section className="verification-strip" aria-label="Verification">
@@ -1410,11 +1447,15 @@ export default function FramesSite(){
   },[]);
   useEffect(()=>{
     let cancelled=false;
-    fetch("/api/scan-count")
+    const load=()=>fetch("/api/scan-count")
       .then(r=>r.ok?r.json():null)
       .then(d=>{ if(!cancelled&&d?.ok&&Number.isFinite(d.count)) setScanCount(d.count); })
       .catch(()=>{});
-    return ()=>{ cancelled=true; };
+    load();
+    const id=setInterval(load,20000);
+    const onVisible=()=>{ if(document.visibilityState==="visible") load(); };
+    document.addEventListener("visibilitychange",onVisible);
+    return ()=>{ cancelled=true; clearInterval(id); document.removeEventListener("visibilitychange",onVisible); };
   },[]);
   useEffect(()=>{
     if (!scan.done) return;
@@ -1735,9 +1776,7 @@ export default function FramesSite(){
               <div className="eyebrow">made-to-measure eyewear</div>
               <h1 className="display hero-headline">frames built for <em>your</em> face.</h1>
               <p className="body-lg hero-sub">scan your face. answer four questions. get frames built to your exact measurements.</p>
-              {scanCount!=null&&(
-                <div className="hero-pill">{scanCount.toLocaleString()} faces scanned</div>
-              )}
+              <ScanCounter count={scanCount}/>
               <div className="btn-row">
                 <button className="btn btn-primary hero-cta" onClick={startFreshScan}>scan your face →</button>
               </div>
