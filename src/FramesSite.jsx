@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useId } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const MAKER_EMAIL = "hello@fitframe.store";
@@ -62,10 +62,6 @@ const CARD_MAX_ROTATION_DEG = 14;
 const CARD_MIN_CONFIDENCE = 0.58;
 const CARD_FALLBACK_MS = 8000;
 const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
-const MEASUREMENT_RANGES = {
-  pd:[50,85], pdLeft:[20,45], pdRight:[20,45],
-  bridge:[8,30], faceW:[110,160], temple:[125,160], lensH:[30,50],
-};
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
   ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $119 is the honest price for what this is."],
@@ -280,18 +276,33 @@ function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) 
 }
 
 function genOrderId() { return "FF-"+Math.random().toString(36).substring(2,8).toUpperCase(); }
-function getETA()     { const d=new Date(); d.setDate(d.getDate()+10); return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}); }
-
-// ─── Frame SVG (refined interim silhouette — replace with CAD render later) ─────
-const FrameSVG = ({ size=120 }) => {
-  const lens = "rgba(255,255,255,0.85)";
+function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+// ─── Frame SVG (shape-correct bold-acetate placeholder — replace with CAD render later) ─────
+const FrameSVG = ({ size=160 }) => {
+  const gid = useId().replace(/:/g,"");
+  const ac = `url(#${gid})`;
   return (
-    <svg width={size} height={size*0.42} viewBox="0 0 200 84" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M27,33 L7,26" stroke={lens} strokeWidth="1.8"/>
-      <path d="M173,33 L193,26" stroke={lens} strokeWidth="1.8"/>
-      <path d="M40,18 L72,18 Q86,18 86,34 L85,50 Q84,64 70,64 L42,64 Q28,64 27,50 L26,34 Q26,18 40,18 Z" stroke={lens} strokeWidth="1.8"/>
-      <path d="M160,18 L128,18 Q114,18 114,34 L115,50 Q116,64 130,64 L158,64 Q172,64 173,50 L174,34 Q174,18 160,18 Z" stroke={lens} strokeWidth="1.8"/>
-      <path d="M86,30 Q100,21 114,30" stroke="var(--accent)" strokeWidth="2"/>
+    <svg width={size} height={size*0.44} viewBox="0 0 240 104" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#5a615b"/>
+          <stop offset="52%" stopColor="#2f342f"/>
+          <stop offset="100%" stopColor="#1a1f1b"/>
+        </linearGradient>
+      </defs>
+      {/* chunky tapering end pieces */}
+      <path d="M10,42 L26,37 L26,61 L10,56 Z" fill={ac}/>
+      <path d="M230,42 L214,37 L214,61 L230,56 Z" fill={ac}/>
+      {/* bold acetate rims */}
+      <rect x="26" y="20" width="86" height="64" rx="22" fill={ac} stroke="rgba(255,255,255,0.16)" strokeWidth="1.5"/>
+      <rect x="128" y="20" width="86" height="64" rx="22" fill={ac} stroke="rgba(255,255,255,0.16)" strokeWidth="1.5"/>
+      {/* substantial bridge */}
+      <rect x="104" y="30" width="32" height="15" rx="7" fill={ac}/>
+      {/* lens openings */}
+      <rect x="37" y="30" width="64" height="44" rx="15" fill="rgba(255,255,255,0.05)"/>
+      <rect x="139" y="30" width="64" height="44" rx="15" fill="rgba(255,255,255,0.05)"/>
+      {/* quiet accent detail */}
+      <rect x="110" y="49" width="20" height="2" rx="1" fill="#4caf7d"/>
     </svg>
   );
 };
@@ -330,7 +341,7 @@ const DEFAULT_LENS = { id:"bluelight", label:"blue light", price:0 };
 const LENS_OPTIONS = [
   { id:"bluelight", label:"blue light", desc:"screen-comfort polycarbonate lenses.", price:0, status:"included", selectable:true },
   { id:"transition", label:"transition lenses", desc:"adaptive tint for bright days.", price:40, status:"coming soon", selectable:false },
-  { id:"prescription", label:"prescription", desc:"rx lens support after launch.", price:70, status:"coming soon", selectable:false },
+  { id:"prescription", label:"prescription", desc:"rx lens support after launch.", price:60, status:"coming soon", selectable:false },
 ];
 
 const SCAN_SEQ = [
@@ -492,8 +503,15 @@ const css = `
   .lens-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;}
   .lens-desc{font-size:11px;color:var(--dim);font-weight:300;line-height:1.45;}
   .lens-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto;}
-  .lens-price-tag{font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);letter-spacing:.02em;}
-  .lens-tag{font-family:'Geist Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.06em;text-transform:uppercase;}
+  .lens-price-tag{font-family:'Geist Mono',monospace;font-size:15px;color:var(--text);letter-spacing:.02em;}
+  .lens-row.sel .lens-price-tag{color:var(--accent);}
+  .lens-tag{font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);letter-spacing:.06em;text-transform:uppercase;}
+  .lens-tag.lens-tag-included{color:var(--accent);}
+  .pair-summary{margin-bottom:18px;}
+  .pair-frame{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);margin-bottom:10px;}
+  .pair-frame-label{font-size:12px;color:var(--dim);font-family:'Geist Mono',monospace;letter-spacing:.04em;text-transform:lowercase;}
+  .hp-field{position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;}
+  .waitlist-err{font-size:12px;color:var(--red);margin:0 0 8px;font-weight:300;}
   .spec-readout{margin-top:18px;display:grid;gap:10px;font-family:'Geist Mono',monospace;}
   .spec-readout-row{display:flex;align-items:baseline;justify-content:space-between;font-size:13px;}
   .spec-readout-label{color:var(--dim);letter-spacing:.01em;}
@@ -1347,6 +1365,9 @@ export default function FramesSite(){
   const [sent,          setSent]          = useState(false);
   const [orderId,       setOrderId]       = useState(()=>saved.orderId??genOrderId());
   const [scanCount,     setScanCount]     = useState(null);
+  const [waitlistPosition,setWaitlistPosition] = useState(null);
+  const [waitlistError, setWaitlistError] = useState("");
+  const [botField,      setBotField]      = useState("");
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
   const processingTimerRef                 = useRef(null);
@@ -1609,116 +1630,47 @@ export default function FramesSite(){
     startCamera();
   }
 
-  function updateMeasurement(key,value){
-    const cleaned=value.replace(/[^\d.]/g,"").replace(/(\..*)\./g,"$1");
-    const range=MEASUREMENT_RANGES[key];
-    let next=cleaned;
-    if (range&&cleaned){
-      const n=Number(cleaned);
-      if (Number.isFinite(n)) next=String(clamp(n,range[0],range[1]));
-    }
-    setConfirmedMeas(prev=>({
-      ...(prev||scan.measurements||{}),
-      [key]:next,
-      scaleSource:(prev||scan.measurements)?.scaleSource||"manual-review",
-    }));
-  }
-
-  function buildMakerSpec(payload,{includeProductionNotes=true}={}){
-    const lines=[
-      "FITFRAME MAKER SPEC",
-      "",
-      `Order ID: ${payload.order_id}`,
-      `Customer: ${payload.customer_name}`,
-      `Customer email: ${payload.customer_email}`,
-      `Created: ${payload.timestamp}`,
-      "",
-      "FRAME",
-      `Frame: custom frame — ${payload.frame} — $${BASE_PRICE}`,
-      `Frame ID: ${payload.frame_id}`,
-      `Lens: ${payload.lens} — ${payload.lens_price?`+$${payload.lens_price}`:"included"}`,
-      `Total: $${payload.total}`,
-      `Material recommendation: ${payload.material}`,
-      "",
-      "MEASUREMENTS_MM",
-      `Binocular PD: ${payload.pd_binocular}`,
-      `Left PD: ${payload.pd_left}`,
-      `Right PD: ${payload.pd_right}`,
-      `Bridge: ${payload.bridge_mm}`,
-      `Lens height: ${payload.lens_height_mm}`,
-      `Face width: ${payload.face_width_mm}`,
-      `Temple length: ${payload.temple_mm}`,
-      "",
-      "SCAN",
-      `Scale source: ${payload.scale_source}`,
-      `Card reference: ${payload.card_reference}`,
-      `Quality: ${payload.scan_quality}`,
-      `Valid frames: ${payload.valid_frames_pct}%`,
-      "",
-      "FIT_ANSWERS",
-      `Fit history: ${payload.style_fit}`,
-      `Visual instinct: ${payload.style_vibe}`,
-      `Use case: ${payload.style_use}`,
-      `Priority: ${payload.style_priority}`,
-    ];
-    if (includeProductionNotes) {
-      lines.push(
-        "",
-        "PRODUCTION_NOTES",
-        "Use the matching STL for the selected frame ID. Scale front geometry to face width, set bridge to measured bridge, keep adjustable nose pad allowance, and use PD to center optical openings. PA12 nylon is the default launch material.",
-      );
-    }
-    return lines.join("\n");
-  }
-
-  async function submitOrder(){
-    setSubmitting(true);
-    const m=currentMeas;
-    const payload={
-      _replyto:customerInfo.email,
-      _subject:`FitFrame Order ${orderId}`,
-      order_id:orderId,
-      customer_name:customerInfo.name,
-      customer_email:customerInfo.email,
-      timestamp:new Date().toISOString(),
-      frame:chosenFrame?.label||"Custom frame",
-      frame_id:chosenFrame?.id||"custom",
-      lens:lensData?.label||"Blue Light",
-      lens_price:lensData?.price||0,
-      total:totalPrice,
-      material:"PA12 nylon, matte finish, adjustable nose pads",
-      style_fit:styleAnswers.fit?.label||"-",
-      style_vibe:styleAnswers.vibe?.label||"-",
-      style_use:styleAnswers.use?.label||"-",
-      style_priority:styleAnswers.priority?.label||"-",
-      pd_binocular:m?.pd||"-",
-      pd_left:m?.pdLeft||"-",
-      pd_right:m?.pdRight||"-",
-      bridge_mm:m?.bridge||"-",
-      temple_mm:m?.temple||"-",
-      lens_height_mm:m?.lensH||"-",
-      face_width_mm:m?.faceW||"-",
-      scale_source:m?.scaleSource||"iris-fallback",
-      card_reference:calibration?.source==="credit-card"?`${calibration.cardWidthMm}x${calibration.cardHeightMm}mm card / ${calibration.cardWidthPx}x${calibration.cardHeightPx}px / confidence ${calibration.confidence ?? "-"}`:calibration?.skippedCard?"skipped - iris reference only":"not captured",
-      scan_quality:m?.scanQuality||scan.quality?.label||"-",
-      valid_frames_pct:m?.validPct??(scan.validPct||"-"),
-      user_agent:navigator.userAgent,
+  async function joinWaitlist(e){
+    if (e?.preventDefault) e.preventDefault();
+    if (botField) return; // honeypot — silently ignore bots
+    const email=customerInfo.email.trim();
+    if (!isValidEmail(email)){ setWaitlistError("enter a valid email."); return; }
+    setSubmitting(true); setWaitlistError("");
+    const m=currentMeas||scan.measurements||{};
+    const measurements={
+      pd:m.pd, pdLeft:m.pdLeft, pdRight:m.pdRight,
+      bridge:m.bridge, temple:m.temple, lensH:m.lensH, faceW:m.faceW,
+      scaleSource:m.scaleSource, scanQuality:m.scanQuality, validPct:m.validPct,
     };
     try {
-      const spec=buildMakerSpec(payload);
-      await navigator.clipboard?.writeText(spec).catch(()=>{});
-      const subject=encodeURIComponent(`FitFrame Spec ${orderId}`);
-      const fullBody=encodeURIComponent(spec);
-      const emailSpec=fullBody.length>1800?buildMakerSpec(payload,{includeProductionNotes:false}):spec;
-      const body=encodeURIComponent(emailSpec);
-      window.location.assign(`mailto:${MAKER_EMAIL}?subject=${subject}&body=${body}`);
-      clearSession();
-      setSent(true);
-    } catch { alert(`Email ${MAKER_EMAIL} and paste the copied spec.`); }
-    finally { setSubmitting(false); }
+      const res=await fetch("/api/waitlist",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          email,
+          measurements,
+          frame_id:chosenFrame?.id||"fitframe-core",
+          lens:lensData?.label||"blue light",
+          lens_price:lensData?.price||0,
+          total:totalPrice,
+          timestamp:new Date().toISOString(),
+          website:botField,
+        }),
+      });
+      const data=await res.json().catch(()=>null);
+      if (res.ok&&data?.ok){
+        setWaitlistPosition(Number.isFinite(data.position)?data.position:null);
+        clearSession();
+        setSent(true);
+      } else {
+        setWaitlistError(data?.error||"something went wrong. please try again.");
+      }
+    } catch {
+      setWaitlistError("network error. please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
-
-  const firstName=customerInfo.name.trim().split(" ")[0]||"there";
   const cameraActive=camReady||camRequesting;
   const showScanPrep=!scanPrepDismissed&&!scan.done&&!currentMeas&&!camErr&&!cameraActive;
   const scanState=scanRestartCopy?"lost":scan.done||confirmedMeas?"complete":scanning||scanSettling?"scanning":"idle";
@@ -1935,28 +1887,15 @@ export default function FramesSite(){
               {(scan.done||confirmedMeas)&&currentMeas&&!scanProcessing&&!scan.quality?.rescan&&(
                 <div className="quality-card">
                   <div className="quality-head">
-                    <div className="quality-title">Measurement review</div>
-                    <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{currentMeas.scanQuality||scan.quality?.label||"Review"}</div>
+                    <div className="quality-title">scan complete.</div>
+                    <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{currentMeas.scanQuality||scan.quality?.label||"Good"}</div>
                   </div>
                   <p className="quality-copy">
-                    {currentMeas.scanReason||scan.quality?.reason||"Review the measured spec before continuing."} Valid frames: {currentMeas.validPct??scan.validPct}%.
+                    your face is mapped to exact millimeter measurements. they're captured securely and sent to the maker with your order — nothing for you to enter.
                   </p>
-                  <div className="measure-grid">
-                    {[
-                      ["PD","pd"],["Left PD","pdLeft"],["Right PD","pdRight"],
-                      ["Bridge","bridge"],["Face width","faceW"],["Temple","temple"],["Lens height","lensH"],
-                    ].map(([label,key])=>(
-                      <div className="measure-field" key={key}>
-                        <label>{label}</label>
-                        <input className="measure-input" inputMode="decimal" value={currentMeas[key]||""}
-                          onChange={e=>updateMeasurement(key,e.target.value)}/>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="measure-help">If the user already knows a measurement, correct it here. These values are what the maker receives.</div>
                   <div className="btn-row">
-                    <button className="btn btn-primary" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
-                    <button className="btn btn-ghost" onClick={rescan}>Rescan</button>
+                    <button className="btn btn-primary" onClick={acceptMeasurements}>continue &rarr;</button>
+                    <button className="btn btn-ghost" onClick={rescan}>rescan</button>
                   </div>
                 </div>
               )}
@@ -1994,20 +1933,11 @@ export default function FramesSite(){
           {step===3&&(
             <div className="section">
               <div className="step-head">your frame.</div>
-              <p className="step-sub">one shape, built to your measurements.</p>
+              <p className="step-sub">built to your measurements — printed in matte acetate-style nylon.</p>
               <div className="single-frame-card">
                 <div className="single-frame-icon">
-                  <FrameSVG size={150}/>
+                  <FrameSVG size={190}/>
                 </div>
-                <div className="single-frame-name">{chosenFrame.label}</div>
-              </div>
-              <div className="spec-readout">
-                {[["pd","pd"],["bridge","bridge"],["temple","temple"],["lens height","lensH"],["face width","faceW"]].map(([label,key])=>(
-                  <div className="spec-readout-row" key={key}>
-                    <span className="spec-readout-label">{label}</span>
-                    <span className="spec-readout-value">{(confirmedMeas||currentMeas)?.[key]??"—"}<span className="spec-readout-unit">mm</span></span>
-                  </div>
-                ))}
               </div>
               <div className="btn-row" style={{marginTop:18}}>
                 <button className="btn btn-primary" onClick={()=>{setSelectedFrame(FITFRAME_FRAME.id);setStep(4);}}>
@@ -2037,68 +1967,69 @@ export default function FramesSite(){
                       <div className="lens-desc">{option.desc}</div>
                     </div>
                     <div className="lens-meta">
-                      <div className="lens-price-tag">{option.price?`+$${option.price}`:"included"}</div>
-                      {!option.selectable&&<div className="lens-tag">coming soon</div>}
+                      <div className="lens-price-tag">${BASE_PRICE+option.price}</div>
+                      <div className={`lens-tag ${option.selectable?"lens-tag-included":""}`}>{option.status}</div>
                     </div>
                   </button>
                 ))}
               </div>
               <div className="btn-row" style={{marginTop:8}}>
-                <button className="btn btn-primary" onClick={()=>setStep(5)}>review my spec →</button>
+                <button className="btn btn-primary" onClick={()=>setStep(5)}>continue →</button>
                 <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
               </div>
             </div>
           )}
 
-          {/* Send spec */}
+          {/* Waitlist wall */}
           {step===5&&!sent&&(
             <div className="section">
-              <div className="step-head">claim your founding pair.</div>
-              <p className="step-sub">your measurements and frame are ready. this opens a pre-filled email to the maker.</p>
-              <div className="receipt">
-                <div className="receipt-head">Spec summary - {orderId}</div>
-                <div className="receipt-row"><span>custom frame - {chosenFrame?.label}</span><span>${BASE_PRICE}</span></div>
-                {lensData&&<div className="receipt-row"><span>{lensData.label} lenses</span><span>{lensData.price?`+$${lensData.price}`:"included"}</span></div>}
-                <div className="receipt-total"><span>Total</span><span>${totalPrice}</span></div>
+              <div className="step-head">you're early.</div>
+              <p className="step-sub">your pair is designed. we're in final production on the first batch — join the list and we'll reach out the moment yours can be built.</p>
+              <div className="pair-summary">
+                <div className="pair-frame">
+                  <FrameSVG size={140}/>
+                  <span className="pair-frame-label">your frame</span>
+                </div>
+                <div className="receipt">
+                  <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
+                  <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
+                </div>
               </div>
-              <input className="field" placeholder="Full name" autoComplete="name"
-                value={customerInfo.name} onChange={e=>setCustomerInfo(p=>({...p,name:e.target.value}))}/>
-              <input className="field" placeholder="Email address" type="email" autoComplete="email"
-                value={customerInfo.email} onChange={e=>setCustomerInfo(p=>({...p,email:e.target.value}))}/>
-              <div className="btn-row" style={{marginTop:10}}>
-                <button className="btn btn-accent"
-                  disabled={!customerInfo.name.trim()||!customerInfo.email.trim()||submitting}
-                  onClick={submitOrder}>
-                  {submitting?"Opening...":"Open email to send"}
-                </button>
-                <button className="btn btn-ghost" onClick={()=>setStep(4)}>Back</button>
-              </div>
-              <div className="trust-line"><Padlock/><span>No images are sent. The maker receives measurements only.</span></div>
+              <form onSubmit={joinWaitlist}>
+                <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
+                  value={botField} onChange={e=>setBotField(e.target.value)}/>
+                <input className="field" placeholder="your email" type="email" inputMode="email" autoComplete="email"
+                  value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
+                {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
+                <div className="btn-row" style={{marginTop:10}}>
+                  <button className="btn btn-accent" type="submit"
+                    disabled={!customerInfo.email.trim()||submitting}>
+                    {submitting?"joining...":"join the list →"}
+                  </button>
+                  <button className="btn btn-ghost" type="button" onClick={()=>setStep(4)}>Back</button>
+                </div>
+              </form>
+              <div className="trust-line"><Padlock/><span>no images are sent. your measurements go securely to the maker.</span></div>
             </div>
           )}
 
           {/* ── Confirmation ── */}
           {sent&&(
             <div className="section">
-              <div className="confirm-id">{orderId}</div>
-              <div className="confirm-greeting">Spec ready,<br/>{firstName}.</div>
+              <div className="confirm-greeting">you're on the list.</div>
               <p className="confirm-body">
-                Your maker email opened with the full frame spec. Tap send in your mail app so it reaches <strong>{MAKER_EMAIL}</strong>.
+                {waitlistPosition!=null&&<><strong>#{waitlistPosition}</strong> in line for the first batch. </>}
+                we'll reach out when production opens for your pair.
               </p>
-              <div className="next-steps">
-                {[
-                  ["01","Send the email","Your spec is also copied to your clipboard as a backup."],
-                  ["02","We confirm details","You'll hear back within 24 hours with payment and shipping next steps."],
-                  ["03","We print your frames",`Estimated delivery target: ${getETA()}.`],
-                ].map(([n,label,desc])=>(
-                  <div className="next-step" key={n}>
-                    <span className="next-step-num">{n}</span>
-                    <div>
-                      <div className="next-step-label">{label}</div>
-                      <div className="next-step-desc">{desc}</div>
-                    </div>
-                  </div>
-                ))}
+              <div className="pair-summary">
+                <div className="pair-frame">
+                  <FrameSVG size={130}/>
+                  <span className="pair-frame-label">your frame</span>
+                </div>
+                <div className="receipt">
+                  <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
+                  <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
+                </div>
               </div>
             </div>
           )}

@@ -348,7 +348,7 @@ function buildWaitlistEmailText(email, measurements, frameId, position) {
   ].join("\n");
 }
 
-function buildFounderNotificationText(email, measurements, frameId, position) {
+function buildFounderNotificationText(email, measurements, frameId, position, lens, total) {
   const m = measurements || {};
   return [
     "New FitFrame waitlist signup",
@@ -356,13 +356,19 @@ function buildFounderNotificationText(email, measurements, frameId, position) {
     `Email: ${email}`,
     `Position: #${position}`,
     `Frame: ${frameId || "Not selected"}`,
+    `Lens: ${lens || "blue light"}`,
+    `Total: $${total != null ? total : "-"}`,
     "",
     "Measurements",
-    `PD: ${m.pd || "-"}`,
+    `PD: ${m.pd || "-"} mm`,
+    `Left PD: ${m.pdLeft || "-"} mm`,
+    `Right PD: ${m.pdRight || "-"} mm`,
     `Bridge: ${m.bridge || "-"} mm`,
     `Temple: ${m.temple || "-"} mm`,
-    `Face height: ${m.faceH || "-"} mm`,
+    `Lens height: ${m.lensH || "-"} mm`,
     `Face width: ${m.faceW || "-"} mm`,
+    `Scale source: ${m.scaleSource || "-"}`,
+    `Scan quality: ${m.scanQuality || "-"}`,
     "",
     `Submitted: ${new Date().toISOString()}`,
   ].join("\n");
@@ -402,7 +408,7 @@ async function waitlist(request, env) {
   }
 
   // Strip unexpected fields
-  const allowed = ["email", "measurements", "frame_id", "colorway_id", "timestamp"];
+  const allowed = ["email", "measurements", "frame_id", "colorway_id", "lens", "lens_price", "total", "timestamp"];
   const sanitized = Object.fromEntries(
     Object.entries(payload).filter(([k]) => allowed.includes(k))
   );
@@ -410,6 +416,8 @@ async function waitlist(request, env) {
   const measurements = sanitized.measurements || null;
   const frameId = sanitized.frame_id || null;
   const colorwayId = sanitized.colorway_id || null;
+  const lens = typeof sanitized.lens === "string" ? sanitized.lens.slice(0, 60) : null;
+  const total = Number.isFinite(sanitized.total) ? sanitized.total : null;
 
   const key = `waitlist:${email}`;
   let duplicate;
@@ -427,6 +435,8 @@ async function waitlist(request, env) {
         measurements,
         frame_id:frameId,
         colorway_id:colorwayId,
+        lens,
+        total,
         position,
         created_at:new Date().toISOString(),
       }));
@@ -459,7 +469,7 @@ async function waitlist(request, env) {
         env,
         to:env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL,
         subject:`FitFrame waitlist signup — ${email}`,
-        text:buildFounderNotificationText(email, measurements, frameId, position),
+        text:buildFounderNotificationText(email, measurements, frameId, position, lens, total),
       }));
     }
     await Promise.allSettled(emailPromises);
