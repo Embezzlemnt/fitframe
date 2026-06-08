@@ -376,31 +376,33 @@ const css = `
   @keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .eyebrow{font-size:10px;font-family:'Geist Mono',monospace;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
   .display{font-size:34px;font-weight:600;color:var(--text);letter-spacing:-.04em;line-height:1.02;margin-bottom:12px;max-width:330px;}
-  .display em{font-style:normal;color:var(--accent);}
+  .display em{font-style:normal;color:#7fe0a8;background:linear-gradient(135deg,rgba(76,175,125,0.40),rgba(76,175,125,0.16));padding:0.04em 0.22em;border-radius:10px;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
   .step-head{font-size:26px;font-weight:600;color:var(--text);letter-spacing:-.035em;line-height:1.08;margin-bottom:6px;}
   .body-lg{font-size:14px;color:var(--dim);line-height:1.62;font-weight:300;margin-bottom:24px;max-width:360px;}
   .hero-headline{margin-bottom:14px;}
-  .uline{color:var(--accent);position:relative;white-space:nowrap;}
-  .uline::after{content:"";position:absolute;left:0;right:0;bottom:3px;height:2px;border-radius:2px;background:rgba(76,175,125,.4);}
   .hero-sub{margin-bottom:16px;}
   .hero-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;margin-bottom:18px;border:1px solid var(--border);border-radius:999px;background:var(--surface2);font-family:'Geist Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:.02em;}
   .hero-cta{width:100%;}
-  .trust-row{display:flex;flex-wrap:wrap;gap:10px 18px;margin:18px 0 2px;}
-  .trust-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mid);font-weight:300;}
+  .trust-row{display:flex;flex-wrap:wrap;gap:12px 16px;margin:20px 0 2px;}
+  .trust-item{display:flex;flex:1 1 42%;align-items:center;gap:7px;font-size:12px;color:var(--mid);font-weight:300;}
   .trust-icon{color:var(--accent);flex:0 0 auto;}
+  .price-block{margin-top:26px;padding-top:24px;border-top:1px solid var(--border);}
+  .price-big{font-size:46px;font-weight:600;letter-spacing:-.045em;line-height:1;color:var(--text);}
+  .price-sub{margin-top:7px;font-size:13px;color:var(--dim);font-weight:300;}
   .why-block{margin-top:30px;padding-top:24px;border-top:1px solid var(--border);}
   .why-lead{font-size:22px;font-weight:500;letter-spacing:-.03em;color:var(--text);line-height:1.2;margin-bottom:14px;}
   .why-body{font-size:14px;font-weight:300;color:var(--dim);line-height:1.7;}
   .why-emph{color:var(--text);font-weight:500;}
-  .feature-list{list-style:none;margin:26px 0 0;padding:0;display:grid;gap:13px;}
-  .feature-list li{display:flex;gap:14px;align-items:baseline;}
+  .feature-list{list-style:none;margin:30px 0 0;padding:0;}
+  .feature-list li{display:flex;gap:14px;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--border);}
+  .feature-list li:first-child{padding-top:0;}
+  .feature-list li:last-child{border-bottom:none;padding-bottom:0;}
   .feature-num{font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent);flex:0 0 auto;}
   .feature-text{font-size:14px;color:var(--dim);font-weight:300;line-height:1.55;}
   .feature-lead{color:var(--text);font-weight:400;}
   .build-block{margin-top:30px;padding-top:24px;border-top:1px solid var(--border);}
   .build-eyebrow{color:var(--accent);margin-bottom:10px;}
   .build-body{font-size:14px;color:var(--dim);font-weight:300;line-height:1.7;}
-  .price-line{margin-top:24px;font-family:'Geist Mono',monospace;font-size:13px;color:var(--text);letter-spacing:.01em;}
   .vs-dot{opacity:.5;}
   .footer-links{width:100%;max-width:462px;margin:14px auto 0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;font-size:11px;color:var(--soft);font-weight:300;}
   .footer-links a{color:var(--soft);transition:color .15s;}
@@ -1712,7 +1714,7 @@ export default function FramesSite(){
           {step===0&&(
             <div className="section hero">
               <div className="eyebrow">made-to-measure eyewear</div>
-              <h1 className="display hero-headline">frames built for <span className="uline">your</span> face.</h1>
+              <h1 className="display hero-headline">frames built for <em>your</em> face.</h1>
               <p className="body-lg hero-sub">scan your face. answer four questions. get frames built to your exact measurements.</p>
               {scanCount!=null&&(
                 <div className="hero-pill">{scanCount.toLocaleString()} faces scanned</div>
@@ -1724,12 +1726,13 @@ export default function FramesSite(){
               <div className="trust-row">
                 <div className="trust-item"><TrustIcon/><span>made in america</span></div>
                 <div className="trust-item"><TrustIcon/><span>ships in ~10 days</span></div>
+                <div className="trust-item"><TrustIcon/><span>one-time reprint guarantee</span></div>
                 <div className="trust-item"><TrustIcon/><span>fit guarantee</span></div>
               </div>
 
-              <div className="why-block">
-                <p className="why-lead">glasses are built for an average face. most of us aren't average.</p>
-                <p className="why-body">FitFrame exists for the person who gave up without realizing it. one browser-based scan maps your face to real millimeter measurements. a carbon fiber nylon frame gets printed to those numbers — zero inventory, zero waste, built to your geometry. <span className="why-emph">not adjusted. not approximated. yours.</span></p>
+              <div className="price-block">
+                <div className="price-big">$119</div>
+                <div className="price-sub">blue light lenses included</div>
               </div>
 
               <ol className="feature-list">
@@ -1739,12 +1742,15 @@ export default function FramesSite(){
                 <li><span className="feature-num">04</span><span className="feature-text"><span className="feature-lead">first batch is limited.</span> you're early.</span></li>
               </ol>
 
+              <div className="why-block">
+                <p className="why-lead">glasses are built for an average face. most of us aren't average.</p>
+                <p className="why-body">FitFrame exists for the person who gave up without realizing it. one browser-based scan maps your face to real millimeter measurements. a carbon fiber nylon frame gets printed to those numbers — zero inventory, zero waste, built to your geometry. <span className="why-emph">not adjusted. not approximated. yours.</span></p>
+              </div>
+
               <div className="build-block">
                 <div className="eyebrow build-eyebrow">how we build it</div>
                 <p className="build-body">every pair starts with your scan. the measurements go directly into the print file — no averaging, no standardizing. carbon fiber nylon is printed layer by layer to those numbers, finished by hand, and shipped from the US. nothing is made until you order.</p>
               </div>
-
-              <div className="price-line">$119 · blue light lenses included</div>
             </div>
           )}
 
