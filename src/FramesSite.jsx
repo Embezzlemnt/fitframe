@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useId } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const MAKER_EMAIL = "hello@fitframe.store";
@@ -277,36 +277,6 @@ function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) 
 
 function genOrderId() { return "FF-"+Math.random().toString(36).substring(2,8).toUpperCase(); }
 function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-// ─── Frame SVG (shape-correct bold-acetate placeholder — replace with CAD render later) ─────
-const FrameSVG = ({ size=160 }) => {
-  const gid = useId().replace(/:/g,"");
-  const ac = `url(#${gid})`;
-  return (
-    <svg width={size} height={size*0.44} viewBox="0 0 240 104" fill="none" aria-hidden="true">
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#5a615b"/>
-          <stop offset="52%" stopColor="#2f342f"/>
-          <stop offset="100%" stopColor="#1a1f1b"/>
-        </linearGradient>
-      </defs>
-      {/* chunky tapering end pieces */}
-      <path d="M10,42 L26,37 L26,61 L10,56 Z" fill={ac}/>
-      <path d="M230,42 L214,37 L214,61 L230,56 Z" fill={ac}/>
-      {/* bold acetate rims */}
-      <rect x="26" y="20" width="86" height="64" rx="22" fill={ac} stroke="rgba(255,255,255,0.16)" strokeWidth="1.5"/>
-      <rect x="128" y="20" width="86" height="64" rx="22" fill={ac} stroke="rgba(255,255,255,0.16)" strokeWidth="1.5"/>
-      {/* substantial bridge */}
-      <rect x="104" y="30" width="32" height="15" rx="7" fill={ac}/>
-      {/* lens openings */}
-      <rect x="37" y="30" width="64" height="44" rx="15" fill="rgba(255,255,255,0.05)"/>
-      <rect x="139" y="30" width="64" height="44" rx="15" fill="rgba(255,255,255,0.05)"/>
-      {/* quiet accent detail */}
-      <rect x="110" y="49" width="20" height="2" rx="1" fill="#4caf7d"/>
-    </svg>
-  );
-};
-
 // ─── Data ─────────────────────────────────────────────────────────────────────
 const FITFRAME_FRAME = { id:"fitframe-core", label:"fitframe core", desc:"one shape, built to your measurements." };
 
@@ -391,10 +361,9 @@ const css = `
   .body-lg{font-size:14px;color:var(--dim);line-height:1.62;font-weight:300;margin-bottom:24px;max-width:360px;}
   .hero-headline{margin-bottom:14px;}
   .hero-sub{margin-bottom:16px;}
-  .scan-stat{display:inline-flex;align-items:baseline;gap:8px;margin-bottom:18px;padding:6px 13px;border-radius:999px;background:rgba(255,255,255,0.028);border:1px solid rgba(255,255,255,0.065);animation:statRise .6s cubic-bezier(.22,1,.36,1) .5s both;}
+  .scan-stat{display:inline-block;margin-bottom:18px;padding:7px 15px;border-radius:999px;background:transparent;border:1px solid rgba(255,255,255,0.12);font-size:12.5px;line-height:1.35;color:var(--dim);font-weight:300;letter-spacing:.01em;animation:statRise .6s cubic-bezier(.22,1,.36,1) .5s both;}
   @keyframes statRise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
-  .scan-stat-num{font-family:'Geist Mono',monospace;font-size:15px;font-weight:500;letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:rgba(255,255,255,0.82);}
-  .scan-stat-label{font-size:12px;color:var(--dim);letter-spacing:.01em;}
+  .scan-stat-num{font-family:'Geist Mono',monospace;font-weight:500;font-variant-numeric:tabular-nums;color:var(--text);}
   .hero-cta{width:100%;}
   .trust-row{display:flex;flex-wrap:wrap;gap:12px 16px;margin:20px 0 2px;}
   .trust-item{display:flex;flex:1 1 42%;align-items:center;gap:7px;font-size:12px;color:var(--mid);font-weight:300;}
@@ -508,8 +477,6 @@ const css = `
   .lens-tag{font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);letter-spacing:.06em;text-transform:uppercase;}
   .lens-tag.lens-tag-included{color:var(--accent);}
   .pair-summary{margin-bottom:18px;}
-  .pair-frame{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);margin-bottom:10px;}
-  .pair-frame-label{font-size:12px;color:var(--dim);font-family:'Geist Mono',monospace;letter-spacing:.04em;text-transform:lowercase;}
   .hp-field{position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;}
   .waitlist-err{font-size:12px;color:var(--red);margin:0 0 8px;font-weight:300;}
   .spec-readout{margin-top:18px;display:grid;gap:10px;font-family:'Geist Mono',monospace;}
@@ -527,10 +494,6 @@ const css = `
   .vto-note-icon{color:var(--accent);flex-shrink:0;padding-top:1px;}
   .vto-note-text{font-size:11px;color:var(--dim);font-weight:300;line-height:1.5;}
   .vto-note-text strong{color:var(--text);font-weight:400;}
-  .single-frame-card{padding:22px 16px;border:1px solid var(--accent);border-radius:12px;background:var(--accent-bg);box-shadow:0 0 0 1px rgba(76,175,125,.18) inset;margin-bottom:14px;text-align:center;}
-  .single-frame-icon{display:flex;justify-content:center;align-items:center;margin:10px 0 16px;color:var(--accent);}
-  .single-frame-name{font-size:16px;font-weight:500;color:var(--text);letter-spacing:-.02em;margin-bottom:5px;}
-  .single-frame-desc{font-size:12px;color:var(--dim);font-weight:300;line-height:1.5;max-width:260px;margin:0 auto;}
   .receipt{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px;}
   .receipt-head{padding:13px 16px;border-bottom:1px solid var(--border);font-size:10px;font-family:'Geist Mono',monospace;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
   .receipt-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--dim);font-weight:300;}
@@ -1267,9 +1230,8 @@ function ScanCounter({count}){
   },[target]);
   if (target==null) return null;
   return (
-    <div className="scan-stat" role="status" aria-label={`${target.toLocaleString()} faces scanned`}>
-      <span className="scan-stat-num">{shown.toLocaleString()}</span>
-      <span className="scan-stat-label">faces scanned</span>
+    <div className="scan-stat" role="status" aria-label={`join ${target.toLocaleString()} people who've already scanned their face`}>
+      join <span className="scan-stat-num">{shown.toLocaleString()}</span> people who've already scanned their face
     </div>
   );
 }
@@ -1707,7 +1669,7 @@ export default function FramesSite(){
               <p className="body-lg hero-sub">scan your face. answer four questions. get frames built to your exact measurements.</p>
               <ScanCounter count={scanCount}/>
               <div className="btn-row">
-                <button className="btn btn-primary hero-cta" onClick={startFreshScan}>scan your face →</button>
+                <button className="btn btn-accent hero-cta" onClick={startFreshScan}>scan your face to join early access →</button>
               </div>
 
               <div className="trust-row">
@@ -1912,12 +1874,7 @@ export default function FramesSite(){
           {step===3&&(
             <div className="section">
               <div className="step-head">your frame.</div>
-              <p className="step-sub">built to your measurements — printed in matte acetate-style nylon.</p>
-              <div className="single-frame-card">
-                <div className="single-frame-icon">
-                  <FrameSVG size={190}/>
-                </div>
-              </div>
+              <p className="step-sub">built to your measurements — printed in matte carbon-fiber nylon, hand-finished, shipped from America.</p>
               <div className="btn-row" style={{marginTop:18}}>
                 <button className="btn btn-primary" onClick={()=>{setSelectedFrame(FITFRAME_FRAME.id);setStep(4);}}>
                   choose lenses →
@@ -1965,11 +1922,8 @@ export default function FramesSite(){
               <div className="step-head">you're early.</div>
               <p className="step-sub">your pair is designed. we're in final production on the first batch — join the list and we'll reach out the moment yours can be built.</p>
               <div className="pair-summary">
-                <div className="pair-frame">
-                  <FrameSVG size={140}/>
-                  <span className="pair-frame-label">your frame</span>
-                </div>
                 <div className="receipt">
+                  <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
                   <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
                   <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
                 </div>
@@ -2001,11 +1955,8 @@ export default function FramesSite(){
                 we'll reach out when production opens for your pair.
               </p>
               <div className="pair-summary">
-                <div className="pair-frame">
-                  <FrameSVG size={130}/>
-                  <span className="pair-frame-label">your frame</span>
-                </div>
                 <div className="receipt">
+                  <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
                   <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
                   <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
                 </div>
