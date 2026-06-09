@@ -10,6 +10,22 @@ let fallbackWaitlistCount = WAITLIST_COUNT_SEED;
 const fallbackWaitlist = new Set();
 
 const ALLOWED_ORIGIN = "https://fitframe.store";
+const RATE_LIMIT_POLICY = "5;w=60";
+
+const SECURITY_HEADERS = {
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
+};
+
+const SENSITIVE_EXACT = new Set([
+  "/.env",
+  "/.DS_Store",
+  "/package.json",
+  "/package-lock.json",
+]);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
@@ -17,14 +33,45 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-const jsonHeaders = {
-  "Content-Type": "application/json",
-  "X-Content-Type-Options": "nosniff",
-  ...corsHeaders,
-};
+function isSensitivePath(pathname) {
+  if (SENSITIVE_EXACT.has(pathname)) return true;
+  if (pathname.startsWith("/.git/") || pathname === "/.git") return true;
+  const segment = pathname.split("/").pop() || "";
+  if (segment.startsWith(".") && !pathname.startsWith("/.well-known")) return true;
+  return false;
+}
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
+function mergeHeaders(...sets) {
+  return Object.assign({}, SECURITY_HEADERS, ...sets);
+}
+
+function notFound(extra = {}) {
+  return new Response("Not found", { status: 404, headers: mergeHeaders(extra) });
+}
+
+function json(body, status = 200, extraHeaders = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: mergeHeaders(
+      { "Content-Type": "application/json" },
+      corsHeaders,
+      extraHeaders,
+    ),
+  });
+}
+
+async function enforceRateLimit(request, env) {
+  const headers = {
+    "X-RateLimit-Policy": RATE_LIMIT_POLICY,
+    "X-RateLimit-Limit": "5",
+  };
+  if (!env.RATE_LIMITER) return { ok: true, headers };
+  const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
+  const { success } = await env.RATE_LIMITER.limit({ key: clientIp });
+  if (!success) {
+    return { ok: false, headers: { ...headers, "Retry-After": "60" } };
+  }
+  return { ok: true, headers };
 }
 
 function envMissing(...keys) {
@@ -277,20 +324,20 @@ async function readScanCount(env) {
   return SCAN_COUNT_SEED;
 }
 
-async function scanCount(request, env) {
-  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405);
-  return json({ ok:true, count:await readScanCount(env) });
+async function scanCount(request, env, rateHeaders = {}) {
+  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405, rateHeaders);
+  return json({ ok:true, count:await readScanCount(env) }, 200, rateHeaders);
 }
 
-async function scanComplete(request, env) {
-  if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405);
+async function scanComplete(request, env, rateHeaders = {}) {
+  if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405, rateHeaders);
   if (!env.FITFRAME_KV) {
     fallbackScanCount += 1;
-    return json({ ok:true, count:fallbackScanCount, storage:"worker-memory" });
+    return json({ ok:true, count:fallbackScanCount, storage:"worker-memory" }, 200, rateHeaders);
   }
   const next = (await readScanCount(env)) + 1;
   await env.FITFRAME_KV.put(SCAN_COUNT_KEY, String(next));
-  return json({ ok:true, count:next, storage:"kv" });
+  return json({ ok:true, count:next, storage:"kv" }, 200, rateHeaders);
 }
 
 function normalizeEmail(email) {
@@ -324,9 +371,9 @@ async function readWaitlistCount(env) {
   return WAITLIST_COUNT_SEED;
 }
 
-async function waitlistCount(request, env) {
-  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405);
-  return json({ ok:true, count:await readWaitlistCount(env) });
+async function waitlistCount(request, env, rateHeaders = {}) {
+  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405, rateHeaders);
+  return json({ ok:true, count:await readWaitlistCount(env) }, 200, rateHeaders);
 }
 
 function buildWaitlistEmailText(email, measurements, frameId, position) {
@@ -348,43 +395,50 @@ function buildWaitlistEmailText(email, measurements, frameId, position) {
   ].join("\n");
 }
 
-function buildFounderNotificationText(email, measurements, frameId, position, lens, total) {
+function buildFounderNotificationText({
+  email,
+  orderId,
+  timestamp,
+  measurements,
+  frameId,
+  position,
+  lens,
+  lensPrice,
+  total,
+}) {
   const m = measurements || {};
+  const lensLine = lensPrice ? `+$${lensPrice}` : "included";
   return [
-    "New FitFrame waitlist signup",
+    "FITFRAME WAITLIST SPEC",
     "",
-    `Email: ${email}`,
+    `Order ID: ${orderId || "-"}`,
+    `Customer email: ${email}`,
     `Position: #${position}`,
-    `Frame: ${frameId || "Not selected"}`,
-    `Lens: ${lens || "blue light"}`,
+    `Submitted: ${timestamp || new Date().toISOString()}`,
+    "",
+    "FRAME",
+    `Frame ID: ${frameId || "Not selected"}`,
+    `Lens: ${lens || "blue light"} — ${lensLine}`,
     `Total: $${total != null ? total : "-"}`,
     "",
-    "Measurements",
-    `PD: ${m.pd || "-"} mm`,
-    `Left PD: ${m.pdLeft || "-"} mm`,
-    `Right PD: ${m.pdRight || "-"} mm`,
+    "MEASUREMENTS_MM",
+    `PD: ${m.pd || "-"}`,
+    `Left PD: ${m.pdLeft || "-"}`,
+    `Right PD: ${m.pdRight || "-"}`,
     `Bridge: ${m.bridge || "-"} mm`,
     `Temple: ${m.temple || "-"} mm`,
     `Lens height: ${m.lensH || "-"} mm`,
     `Face width: ${m.faceW || "-"} mm`,
+    "",
+    "SCAN",
     `Scale source: ${m.scaleSource || "-"}`,
     `Scan quality: ${m.scanQuality || "-"}`,
-    "",
-    `Submitted: ${new Date().toISOString()}`,
+    `Valid frames: ${m.validPct != null ? `${m.validPct}%` : "-"}`,
   ].join("\n");
 }
 
-async function waitlist(request, env) {
-  if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405);
-
-  // Rate limiting
-  if (env.RATE_LIMITER) {
-    const clientIp = request.headers.get("CF-Connecting-IP") || "unknown";
-    const { success } = await env.RATE_LIMITER.limit({ key: clientIp });
-    if (!success) {
-      return json({ error: "too many requests" }, 429);
-    }
-  }
+async function waitlist(request, env, rateHeaders = {}) {
+  if (request.method !== "POST") return json({ ok:false, error:"Method not allowed." }, 405, rateHeaders);
 
   let payload;
   try {
@@ -408,16 +462,19 @@ async function waitlist(request, env) {
   }
 
   // Strip unexpected fields
-  const allowed = ["email", "measurements", "frame_id", "colorway_id", "lens", "lens_price", "total", "timestamp"];
+  const allowed = ["email", "order_id", "measurements", "frame_id", "colorway_id", "lens", "lens_price", "total", "timestamp"];
   const sanitized = Object.fromEntries(
     Object.entries(payload).filter(([k]) => allowed.includes(k))
   );
 
   const measurements = sanitized.measurements || null;
+  const orderId = typeof sanitized.order_id === "string" ? sanitized.order_id.slice(0, 32) : null;
   const frameId = sanitized.frame_id || null;
   const colorwayId = sanitized.colorway_id || null;
   const lens = typeof sanitized.lens === "string" ? sanitized.lens.slice(0, 60) : null;
+  const lensPrice = Number.isFinite(sanitized.lens_price) ? sanitized.lens_price : null;
   const total = Number.isFinite(sanitized.total) ? sanitized.total : null;
+  const submittedAt = typeof sanitized.timestamp === "string" ? sanitized.timestamp.slice(0, 40) : new Date().toISOString();
 
   const key = `waitlist:${email}`;
   let duplicate;
@@ -432,13 +489,15 @@ async function waitlist(request, env) {
       position = nextCount;
       await env.FITFRAME_KV.put(key, JSON.stringify({
         email,
+        order_id:orderId,
         measurements,
         frame_id:frameId,
         colorway_id:colorwayId,
         lens,
+        lens_price:lensPrice,
         total,
         position,
-        created_at:new Date().toISOString(),
+        created_at:submittedAt,
       }));
     } else {
       const parsed = JSON.parse(existing);
@@ -468,14 +527,24 @@ async function waitlist(request, env) {
       emailPromises.push(sendResendEmail({
         env,
         to:env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL,
-        subject:`FitFrame waitlist signup — ${email}`,
-        text:buildFounderNotificationText(email, measurements, frameId, position, lens, total),
+        subject:`FitFrame waitlist spec — ${orderId || email}`,
+        text:buildFounderNotificationText({
+          email,
+          orderId,
+          timestamp:submittedAt,
+          measurements,
+          frameId,
+          position,
+          lens,
+          lensPrice,
+          total,
+        }),
       }));
     }
     await Promise.allSettled(emailPromises);
   }
 
-  return json({ ok:true, duplicate, position, count:currentCount });
+  return json({ ok:true, duplicate, position, count:currentCount }, 200, rateHeaders);
 }
 
 function validateOrigin(request) {
@@ -490,22 +559,34 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (isSensitivePath(url.pathname)) {
+      return notFound();
+    }
+
     if (request.method === "OPTIONS") {
-      return new Response(null, { status:204, headers:corsHeaders });
+      return new Response(null, { status:204, headers: mergeHeaders(corsHeaders) });
     }
 
     const originBlock = validateOrigin(request);
     if (originBlock) return originBlock;
 
-    if (url.pathname === "/api/create-checkout-session" && request.method === "POST") return createCheckoutSession(request, env);
-    if (url.pathname === "/api/checkout-session" && request.method === "GET") return getCheckoutSession(request, env);
-    if (url.pathname === "/api/stripe-webhook" && request.method === "POST") return stripeWebhook(request, env);
-    if (url.pathname === "/api/scan-count") return scanCount(request, env);
-    if (url.pathname === "/api/scan-complete") return scanComplete(request, env);
-    if (url.pathname === "/api/waitlist") return waitlist(request, env);
-    if (url.pathname === "/api/waitlist-count") return waitlistCount(request, env);
+    if (url.pathname.startsWith("/api/")) {
+      const rate = await enforceRateLimit(request, env);
+      if (!rate.ok) {
+        return json({ error:"too many requests" }, 429, rate.headers);
+      }
 
-    if (url.pathname.startsWith("/api/")) return json({ error:"Not found." }, 404);
-    return new Response(null, { status:404 });
+      if (url.pathname === "/api/create-checkout-session" && request.method === "POST") return createCheckoutSession(request, env);
+      if (url.pathname === "/api/checkout-session" && request.method === "GET") return getCheckoutSession(request, env);
+      if (url.pathname === "/api/stripe-webhook" && request.method === "POST") return stripeWebhook(request, env);
+      if (url.pathname === "/api/scan-count") return scanCount(request, env, rate.headers);
+      if (url.pathname === "/api/scan-complete") return scanComplete(request, env, rate.headers);
+      if (url.pathname === "/api/waitlist") return waitlist(request, env, rate.headers);
+      if (url.pathname === "/api/waitlist-count") return waitlistCount(request, env, rate.headers);
+
+      return json({ error:"Not found." }, 404, rate.headers);
+    }
+
+    return notFound();
   },
 };
