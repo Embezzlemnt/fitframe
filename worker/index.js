@@ -20,11 +20,24 @@ const SECURITY_HEADERS = {
   "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
 };
 
-const SENSITIVE_EXACT = new Set([
-  "/.env",
-  "/.DS_Store",
-  "/package.json",
-  "/package-lock.json",
+const SENSITIVE_BASENAMES = new Set([
+  ".env",
+  ".DS_Store",
+  "package.json",
+  "package-lock.json",
+  "composer.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  ".htaccess",
+  "web.config",
+  "config.json",
+  "wp-config.php",
+  "database.yml",
+  "secrets.json",
+  "id_rsa",
+  ".npmrc",
+  "docker-compose.yml",
+  "Dockerfile",
 ]);
 
 const corsHeaders = {
@@ -34,9 +47,11 @@ const corsHeaders = {
 };
 
 function isSensitivePath(pathname) {
-  if (SENSITIVE_EXACT.has(pathname)) return true;
   if (pathname.startsWith("/.git/") || pathname === "/.git") return true;
+  if (pathname.startsWith("/.svn/") || pathname === "/.svn") return true;
   const segment = pathname.split("/").pop() || "";
+  if (SENSITIVE_BASENAMES.has(segment)) return true;
+  if (segment.startsWith(".env")) return true;
   if (segment.startsWith(".") && !pathname.startsWith("/.well-known")) return true;
   return false;
 }
@@ -46,7 +61,27 @@ function mergeHeaders(...sets) {
 }
 
 function notFound(extra = {}) {
-  return new Response("Not found", { status: 404, headers: mergeHeaders(extra) });
+  return new Response("Not found", {
+    status: 404,
+    headers: mergeHeaders({ "Content-Type": "text/plain; charset=utf-8" }, extra),
+  });
+}
+
+function rateLimitMetaHeaders() {
+  return {
+    "X-RateLimit-Policy": RATE_LIMIT_POLICY,
+    "X-RateLimit-Limit": "5",
+  };
+}
+
+async function serveAssets(request, env, extraHeaders = {}) {
+  if (!env.ASSETS) return notFound(extraHeaders);
+  const asset = await env.ASSETS.fetch(request);
+  const headers = new Headers(asset.headers);
+  for (const [key, value] of Object.entries(mergeHeaders(rateLimitMetaHeaders(), extraHeaders))) {
+    headers.set(key, value);
+  }
+  return new Response(asset.body, { status: asset.status, headers });
 }
 
 function json(body, status = 200, extraHeaders = {}) {
@@ -587,6 +622,6 @@ export default {
       return json({ error:"Not found." }, 404, rate.headers);
     }
 
-    return notFound();
+    return serveAssets(request, env);
   },
 };
