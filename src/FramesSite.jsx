@@ -563,16 +563,6 @@ const css = `
   .faq-chevron{color:var(--dim);flex:0 0 auto;transition:transform .2s ease;}
   .faq-item[open] .faq-chevron{transform:rotate(180deg);}
   .faq-a{padding:0 0 16px 16px;border-left:2px solid rgba(76,175,125,0.3);font-size:13px;color:var(--dim);font-weight:300;line-height:1.6;}
-  .geo-footer{width:100%;max-width:420px;margin:24px auto 0;border-top:1px solid var(--border);padding-top:8px;}
-  .geo-block{border-bottom:1px solid var(--border);}
-  .geo-block summary{list-style:none;cursor:pointer;padding:12px 0;font-family:'Geist Mono',monospace;font-size:10px;color:var(--soft);letter-spacing:.08em;text-transform:uppercase;}
-  .geo-block summary::-webkit-details-marker{display:none;}
-  .geo-block summary::after{content:'+';float:right;color:var(--soft);}
-  .geo-block[open] summary::after{content:'-';}
-  .geo-content{padding:0 0 14px;font-size:12px;color:var(--dim);line-height:1.58;font-weight:300;}
-  .geo-content p{margin-bottom:9px;}
-  .geo-content p:last-child{margin-bottom:0;}
-  .geo-content strong{color:var(--text);font-weight:400;}
   .debug-overlay{position:absolute;top:9px;left:9px;z-index:7;padding:8px 9px;border-radius:7px;background:rgba(0,0,0,.68);color:rgba(255,255,255,.78);font-family:'Geist Mono',monospace;font-size:9px;line-height:1.45;text-align:left;pointer-events:none;}
   @media (max-width:390px){
     .site-header{padding-left:14px;padding-right:14px;}
@@ -1297,10 +1287,10 @@ function VerificationStrip(){
 function FooterLinks(){
   return (
     <nav className="footer-links" aria-label="Footer">
-      <a href="#faq">FAQ</a><span>·</span>
-      <a href="#about">ABOUT</a><span>·</span>
-      <a href="/returns">Returns</a><span>·</span>
-      <a href="/privacy">Privacy</a><span>·</span>
+      <a href="/faq">faq</a><span>·</span>
+      <a href="/about">about</a><span>·</span>
+      <a href="/returns">returns</a><span>·</span>
+      <a href="/privacy">privacy</a><span>·</span>
       <a href="mailto:hello@fitframe.store">hello@fitframe.store</a>
     </nav>
   );
@@ -1322,19 +1312,6 @@ function FaqAccordion(){
         ))}
       </div>
     </section>
-  );
-}
-
-function GeoFooter(){
-  return (
-    <footer className="geo-footer">
-      <details className="geo-block" id="about">
-        <summary>About</summary>
-        <div className="geo-content">
-          <p>FitFrame started as a frustration with glasses that never fit right. Every pair built here is measured from your actual face, printed to those measurements, and shipped directly to you. No middleman, no standard sizing, no compromise. It's a small operation built on the belief that fit shouldn't be a luxury.</p>
-        </div>
-      </details>
-    </footer>
   );
 }
 
@@ -1759,7 +1736,9 @@ export default function FramesSite(){
 
               <div className="build-block">
                 <div className="eyebrow build-eyebrow">how we build it</div>
-                <p className="build-body">every pair starts with your scan. the measurements go directly into the print file — no averaging, no standardizing. carbon fiber nylon is printed layer by layer to those numbers, finished by hand, and shipped from the US. nothing is made until you order.</p>
+                <p className="build-body">every pair starts with a browser-based scan. a facial landmark system maps your face from the camera feed and extracts the measurements that define a frame's fit — pupillary distance, bridge width, temple length, lens height, face width. a credit card or your own iris gives the scan a real millimeter scale. nothing leaves your device but the numbers.</p>
+                <p className="build-body">those measurements go straight into a parametric print file. each frame is printed in carbon-fiber nylon — light, durable, dimensionally precise — then hand-finished, fitted with US lab-cut blue light lenses, and shipped from America. zero inventory: nothing is made until you order it.</p>
+                <p className="build-body">it's made-to-measure manufacturing run lean and built to scale carefully. if you care how things are actually made, this is the part for you.</p>
               </div>
 
               <FaqAccordion/>
@@ -2035,7 +2014,6 @@ export default function FramesSite(){
           )}
 
           <VerificationStrip/>
-          <GeoFooter/>
           <FooterLinks/>
 
         </div>
