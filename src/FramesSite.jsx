@@ -1629,7 +1629,7 @@ export default function FramesSite(){
   const scanState=scanRestartCopy?"lost":scan.done||confirmedMeas?"complete":scanning||scanSettling?"scanning":"idle";
   const scaleIndicator=calibration?.source==="credit-card"?"scale — card reference":"scale — iris reference";
   const scanTitle=scanProcessing
-    ?"Scan complete."
+    ?"your face is mapped."
     :scanState==="lost"
       ?"Face scan"
     :scanState==="scanning"
@@ -1637,7 +1637,7 @@ export default function FramesSite(){
     :cameraIntro
       ?"Look straight ahead."
     :scanState==="complete"
-      ?"Scan complete."
+      ?"your face is mapped."
     :showScanPrep
       ?"Take a quick calibrated face scan to begin."
     :camRequesting||!camReady
@@ -1658,7 +1658,7 @@ export default function FramesSite(){
     :cameraIntro
       ?"Fill the oval with your face."
     :scanState==="complete"
-      ?"Review the scan before continuing."
+      ?""
     :scanState==="lost"
       ?""
     :showScanPrep
@@ -1796,7 +1796,7 @@ export default function FramesSite(){
               {scanProcessing&&(
                 <div className="processing-card">
                   <div className="processing-logo">fitframe<span className="logo-dot">.</span></div>
-                  <div className="processing-copy">Analyzing measurements</div>
+                  <div className="processing-copy">mapping your face</div>
                   <div className="processing-track"><div className="processing-fill"/></div>
                 </div>
               )}
@@ -1836,7 +1836,7 @@ export default function FramesSite(){
                   <div className="cam-sub">{scan.quality?.reason||"Face the camera straight on in good light and hold still."}</div>
                   <div className="btn-row" style={{marginTop:4}}>
                     <button className="btn btn-primary" onClick={rescan}>Rescan</button>
-                    <button className="btn btn-ghost" onClick={acceptMeasurements}>Use these measurements &rarr;</button>
+                    <button className="btn btn-ghost" onClick={acceptMeasurements}>continue anyway &rarr;</button>
                   </div>
                 </div>
               )}
@@ -1844,11 +1844,10 @@ export default function FramesSite(){
               {(scan.done||confirmedMeas)&&currentMeas&&!scanProcessing&&!scan.quality?.rescan&&(
                 <div className="quality-card">
                   <div className="quality-head">
-                    <div className="quality-title">scan complete.</div>
-                    <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{currentMeas.scanQuality||scan.quality?.label||"Good"}</div>
+                    <div className="quality-title">your face is mapped.</div>
                   </div>
                   <p className="quality-copy">
-                    your face is mapped to exact millimeter measurements. they're captured securely and sent to the maker with your order — nothing for you to enter.
+                    you're all set — continue to pick your frame.
                   </p>
                   <div className="btn-row">
                     <button className="btn btn-primary" onClick={acceptMeasurements}>continue &rarr;</button>
