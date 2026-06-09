@@ -51,7 +51,7 @@ const MONOCULAR_SYMMETRY = 2.5;// Max acceptable left/right monocular PD differe
 const TILT_THRESHOLD = 0.14;   // Iris center Y difference as a fraction of face height
 const IRIS_MISMATCH_MAX = 0.30;// Launch-tolerant left/right iris diameter difference
 const MIN_VALID_SAMPLES = 3;   // Review-screen safety net handles small usable samples
-const FACE_ABORT_FRAMES = 8;   // Roughly 250ms of sustained face/pose loss during active scan
+const FACE_ABORT_FRAMES = 80;  // ~2.5s of sustained face/pose loss during active scan (~32fps)
 const FACE_YAW_MAX = 0.15;
 const SCALE_HISTORY_FRAMES = 10;
 const CREDIT_CARD_WIDTH_MM = 85.6;
@@ -420,6 +420,7 @@ const css = `
   @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
   @keyframes lockIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}
+  .scan-inst-lost{font-size:12px;font-weight:300;color:rgba(255,255,255,.72);line-height:1.35;max-width:280px;}
   .face-intro{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s ease both;}
   .face-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;line-height:1.08;}
   .face-intro-sub{margin-top:7px;font-size:13px;color:rgba(255,255,255,.62);font-weight:300;}
@@ -1616,19 +1617,27 @@ export default function FramesSite(){
   const scaleIndicator=calibration?.source==="credit-card"?"scale — card reference":"scale — iris reference";
   const scanTitle=scanProcessing
     ?"Scan complete."
+    :scanState==="lost"
+      ?"Face scan"
     :scanState==="scanning"
       ?scanSettling?"Find your spot.":"Stay still."
     :cameraIntro
       ?"Look straight ahead."
     :scanState==="complete"
       ?"Scan complete."
-    :scanState==="lost"
-      ?scanRestartCopy
     :showScanPrep
       ?"Take a quick calibrated face scan to begin."
     :camRequesting||!camReady
       ?"Opening camera."
       :"Ready to measure.";
+  const scanCamInst=(()=>{
+    if (scanRestartCopy) return {text:scanRestartCopy,lost:true};
+    if (scanning) return {text:"Hold steady"};
+    if (scanSettling) return {text:"Find your spot"};
+    if (scan.poseHint) return {text:scan.poseHint,warn:true};
+    if (scan.autoStartPct>0&&scan.autoStartPct<1) return {text:"Hold still..."};
+    return {text:"Look directly at the camera."};
+  })();
   const scanCopy=scanProcessing
     ?""
     :scanState==="scanning"
@@ -1737,14 +1746,14 @@ export default function FramesSite(){
                     <video ref={videoRef} autoPlay playsInline muted/>
                     <canvas ref={canvasRef}/>
                     <div className="cam-vignette"/>
-                    <FaceGuide fill={scan.fill} poseHint={!scanning&&!scanSettling?scan.poseHint:null} done={scan.done}/>
-                    {cameraIntro&&(
+                    <FaceGuide fill={scan.fill} poseHint={!scanRestartCopy&&!scanning&&!scanSettling?scan.poseHint:null} done={scan.done}/>
+                    {cameraIntro&&!scanRestartCopy&&(
                       <div className="face-intro">
                         <div className="face-intro-main">Look straight ahead</div>
                         <div className="face-intro-sub">Fill the oval with your face</div>
                       </div>
                     )}
-                    {scanSettling&&(
+                    {scanSettling&&!scanRestartCopy&&(
                       <div className="settle-intro">
                         <div className="settle-intro-main">Find your spot</div>
                       </div>
@@ -1761,15 +1770,9 @@ export default function FramesSite(){
                       </div>
                     )}
                     <div className="cam-bottom">
-                      {scanning
-                        ?<div className="scan-inst">Hold steady</div>
-                        :scanSettling
-                          ?<div className="scan-inst">Find your spot</div>
-                        :scan.poseHint
-                          ?<div className="scan-inst" style={{color:"#C49A2E"}}>{scan.poseHint}</div>
-                          :scan.autoStartPct>0&&scan.autoStartPct<1
-                            ?<div className="scan-inst">Hold still...</div>
-                            :<div className="scan-inst">Look directly at the camera.</div>}
+                      <div className={`scan-inst ${scanCamInst.lost?"scan-inst-lost":""}`} style={scanCamInst.warn?{color:"#C49A2E"}:undefined}>
+                        {scanCamInst.text}
+                      </div>
                     </div>
                   </div>
                 </div>
