@@ -1310,6 +1310,7 @@ export default function FramesSite(){
   const [botField,      setBotField]      = useState("");
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
+  const scanCompletePostedRef              = useRef(false);
   const processingTimerRef                 = useRef(null);
   const settleTimerRef                     = useRef(null);
 
@@ -1367,6 +1368,7 @@ export default function FramesSite(){
     setScanPrepDismissed(true);
     setScanRestartCopy(message||"scan lost. position your face and tap start again.");
     scanHistorySavedRef.current=false;
+    scanCompletePostedRef.current=false;
   },[]);
   const scan=useFaceScan({
     videoRef,
@@ -1452,6 +1454,13 @@ export default function FramesSite(){
           });
           scanHistorySavedRef.current=true;
         }
+        if (!scanCompletePostedRef.current){
+          scanCompletePostedRef.current=true;
+          fetch("/api/scan-complete",{method:"POST"})
+            .then(r=>r.ok?r.json():null)
+            .then(d=>{ if(d?.ok&&Number.isFinite(d.count)) setScanCount(d.count); })
+            .catch(()=>{});
+        }
         setScanProcessing(false);
         processingTimerRef.current=null;
       },2000);
@@ -1512,6 +1521,7 @@ export default function FramesSite(){
     setSent(false);
     setSubmitting(false);
     scanHistorySavedRef.current=false;
+    scanCompletePostedRef.current=false;
     setScanPrepDismissed(false);
     setStep(1);
   }
@@ -1541,6 +1551,7 @@ export default function FramesSite(){
     setCameraIntro(false);
     setScanPrepDismissed(false);
     scanHistorySavedRef.current=false;
+    scanCompletePostedRef.current=false;
     stopCamera();
     setStep(0);
   }
@@ -1559,6 +1570,7 @@ export default function FramesSite(){
     setConfirmedMeas(null);
     setCalibration(null);
     scanHistorySavedRef.current=false;
+    scanCompletePostedRef.current=false;
     setScanPrepDismissed(false);
     stopCamera();
   }
@@ -1588,6 +1600,7 @@ export default function FramesSite(){
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           email,
+          order_id:orderId,
           measurements,
           frame_id:chosenFrame?.id||"fitframe-core",
           lens:lensData?.label||"blue light",
