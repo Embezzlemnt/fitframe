@@ -1979,9 +1979,11 @@ export default function FramesSite(){
                       <div className="lens-desc">{option.desc}</div>
                     </div>
                     <div className="lens-meta">
-                      <div className="lens-price-tag" style={creatorAccess?{color:"var(--accent)"}:undefined}>
-                        {creatorAccess?"covered for you":`$${BASE_PRICE+option.price}`}
-                      </div>
+                      {(!creatorAccess||option.selectable)&&(
+                        <div className="lens-price-tag" style={creatorAccess?{color:"var(--accent)"}:undefined}>
+                          {creatorAccess?"covered for you":`$${BASE_PRICE+option.price}`}
+                        </div>
+                      )}
                       <div className={`lens-tag ${option.selectable?"lens-tag-included":""}`}>{option.status}</div>
                     </div>
                   </button>
