@@ -383,6 +383,48 @@ function validEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function normalizeCreatorKey(raw) {
+  const key = String(raw || "").trim().toLowerCase();
+  if (!/^[a-z0-9]{6,32}$/.test(key)) return null;
+  return key;
+}
+
+async function readCreatorKey(env, key) {
+  if (!env.FITFRAME_KV || !key) return null;
+  const stored = await env.FITFRAME_KV.get(`creator_key:${key}`);
+  if (!stored) return null;
+  try {
+    const parsed = JSON.parse(stored);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function markCreatorKeyUsed(env, key) {
+  const record = await readCreatorKey(env, key);
+  if (!record || record.used) return false;
+  await env.FITFRAME_KV.put(`creator_key:${key}`, JSON.stringify({
+    ...record,
+    used: true,
+    used_at: new Date().toISOString(),
+  }));
+  return true;
+}
+
+async function creatorKey(request, env, rateHeaders = {}) {
+  if (request.method !== "GET") return json({ valid: false }, 200, rateHeaders);
+  const url = new URL(request.url);
+  const key = normalizeCreatorKey(url.searchParams.get("key"));
+  if (!key) return json({ valid: false }, 200, rateHeaders);
+  const record = await readCreatorKey(env, key);
+  if (!record || record.used) return json({ valid: false }, 200, rateHeaders);
+  const name = typeof record.name === "string" ? record.name.slice(0, 80) : "";
+  if (!name) return json({ valid: false }, 200, rateHeaders);
+  return json({ valid: true, name }, 200, rateHeaders);
+}
+
 async function readWaitlistCount(env) {
   if (!env.FITFRAME_KV) return fallbackWaitlistCount;
   const stored = await env.FITFRAME_KV.get(WAITLIST_COUNT_KEY);
@@ -440,10 +482,12 @@ function buildFounderNotificationText({
   lens,
   lensPrice,
   total,
+  creatorKey,
+  creatorName,
 }) {
   const m = measurements || {};
   const lensLine = lensPrice ? `+$${lensPrice}` : "included";
-  return [
+  const lines = [
     "FITFRAME WAITLIST SPEC",
     "",
     `Order ID: ${orderId || "-"}`,
@@ -469,7 +513,11 @@ function buildFounderNotificationText({
     `Scale source: ${m.scaleSource || "-"}`,
     `Scan quality: ${m.scanQuality || "-"}`,
     `Valid frames: ${m.validPct != null ? `${m.validPct}%` : "-"}`,
-  ].join("\n");
+  ];
+  if (creatorKey && creatorName) {
+    lines.push("", `creator key: ${creatorKey} (${creatorName})`);
+  }
+  return lines.join("\n");
 }
 
 async function waitlist(request, env, rateHeaders = {}) {
@@ -497,10 +545,22 @@ async function waitlist(request, env, rateHeaders = {}) {
   }
 
   // Strip unexpected fields
-  const allowed = ["email", "order_id", "measurements", "frame_id", "colorway_id", "lens", "lens_price", "total", "timestamp"];
+  const allowed = ["email", "order_id", "measurements", "frame_id", "colorway_id", "lens", "lens_price", "total", "timestamp", "creator_key"];
   const sanitized = Object.fromEntries(
     Object.entries(payload).filter(([k]) => allowed.includes(k))
   );
+
+  let creatorKey = normalizeCreatorKey(sanitized.creator_key);
+  let creatorName = null;
+  if (creatorKey) {
+    const record = await readCreatorKey(env, creatorKey);
+    if (!record || record.used) {
+      creatorKey = null;
+    } else {
+      creatorName = typeof record.name === "string" ? record.name.slice(0, 80) : null;
+      if (!creatorName) creatorKey = null;
+    }
+  }
 
   const measurements = sanitized.measurements || null;
   const orderId = typeof sanitized.order_id === "string" ? sanitized.order_id.slice(0, 32) : null;
@@ -549,37 +609,63 @@ async function waitlist(request, env, rateHeaders = {}) {
 
   const currentCount = await readWaitlistCount(env).catch(() => fallbackWaitlistCount);
 
-  if (!duplicate && env.RESEND_API_KEY) {
-    const emailPromises = [
-      sendResendEmail({
-        env,
-        to:email,
-        subject:"You're on the FitFrame founding member list",
-        text:buildWaitlistEmailText(email, measurements, frameId, position),
-      }),
-    ];
-    if (env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL) {
-      emailPromises.push(sendResendEmail({
-        env,
-        to:env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL,
-        subject:`FitFrame waitlist spec — ${orderId || email}`,
-        text:buildFounderNotificationText({
-          email,
-          orderId,
-          timestamp:submittedAt,
-          measurements,
-          frameId,
-          position,
-          lens,
-          lensPrice,
-          total,
-        }),
-      }));
+  const founderSubjectBase = `FitFrame waitlist spec — ${orderId || email}`;
+  const founderSubject = creatorName
+    ? `[CREATOR: ${creatorName}] ${founderSubjectBase}`
+    : founderSubjectBase;
+
+  if (env.RESEND_API_KEY) {
+    let founderEmailOk = false;
+    if (!duplicate) {
+      try {
+        await sendResendEmail({
+          env,
+          to:email,
+          subject:"You're on the FitFrame founding member list",
+          text:buildWaitlistEmailText(email, measurements, frameId, position),
+        });
+      } catch { /* customer email failure does not block founder path */ }
     }
-    await Promise.allSettled(emailPromises);
+
+    if (env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL) {
+      const sendFounder = !duplicate || creatorKey;
+      if (sendFounder) {
+        try {
+          await sendResendEmail({
+            env,
+            to:env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL,
+            subject:founderSubject,
+            text:buildFounderNotificationText({
+              email,
+              orderId,
+              timestamp:submittedAt,
+              measurements,
+              frameId,
+              position,
+              lens,
+              lensPrice,
+              total,
+              creatorKey,
+              creatorName,
+            }),
+          });
+          founderEmailOk = true;
+        } catch { /* founder email failed — do not mark creator key used */ }
+      }
+    }
+
+    if (creatorKey && founderEmailOk) {
+      await markCreatorKeyUsed(env, creatorKey);
+    }
   }
 
-  return json({ ok:true, duplicate, position, count:currentCount }, 200, rateHeaders);
+  return json({
+    ok: true,
+    duplicate,
+    position,
+    count: currentCount,
+    creator: Boolean(creatorKey),
+  }, 200, rateHeaders);
 }
 
 function validateOrigin(request) {
@@ -618,6 +704,7 @@ export default {
       if (url.pathname === "/api/scan-complete") return scanComplete(request, env, rate.headers);
       if (url.pathname === "/api/waitlist") return waitlist(request, env, rate.headers);
       if (url.pathname === "/api/waitlist-count") return waitlistCount(request, env, rate.headers);
+      if (url.pathname === "/api/creator-key") return creatorKey(request, env, rate.headers);
 
       return json({ error:"Not found." }, 404, rate.headers);
     }
