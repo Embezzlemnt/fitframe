@@ -1312,12 +1312,12 @@ export default function FramesSite(){
   const [creatorName,   setCreatorName]   = useState(saved.creatorName??null);
   const [creatorAccess, setCreatorAccess] = useState(false);
   const [submittedAsCreator,setSubmittedAsCreator] = useState(false);
+  const [creatorFullSite, setCreatorFullSite] = useState(false);
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
   const scanCompletePostedRef              = useRef(false);
   const processingTimerRef                 = useRef(null);
   const settleTimerRef                     = useRef(null);
-  const creatorBootedRef                   = useRef(false);
 
   const canvasRef=useRef(null);
   const {
@@ -1431,13 +1431,6 @@ export default function FramesSite(){
       });
     return ()=>{ cancelled=true; };
   },[]);
-
-  useEffect(()=>{
-    if (!creatorAccess||!creatorKey||creatorBootedRef.current) return;
-    if (savedStep!==0) return;
-    creatorBootedRef.current=true;
-    startFreshScan();
-  },[creatorAccess,creatorKey,savedStep]);
 
   const lensData=LENS_OPTIONS.find(lens=>lens.id===selectedLens&&lens.selectable)||DEFAULT_LENS;
   const totalPrice=BASE_PRICE+(lensData?.price||0);
@@ -1597,7 +1590,7 @@ export default function FramesSite(){
     setCreatorName(null);
     setCreatorAccess(false);
     setSubmittedAsCreator(false);
-    creatorBootedRef.current=false;
+    setCreatorFullSite(false);
     scan.reset();
     setScanning(false);
     setCameraIntro(false);
@@ -1737,8 +1730,26 @@ export default function FramesSite(){
 
         <div className="container">
 
+          {/* ── 0: Creator landing ── */}
+          {step===0&&creatorAccess&&creatorName&&!creatorFullSite&&(
+            <div className="section hero">
+              <h1 className="display hero-headline">hey <span style={{color:"var(--accent)"}}>{creatorName}</span> — this pair is on us.</h1>
+              <p className="body-lg hero-sub">custom eyewear printed to your exact face. built for people who live in front of a screen.</p>
+              <ol className="feature-list">
+                <li><span className="feature-num">1</span><span className="feature-text">scan your face — 60 seconds, right here in the browser</span></li>
+                <li><span className="feature-num">2</span><span className="feature-text">I print your frame to your measurements and finish it by hand</span></li>
+                <li><span className="feature-num">3</span><span className="feature-text">it ships to you free. if the fit isn't perfect, I reprint until it is</span></li>
+              </ol>
+              <div className="btn-row" style={{marginTop:24}}>
+                <button className="btn btn-primary hero-cta" onClick={startFreshScan}>start my scan →</button>
+              </div>
+              <div className="trust-line" style={{marginTop:13}}>made in america · PA12 nylon · blue light lenses included</div>
+              <button type="button" className="btn btn-ghost" style={{marginTop:12}} onClick={()=>setCreatorFullSite(true)}>see the full site</button>
+            </div>
+          )}
+
           {/* ── 0: Hero ── */}
-          {step===0&&(
+          {step===0&&(!creatorAccess||!creatorName||creatorFullSite)&&(
             <div className="section hero">
               <div className="eyebrow">made-to-measure eyewear</div>
               <h1 className="display hero-headline">frames built for <em>your</em> face.</h1>
@@ -1802,13 +1813,6 @@ export default function FramesSite(){
                     <div>arm's length from your phone</div>
                     <div>good overhead light, face it directly</div>
                   </div>
-                  {creatorAccess&&creatorName&&(
-                    <>
-                      <div className="pre-scan-line" style={{marginTop:8}}><strong>hey <span style={{color:"var(--accent)"}}>{creatorName}</span> —</strong></div>
-                      <div className="pre-scan-line">this pair is on us. one quick scan and we build a frame to your exact face — nobody else's.</div>
-                      <div className="pre-scan-line">takes about 60 seconds. ready when you are.</div>
-                    </>
-                  )}
                   <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready →</button>
                   <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
                 </div>
