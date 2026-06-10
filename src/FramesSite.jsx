@@ -1308,11 +1308,16 @@ export default function FramesSite(){
   const [waitlistPosition,setWaitlistPosition] = useState(null);
   const [waitlistError, setWaitlistError] = useState("");
   const [botField,      setBotField]      = useState("");
+  const [creatorKey,    setCreatorKey]    = useState(saved.creatorKey??null);
+  const [creatorName,   setCreatorName]   = useState(saved.creatorName??null);
+  const [creatorAccess, setCreatorAccess] = useState(false);
+  const [submittedAsCreator,setSubmittedAsCreator] = useState(false);
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanHistorySavedRef                = useRef(false);
   const scanCompletePostedRef              = useRef(false);
   const processingTimerRef                 = useRef(null);
   const settleTimerRef                     = useRef(null);
+  const creatorBootedRef                   = useRef(false);
 
   const canvasRef=useRef(null);
   const {
@@ -1389,8 +1394,50 @@ export default function FramesSite(){
   // Persist
   useEffect(()=>{
     if (step===0||sent) return;
-    saveSession({step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId});
-  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId]);
+    saveSession({
+      step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId,
+      creatorKey:creatorAccess?creatorKey:null,
+      creatorName:creatorAccess?creatorName:null,
+    });
+  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId,creatorAccess,creatorKey,creatorName]);
+
+  useEffect(()=>{
+    let cancelled=false;
+    const params=new URLSearchParams(window.location.search);
+    const urlKey=params.get("key")?.trim().toLowerCase()||null;
+    const sessionKey=typeof saved.creatorKey==="string"?saved.creatorKey:null;
+    const keyToCheck=urlKey||sessionKey;
+    if (!keyToCheck) return;
+    fetch(`/api/creator-key?key=${encodeURIComponent(keyToCheck)}`)
+      .then(r=>r.ok?r.json():{valid:false})
+      .then(d=>{
+        if (cancelled) return;
+        if (d?.valid&&d.name){
+          setCreatorKey(keyToCheck);
+          setCreatorName(d.name);
+          setCreatorAccess(true);
+        } else {
+          setCreatorKey(null);
+          setCreatorName(null);
+          setCreatorAccess(false);
+        }
+      })
+      .catch(()=>{
+        if (!cancelled){
+          setCreatorKey(null);
+          setCreatorName(null);
+          setCreatorAccess(false);
+        }
+      });
+    return ()=>{ cancelled=true; };
+  },[]);
+
+  useEffect(()=>{
+    if (!creatorAccess||!creatorKey||creatorBootedRef.current) return;
+    if (savedStep!==0) return;
+    creatorBootedRef.current=true;
+    startFreshScan();
+  },[creatorAccess,creatorKey,savedStep]);
 
   const lensData=LENS_OPTIONS.find(lens=>lens.id===selectedLens&&lens.selectable)||DEFAULT_LENS;
   const totalPrice=BASE_PRICE+(lensData?.price||0);
@@ -1546,6 +1593,11 @@ export default function FramesSite(){
     setOrderId(genOrderId());
     setSubmitting(false);
     setSent(false);
+    setCreatorKey(null);
+    setCreatorName(null);
+    setCreatorAccess(false);
+    setSubmittedAsCreator(false);
+    creatorBootedRef.current=false;
     scan.reset();
     setScanning(false);
     setCameraIntro(false);
@@ -1608,10 +1660,12 @@ export default function FramesSite(){
           total:totalPrice,
           timestamp:new Date().toISOString(),
           website:botField,
+          ...(creatorAccess&&creatorKey?{creator_key:creatorKey}:{}),
         }),
       });
       const data=await res.json().catch(()=>null);
       if (res.ok&&data?.ok){
+        setSubmittedAsCreator(Boolean(creatorAccess&&creatorKey));
         setWaitlistPosition(Number.isFinite(data.position)?data.position:null);
         clearSession();
         setSent(true);
@@ -1931,43 +1985,73 @@ export default function FramesSite(){
             </div>
           )}
 
-          {/* Waitlist wall */}
+          {/* Waitlist wall / creator submit */}
           {step===5&&!sent&&(
-            <div className="section">
-              <div className="step-head">you're early.</div>
-              <p className="step-sub">your pair is designed. we're in final production on the first batch — join the list and we'll reach out the moment yours can be built.</p>
-              <div className="pair-summary">
-                <div className="receipt">
-                  <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
-                  <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
-                  <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
+            creatorAccess?(
+              <div className="section">
+                <div className="step-head">your pair is ready.</div>
+                <p className="step-sub">send your spec to the maker — we'll build your custom pair.</p>
+                <div className="pair-summary">
+                  <div className="receipt">
+                    <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
+                    <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
+                    <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
+                  </div>
                 </div>
+                <form onSubmit={joinWaitlist}>
+                  <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
+                    value={botField} onChange={e=>setBotField(e.target.value)}/>
+                  <input className="field" placeholder="your email" type="email" inputMode="email" autoComplete="email"
+                    value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
+                  {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
+                  <div className="btn-row" style={{marginTop:10}}>
+                    <button className="btn btn-accent" type="submit"
+                      disabled={!customerInfo.email.trim()||submitting}>
+                      {submitting?"sending...":"send my spec →"}
+                    </button>
+                    <button className="btn btn-ghost" type="button" onClick={()=>setStep(4)}>Back</button>
+                  </div>
+                </form>
+                <div className="trust-line"><Padlock/><span>no images are sent. your measurements go securely to the maker.</span></div>
               </div>
-              <form onSubmit={joinWaitlist}>
-                <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
-                  value={botField} onChange={e=>setBotField(e.target.value)}/>
-                <input className="field" placeholder="your email" type="email" inputMode="email" autoComplete="email"
-                  value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
-                {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
-                <div className="btn-row" style={{marginTop:10}}>
-                  <button className="btn btn-accent" type="submit"
-                    disabled={!customerInfo.email.trim()||submitting}>
-                    {submitting?"joining...":"join the list →"}
-                  </button>
-                  <button className="btn btn-ghost" type="button" onClick={()=>setStep(4)}>Back</button>
+            ):(
+              <div className="section">
+                <div className="step-head">you're early.</div>
+                <p className="step-sub">your pair is designed. we're in final production on the first batch — join the list and we'll reach out the moment yours can be built.</p>
+                <div className="pair-summary">
+                  <div className="receipt">
+                    <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
+                    <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
+                    <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
+                  </div>
                 </div>
-              </form>
-              <div className="trust-line"><Padlock/><span>no images are sent. your measurements go securely to the maker.</span></div>
-            </div>
+                <form onSubmit={joinWaitlist}>
+                  <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
+                    value={botField} onChange={e=>setBotField(e.target.value)}/>
+                  <input className="field" placeholder="your email" type="email" inputMode="email" autoComplete="email"
+                    value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
+                  {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
+                  <div className="btn-row" style={{marginTop:10}}>
+                    <button className="btn btn-accent" type="submit"
+                      disabled={!customerInfo.email.trim()||submitting}>
+                      {submitting?"joining...":"join the list →"}
+                    </button>
+                    <button className="btn btn-ghost" type="button" onClick={()=>setStep(4)}>Back</button>
+                  </div>
+                </form>
+                <div className="trust-line"><Padlock/><span>no images are sent. your measurements go securely to the maker.</span></div>
+              </div>
+            )
           )}
 
           {/* ── Confirmation ── */}
           {sent&&(
             <div className="section">
-              <div className="confirm-greeting">you're on the list.</div>
+              <div className="confirm-greeting">{submittedAsCreator?"your spec is sent.":"you're on the list."}</div>
               <p className="confirm-body">
-                {waitlistPosition!=null&&<><strong>#{waitlistPosition}</strong> in line for the first batch. </>}
-                we'll reach out when production opens for your pair.
+                {submittedAsCreator
+                  ?"we'll be in touch about your custom pair."
+                  :<>{waitlistPosition!=null&&<><strong>#{waitlistPosition}</strong> in line for the first batch. </>}we'll reach out when production opens for your pair.</>}
               </p>
               <div className="pair-summary">
                 <div className="receipt">
