@@ -515,7 +515,7 @@ function buildFounderNotificationText({
     `Valid frames: ${m.validPct != null ? `${m.validPct}%` : "-"}`,
   ];
   if (creatorKey && creatorName) {
-    lines.push("", `creator key: ${creatorKey} (${creatorName})`);
+    lines.push("", `creator key: ${creatorKey} (${creatorName})`, "reminder: free pair — reach out within 24h to confirm shipping address.");
   }
   return lines.join("\n");
 }

@@ -1802,7 +1802,14 @@ export default function FramesSite(){
                     <div>arm's length from your phone</div>
                     <div>good overhead light, face it directly</div>
                   </div>
-                  <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>i'm ready →</button>
+                  {creatorAccess&&creatorName&&(
+                    <>
+                      <div className="pre-scan-line" style={{marginTop:8}}><strong>hey <span style={{color:"var(--accent)"}}>{creatorName}</span> —</strong></div>
+                      <div className="pre-scan-line">this pair is on us. one quick scan and we build a frame to your exact face — nobody else's.</div>
+                      <div className="pre-scan-line">takes about 60 seconds. ready when you are.</div>
+                    </>
+                  )}
+                  <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready →</button>
                   <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
                 </div>
               )}
@@ -1972,7 +1979,9 @@ export default function FramesSite(){
                       <div className="lens-desc">{option.desc}</div>
                     </div>
                     <div className="lens-meta">
-                      <div className="lens-price-tag">${BASE_PRICE+option.price}</div>
+                      <div className="lens-price-tag" style={creatorAccess?{color:"var(--accent)"}:undefined}>
+                        {creatorAccess?"covered for you":`$${BASE_PRICE+option.price}`}
+                      </div>
                       <div className={`lens-tag ${option.selectable?"lens-tag-included":""}`}>{option.status}</div>
                     </div>
                   </button>
@@ -1995,7 +2004,7 @@ export default function FramesSite(){
                   <div className="receipt">
                     <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
                     <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
-                    <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
+                    <div className="receipt-total"><span>total</span><span style={creatorAccess?{color:"var(--accent)"}:undefined}>{creatorAccess?"covered for you":`$${totalPrice}`}</span></div>
                   </div>
                 </div>
                 <form onSubmit={joinWaitlist}>
@@ -2045,13 +2054,19 @@ export default function FramesSite(){
           )}
 
           {/* ── Confirmation ── */}
-          {sent&&(
+          {sent&&submittedAsCreator&&creatorName&&(
             <div className="section">
-              <div className="confirm-greeting">{submittedAsCreator?"your spec is sent.":"you're on the list."}</div>
+              <div className="confirm-greeting">your frame is in the queue, {creatorName}.</div>
+              <p className="confirm-body">here's what happens next: I print your pair to the exact measurements from your scan, finish it by hand, and ship it to you directly. no charge, no card, nothing owed.</p>
+              <p className="confirm-body">one honest ask — wear them for a week. if they're the best-fitting frames you've owned, tell people. if anything is off, tell me, and I'll reprint until it's right.</p>
+              <p className="confirm-body" style={{marginTop:20}}>— ratio, founder<br/><a href="mailto:hello@fitframe.store" style={{color:"var(--accent)"}}>hello@fitframe.store</a></p>
+            </div>
+          )}
+          {sent&&!submittedAsCreator&&(
+            <div className="section">
+              <div className="confirm-greeting">you're on the list.</div>
               <p className="confirm-body">
-                {submittedAsCreator
-                  ?"we'll be in touch about your custom pair."
-                  :<>{waitlistPosition!=null&&<><strong>#{waitlistPosition}</strong> in line for the first batch. </>}we'll reach out when production opens for your pair.</>}
+                {waitlistPosition!=null&&<><strong>#{waitlistPosition}</strong> in line for the first batch. </>}we'll reach out when production opens for your pair.
               </p>
               <div className="pair-summary">
                 <div className="receipt">
