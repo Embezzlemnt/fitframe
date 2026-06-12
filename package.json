@@ -11,12 +11,10 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
-    "puppeteer-core": "^24.43.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.35.0",
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
