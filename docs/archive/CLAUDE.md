@@ -1,3 +1,5 @@
+> **ARCHIVED — STALE (2026-06-12).** This was an early AI-agent brief. It describes features that were never shipped or were replaced (mailto order flow, Fillout forms, design-token plan). It does not describe the current product. Kept for historical reference only — do not act on it.
+
 # FitFrame — Master Agent Brief
 # Paste this entire prompt into Claude Code after it reads CLAUDE.md.
 # This is your fire-and-forget brief. Walk away and come back to a PR.

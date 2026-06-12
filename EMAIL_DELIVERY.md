@@ -1,34 +1,28 @@
 # Email Delivery Notes
 
-**Live flow:** at the final step ("claim your founding pair") the app opens a pre-filled maker spec email (mailto) from the customer's own mail client, addressed to `hello@fitframe.store`. The body is the structured maker spec (frame, lens, price, measurements, fit answers). There is no card payment and no server-side send in the live path.
+## Live email flow (Resend via Worker)
 
-The Worker + Stripe + Resend automated flow below is **dormant** — kept for a possible future paid checkout, not used today.
+When a customer submits the waitlist form, `POST /api/waitlist` sends two emails through Resend:
 
-## Dormant Automated Email Flow (Stripe + Resend)
+1. **Customer confirmation** — "You're on the FitFrame founding member list" with their position and the spec on file.
+2. **Founder spec email** — full build spec (order ID, measurements, frame, lens, total) to `FITFRAME_ORDER_EMAIL` (`hello@fitframe.store`). Creator-key submissions are tagged `[CREATOR: name]` in the subject and include the key in the body.
 
-1. The customer completes Stripe Checkout.
-2. Stripe sends `checkout.session.completed` to `/api/stripe-webhook`.
-3. The Worker verifies `STRIPE_WEBHOOK_SECRET`.
-4. The Worker sends the paid order spec through Resend to `hello@fitframe.store`.
+Duplicate signups (same email) do not re-send the customer confirmation. If the founder email fails for a creator submission, the creator key is **not** marked used.
 
-Required Cloudflare secrets:
+Required secret: `RESEND_API_KEY` (set with `wrangler secret put RESEND_API_KEY`).
+Required vars (`wrangler.jsonc`): `RESEND_FROM_EMAIL`, `FITFRAME_ORDER_EMAIL`.
 
-```txt
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-RESEND_API_KEY=re_...
-```
+Without `RESEND_API_KEY` the API still accepts signups (stored in KV) but sends no email.
 
-Required vars:
+## Dormant Stripe order emails
 
-```txt
-RESEND_FROM_EMAIL=FitFrame <orders@fitframe.store>
-FITFRAME_ORDER_EMAIL=hello@fitframe.store
-```
+The Stripe webhook path (`/api/stripe-webhook`) emails a paid-order spec on `checkout.session.completed`. This path is dormant — see README. Verification steps for when it is activated:
 
-The order email includes shipping address, Stripe payment confirmation ID, selected frame, colorway, lens, scan measurements, scan quality, and customer email.
+1. Create a Stripe test Checkout Session from `wrangler dev`.
+2. Pay with test card `4242 4242 4242 4242`.
+3. Confirm `checkout.session.completed` fires and the spec email arrives.
 
-## Resend DNS Notes
+## Resend DNS notes
 
 Resend may ask for SPF, DKIM, and bounce/return-path records. Copy the exact generated records from Resend.
 
@@ -81,7 +75,7 @@ TTL: Auto
 Proxy: DNS only
 ```
 
-## Inbound Mail
+## Inbound mail
 
 ImprovMX remains useful for inbound forwarding to `hello@fitframe.store` unless FitFrame moves that inbox to a mailbox provider.
 
@@ -120,11 +114,3 @@ Content: v=spf1 include:spf.improvmx.com ~all
 TTL: Auto
 Proxy: DNS only
 ```
-
-## Verification (dormant Stripe path)
-
-1. Create a Stripe test Checkout Session from `wrangler dev`.
-2. Complete payment with Stripe test card `4242 4242 4242 4242`.
-3. Confirm the customer returns to the FitFrame confirmation screen.
-4. Confirm Stripe emits `checkout.session.completed`.
-5. Confirm the business inbox receives the structured order spec.
