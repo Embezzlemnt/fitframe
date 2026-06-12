@@ -7,16 +7,9 @@ const BASE_PRICE  = 119;
 
 // ─── localStorage persistence ─────────────────────────────────────────────────
 const STORE_KEY = "fitframe_session_v1";
-const SCAN_HISTORY_KEY = "fitframe_scan_history";
 function saveSession(data) { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch { /* storage can be unavailable in private mode */ } }
 function loadSession()     { try { const r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
 function clearSession()    { try { localStorage.removeItem(STORE_KEY); } catch { /* storage can be unavailable in private mode */ } }
-function appendScanHistory(entry) {
-  try {
-    const prev=JSON.parse(localStorage.getItem(SCAN_HISTORY_KEY)||"[]");
-    localStorage.setItem(SCAN_HISTORY_KEY, JSON.stringify([entry,...prev].slice(0,20)));
-  } catch { /* storage can be unavailable in private mode */ }
-}
 
 // ─── Script loader ────────────────────────────────────────────────────────────
 function loadScript(src) {
@@ -1295,9 +1288,8 @@ export default function FramesSite(){
   const [styleAnswers,  setStyleAnswers]  = useState(saved.styleAnswers??{});
   const [styleQIdx,     setStyleQIdx]     = useState(saved.styleQIdx??0);
   const [tapped,        setTapped]        = useState(null);
-  const [selectedFrame, setSelectedFrame] = useState(saved.selectedFrame??null);
   const [selectedLens,  setSelectedLens]  = useState(saved.selectedLens??DEFAULT_LENS.id);
-  const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{name:"",email:""});
+  const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{email:""});
   const [scanning,      setScanning]      = useState(false);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
   const [cameraIntro,   setCameraIntro]   = useState(false);
@@ -1319,7 +1311,6 @@ export default function FramesSite(){
   const [submittedAsCreator,setSubmittedAsCreator] = useState(false);
   const [creatorFullSite, setCreatorFullSite] = useState(false);
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
-  const scanHistorySavedRef                = useRef(false);
   const scanCompletePostedRef              = useRef(false);
   const processingTimerRef                 = useRef(null);
   const settleTimerRef                     = useRef(null);
@@ -1377,7 +1368,6 @@ export default function FramesSite(){
     setCameraIntro(false);
     setScanPrepDismissed(true);
     setScanRestartCopy(message||"scan lost. position your face and tap start again.");
-    scanHistorySavedRef.current=false;
     scanCompletePostedRef.current=false;
   },[]);
   const scan=useFaceScan({
@@ -1400,17 +1390,19 @@ export default function FramesSite(){
   useEffect(()=>{
     if (step===0||sent) return;
     saveSession({
-      step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId,
+      step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedLens,customerInfo,orderId,
       creatorKey:creatorAccess?creatorKey:null,
       creatorName:creatorAccess?creatorName:null,
     });
-  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedFrame,selectedLens,customerInfo,orderId,creatorAccess,creatorKey,creatorName]);
+  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedLens,customerInfo,orderId,creatorAccess,creatorKey,creatorName]);
 
   useEffect(()=>{
     let cancelled=false;
     const params=new URLSearchParams(window.location.search);
     const urlKey=params.get("key")?.trim().toLowerCase()||null;
-    const sessionKey=typeof saved.creatorKey==="string"?saved.creatorKey:null;
+    // Read the persisted key directly from storage (not the render-scoped `saved`
+    // object) so this mount-only effect has no reactive dependencies.
+    const sessionKey=(()=>{ const s=loadSession(); return typeof s?.creatorKey==="string"?s.creatorKey:null; })();
     const keyToCheck=urlKey||sessionKey;
     if (!keyToCheck) return;
     fetch(`/api/creator-key?key=${encodeURIComponent(keyToCheck)}`)
@@ -1487,18 +1479,6 @@ export default function FramesSite(){
           scanReason:scan.quality?.reason||"",
           validPct:scan.validPct,
         });
-        if (!scanHistorySavedRef.current){
-          appendScanHistory({
-            timestamp:new Date().toISOString(),
-            pd:scan.measurements.pd,
-            bridge:scan.measurements.bridge,
-            face:scan.measurements.faceW,
-            scaleSource:scan.measurements.scaleSource,
-            quality:scan.quality?.label||"Review",
-            validPct:scan.validPct,
-          });
-          scanHistorySavedRef.current=true;
-        }
         if (!scanCompletePostedRef.current){
           scanCompletePostedRef.current=true;
           fetch("/api/scan-complete",{method:"POST"})
@@ -1522,18 +1502,6 @@ export default function FramesSite(){
       validPct:m.validPct??scan.validPct,
     };
     setConfirmedMeas(accepted);
-    if (!scanHistorySavedRef.current){
-      appendScanHistory({
-        timestamp:new Date().toISOString(),
-        pd:accepted.pd,
-        bridge:accepted.bridge,
-        face:accepted.faceW,
-        scaleSource:accepted.scaleSource,
-        quality:accepted.scanQuality,
-        validPct:accepted.validPct,
-      });
-      scanHistorySavedRef.current=true;
-    }
     setStep(2);
   }
 
@@ -1558,14 +1526,12 @@ export default function FramesSite(){
     setCalibration(null);
     setStyleAnswers({});
     setStyleQIdx(0);
-    setSelectedFrame(null);
     setSelectedLens(DEFAULT_LENS.id);
     scan.reset();
     setScanning(false);
     setCameraIntro(false);
     setSent(false);
     setSubmitting(false);
-    scanHistorySavedRef.current=false;
     scanCompletePostedRef.current=false;
     setScanPrepDismissed(false);
     setStep(1);
@@ -1585,9 +1551,8 @@ export default function FramesSite(){
     setStyleAnswers({});
     setStyleQIdx(0);
     setTapped(null);
-    setSelectedFrame(null);
     setSelectedLens(DEFAULT_LENS.id);
-    setCustomerInfo({name:"",email:""});
+    setCustomerInfo({email:""});
     setOrderId(genOrderId());
     setSubmitting(false);
     setSent(false);
@@ -1600,7 +1565,6 @@ export default function FramesSite(){
     setScanning(false);
     setCameraIntro(false);
     setScanPrepDismissed(false);
-    scanHistorySavedRef.current=false;
     scanCompletePostedRef.current=false;
     stopCamera();
     setStep(0);
@@ -1619,7 +1583,6 @@ export default function FramesSite(){
     setCameraIntro(false);
     setConfirmedMeas(null);
     setCalibration(null);
-    scanHistorySavedRef.current=false;
     scanCompletePostedRef.current=false;
     setScanPrepDismissed(false);
     stopCamera();
@@ -1961,7 +1924,7 @@ export default function FramesSite(){
               <div className="step-head">your frame.</div>
               <p className="step-sub">built to your measurements — printed in matte carbon-fiber nylon, hand-finished, shipped from America.</p>
               <div className="btn-row" style={{marginTop:18}}>
-                <button className="btn btn-primary" onClick={()=>{setSelectedFrame(FITFRAME_FRAME.id);setStep(4);}}>
+                <button className="btn btn-primary" onClick={()=>setStep(4)}>
                   choose lenses →
                 </button>
                 <button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button>

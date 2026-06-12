@@ -168,6 +168,12 @@ function requiredOrderFields(order) {
   ].filter(key => !order[key]);
 }
 
+// ─── DORMANT STRIPE CHECKOUT PATH ────────────────────────────────────────────
+// The live product flow (waitlist) does NOT use any of the Stripe handlers
+// below. They fail closed with 501 unless STRIPE_SECRET_KEY /
+// STRIPE_WEBHOOK_SECRET are configured, which they intentionally are not in
+// production. Keep dormant until checkout is launched with a tested plan.
+// ─────────────────────────────────────────────────────────────────────────────
 async function createCheckoutSession(request, env) {
   const missingEnv = envMissing(env.STRIPE_SECRET_KEY);
   if (missingEnv.length) {
@@ -448,11 +454,6 @@ async function readWaitlistCount(env) {
   return WAITLIST_COUNT_SEED;
 }
 
-async function waitlistCount(request, env, rateHeaders = {}) {
-  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405, rateHeaders);
-  return json({ ok:true, count:await readWaitlistCount(env) }, 200, rateHeaders);
-}
-
 function buildWaitlistEmailText(email, measurements, frameId, position) {
   const m = measurements || {};
   return [
@@ -703,7 +704,6 @@ export default {
       if (url.pathname === "/api/scan-count") return scanCount(request, env, rate.headers);
       if (url.pathname === "/api/scan-complete") return scanComplete(request, env, rate.headers);
       if (url.pathname === "/api/waitlist") return waitlist(request, env, rate.headers);
-      if (url.pathname === "/api/waitlist-count") return waitlistCount(request, env, rate.headers);
       if (url.pathname === "/api/creator-key") return creatorKey(request, env, rate.headers);
 
       return json({ error:"Not found." }, 404, rate.headers);
