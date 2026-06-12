@@ -1848,7 +1848,7 @@ export default function FramesSite(){
                       </div>
                     )}
                     <div className="cam-bottom">
-                      <div className={`scan-inst ${scanCamInst.lost?"scan-inst-lost":""}`} style={scanCamInst.warn?{color:"#C49A2E"}:undefined}>
+                      <div className={`scan-inst ${scanCamInst.lost?"scan-inst-lost":""}`} aria-live="polite" style={scanCamInst.warn?{color:"#C49A2E"}:undefined}>
                         {scanCamInst.text}
                       </div>
                     </div>
@@ -2016,7 +2016,7 @@ export default function FramesSite(){
                 <form onSubmit={joinWaitlist}>
                   <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
                     value={botField} onChange={e=>setBotField(e.target.value)}/>
-                  <input className="field" placeholder="your email" type="email" inputMode="email" autoComplete="email"
+                  <input className="field" placeholder="your email" aria-label="your email" type="email" inputMode="email" autoComplete="email"
                     value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
                   {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
                   <div className="btn-row" style={{marginTop:10}}>
@@ -2043,7 +2043,7 @@ export default function FramesSite(){
                 <form onSubmit={joinWaitlist}>
                   <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
                     value={botField} onChange={e=>setBotField(e.target.value)}/>
-                  <input className="field" placeholder="your email" type="email" inputMode="email" autoComplete="email"
+                  <input className="field" placeholder="your email" aria-label="your email" type="email" inputMode="email" autoComplete="email"
                     value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
                   {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
                   <div className="btn-row" style={{marginTop:10}}>
