@@ -62,6 +62,11 @@ const CARD_MAX_ROTATION_DEG = 14;
 const CARD_MIN_CONFIDENCE = 0.58;
 const CARD_FALLBACK_MS = 8000;
 const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
+// Pinned MediaPipe versions — the scan engine must not float with CDN "latest".
+// These are the final published versions of the legacy MediaPipe JS solutions.
+const MEDIAPIPE_FACE_MESH_VERSION = "0.4.1633559619";
+const MEDIAPIPE_CAMERA_UTILS_VERSION = "0.3.1675466862";
+const MEDIAPIPE_DRAWING_UTILS_VERSION = "0.3.1675466124";
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
   ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $119 is the honest price for what this is."],
@@ -901,13 +906,13 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
 
   useEffect(()=>{
     Promise.all([
-      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"),
-      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"),
-      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"),
+      loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@${MEDIAPIPE_CAMERA_UTILS_VERSION}/camera_utils.js`),
+      loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@${MEDIAPIPE_DRAWING_UTILS_VERSION}/drawing_utils.js`),
+      loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${MEDIAPIPE_FACE_MESH_VERSION}/face_mesh.js`),
     ]).then(()=>{
       function init(retry){
         if (!window.FaceMesh){ if(retry) setTimeout(()=>init(false),800); return; }
-        const fm=new window.FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+        const fm=new window.FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${MEDIAPIPE_FACE_MESH_VERSION}/${f}`});
         fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
         fm.onResults(handleResults);
         fm.initialize().then(()=>{ fmRef.current=fm; setMpReady(true); });
