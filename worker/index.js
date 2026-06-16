@@ -1,12 +1,20 @@
-const ORDER_PRICE_CENTS = 11900;
+// ─── Founder's Cut pricing ──────────────────────────────────────────────────
+// Charged upfront at reservation: $20 (frame, at cost) + $1 shipping = $21.
+const FOUNDER_FRAME_CENTS = 2000;
+const FOUNDER_SHIPPING_CENTS = 100;
 const ORDER_EMAIL = "hello@fitframe.store";
 const SCAN_COUNT_KEY = "faces_scanned_count";
 const SCAN_COUNT_SEED = 47;
 const WAITLIST_COUNT_KEY = "waitlist_count";
 const WAITLIST_COUNT_SEED = 0;
+// Genuine paid reservations only. Seed 0 — the count is driven solely by the
+// Stripe webhook on confirmed payment, so test rows never pollute it.
+const RESERVATION_COUNT_KEY = "reservations_count";
+const RESERVATION_COUNT_SEED = 0;
 
 let fallbackScanCount = SCAN_COUNT_SEED;
 let fallbackWaitlistCount = WAITLIST_COUNT_SEED;
+let fallbackReservationCount = RESERVATION_COUNT_SEED;
 const fallbackWaitlist = new Set();
 
 const ALLOWED_ORIGIN = "https://fitframe.store";
@@ -121,18 +129,17 @@ function metadataValue(value) {
 function orderMetadata(order) {
   return {
     order_id: order.order_id,
-    customer_name: order.customer_name,
     customer_email: order.customer_email,
-    shipping_name: order.shipping_name || order.customer_name,
-    shipping_address: order.shipping_address,
-    shipping_city: order.shipping_city,
-    shipping_state: order.shipping_state,
-    shipping_zip: order.shipping_zip,
     frame_id: order.frame_id,
-    frame: order.frame,
-    colorway_id: order.colorway_id || "pending",
-    colorway: order.colorway || "Pending selection",
-    lens: order.lens,
+    frame: order.frame || "Founder's Cut · PA12 nylon",
+    lens: order.lens || "blue light",
+    // Founder agreement answers
+    wear_now: order.wear_now,
+    whats_wrong: order.whats_wrong,
+    will_share: order.will_share,
+    marketing_opt_in: order.marketing_opt_in,
+    submitted: order.timestamp,
+    // Face measurements
     pd_binocular: order.pd_binocular,
     pd_left: order.pd_left,
     pd_right: order.pd_right,
@@ -142,6 +149,7 @@ function orderMetadata(order) {
     face_width_mm: order.face_width_mm,
     scan_quality: order.scan_quality,
     valid_frames_pct: order.valid_frames_pct,
+    scale_source: order.scale_source,
   };
 }
 
@@ -152,19 +160,11 @@ function appendMetadata(form, prefix, metadata) {
 }
 
 function requiredOrderFields(order) {
+  // The founder flow collects only an email + agreement answers up front; the
+  // shipping address is collected by Stripe Checkout itself.
   return [
     "order_id",
-    "customer_name",
     "customer_email",
-    "shipping_address",
-    "shipping_city",
-    "shipping_state",
-    "shipping_zip",
-    "frame_id",
-    "pd_binocular",
-    "bridge_width_mm",
-    "temple_mm",
-    "face_height_mm",
   ].filter(key => !order[key]);
 }
 
@@ -199,11 +199,18 @@ async function createCheckoutSession(request, env) {
   form.append("cancel_url", `${origin}/?checkout=cancelled`);
   form.append("client_reference_id", metadataValue(order.order_id));
   form.append("customer_email", metadataValue(order.customer_email));
+  // Collect the shipping address on Stripe's hosted page (the maker needs it).
+  form.append("shipping_address_collection[allowed_countries][0]", "US");
+  // Line 0: the founder's cut pair, at cost ($20). Line 1: shipping ($1).
   form.append("line_items[0][quantity]", "1");
   form.append("line_items[0][price_data][currency]", "usd");
-  form.append("line_items[0][price_data][unit_amount]", String(ORDER_PRICE_CENTS));
-  form.append("line_items[0][price_data][product_data][name]", "FitFrame custom 3D printed glasses");
-  form.append("line_items[0][price_data][product_data][description]", "Made-to-measure PA12 frame with blue light lenses");
+  form.append("line_items[0][price_data][unit_amount]", String(FOUNDER_FRAME_CENTS));
+  form.append("line_items[0][price_data][product_data][name]", "FitFrame founder's cut pair · PA12 nylon");
+  form.append("line_items[0][price_data][product_data][description]", "Made-to-measure PA12 nylon frame, printed to your scan. Founder price locked at $60.");
+  form.append("line_items[1][quantity]", "1");
+  form.append("line_items[1][price_data][currency]", "usd");
+  form.append("line_items[1][price_data][unit_amount]", String(FOUNDER_SHIPPING_CENTS));
+  form.append("line_items[1][price_data][product_data][name]", "Shipping");
   appendMetadata(form, "metadata", metadata);
   appendMetadata(form, "payment_intent_data[metadata]", metadata);
 
@@ -277,39 +284,54 @@ async function verifyStripeSignature(payload, header, secret) {
   return parsed.signatures.some(signature => safeEqual(signature, expected));
 }
 
-function paidOrderSpec(session) {
+function formatShipping(session) {
+  const ship = session.shipping_details || session.collected_information?.shipping_details || {};
+  const a = ship.address || {};
+  const line2 = a.line2 ? `, ${a.line2}` : "";
+  return [
+    `Name: ${ship.name || session.customer_details?.name || "-"}`,
+    `Address: ${a.line1 ? `${a.line1}${line2}` : "-"}`,
+    `City: ${a.city || "-"}`,
+    `State: ${a.state || "-"}`,
+    `ZIP: ${a.postal_code || "-"}`,
+    `Country: ${a.country || "-"}`,
+  ];
+}
+
+function paidOrderSpec(session, pairNumber) {
   const m = session.metadata || {};
   const paymentId = session.payment_intent || session.id;
   return [
-    "FitFrame paid order",
-    `Stripe payment confirmation ID: ${paymentId}`,
+    "FITFRAME FOUNDER'S CUT — paid reservation",
+    `Pair #: ${pairNumber != null ? pairNumber : "-"}`,
+    `Email: ${m.customer_email || session.customer_details?.email || "-"}`,
+    `Submitted: ${m.submitted || "-"}`,
+    `Stripe payment ID: ${paymentId}`,
     `Stripe checkout session ID: ${session.id}`,
     "",
-    "Customer",
-    `Name: ${m.customer_name || "-"}`,
-    `Email: ${m.customer_email || session.customer_details?.email || "-"}`,
+    "FOUNDER AGREEMENT",
+    `What they wear now: ${m.wear_now || "-"}`,
+    `What's wrong with them: ${m.whats_wrong || "-"}`,
+    `Will share photo + honest review: ${m.will_share || "-"}`,
+    `Marketing opt-in: ${m.marketing_opt_in || "no"}`,
     "",
-    "Shipping",
-    `Name: ${m.shipping_name || m.customer_name || "-"}`,
-    `Address: ${m.shipping_address || "-"}`,
-    `City: ${m.shipping_city || "-"}`,
-    `State: ${m.shipping_state || "-"}`,
-    `ZIP: ${m.shipping_zip || "-"}`,
+    "SHIPPING",
+    ...formatShipping(session),
     "",
-    "Frame",
+    "FRAME",
     `Frame ID: ${m.frame_id || "-"}`,
-    `Frame style: ${m.frame || "-"}`,
-    `Colorway: ${m.colorway || "-"}`,
+    `Frame: ${m.frame || "-"}`,
     `Lens: ${m.lens || "-"}`,
     "",
-    "Face measurements",
+    "FACE MEASUREMENTS (mm)",
     `PD binocular: ${m.pd_binocular || "-"}`,
     `PD left: ${m.pd_left || "-"}`,
     `PD right: ${m.pd_right || "-"}`,
     `Bridge width: ${m.bridge_width_mm || "-"}`,
-    `Temple width: ${m.temple_mm || "-"}`,
-    `Face height: ${m.face_height_mm || "-"}`,
+    `Temple: ${m.temple_mm || "-"}`,
+    `Lens height: ${m.face_height_mm || "-"}`,
     `Face width: ${m.face_width_mm || "-"}`,
+    `Scale source: ${m.scale_source || "-"}`,
     `Scan quality: ${m.scan_quality || "-"}`,
     `Valid frames: ${m.valid_frames_pct || "-"}`,
   ].join("\n");
@@ -346,14 +368,47 @@ async function stripeWebhook(request, env) {
   const session = event.data.object;
   if (session.payment_status !== "paid") return json({ ok:true, unpaid:true });
 
-  await sendResendEmail({
-    env,
-    to:env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL,
-    subject:`FitFrame paid order ${session.metadata?.order_id || session.id}`,
-    text:paidOrderSpec(session),
-  });
+  // A confirmed payment is the only thing that increments the reservation count,
+  // so the founder's-cut counter reflects genuine paid reservations only.
+  const pairNumber = await incrementReservationCount(env);
+  const orderRef = session.metadata?.order_id || session.id;
 
-  return json({ ok:true });
+  try {
+    await sendResendEmail({
+      env,
+      to:env.FITFRAME_ORDER_EMAIL || ORDER_EMAIL,
+      subject:`FitFrame founder reservation — pair #${pairNumber} (${orderRef})`,
+      text:paidOrderSpec(session, pairNumber),
+    });
+    console.log(`[founder-spec] sent ok — pair #${pairNumber}, order ${orderRef}`);
+  } catch (err) {
+    console.error(`[founder-spec] SEND FAILED — pair #${pairNumber}, order ${orderRef}: ${err?.message || err}`);
+    // The payment succeeded; surface the failure to Stripe so it retries delivery.
+    return json({ ok:false, error:"reservation recorded but spec email failed", pair:pairNumber }, 500);
+  }
+
+  return json({ ok:true, pair:pairNumber });
+}
+
+async function readReservationCount(env) {
+  if (!env.FITFRAME_KV) return fallbackReservationCount;
+  const stored = await env.FITFRAME_KV.get(RESERVATION_COUNT_KEY);
+  const count = Number.parseInt(stored || "", 10);
+  if (Number.isFinite(count)) return count;
+  await env.FITFRAME_KV.put(RESERVATION_COUNT_KEY, String(RESERVATION_COUNT_SEED));
+  return RESERVATION_COUNT_SEED;
+}
+
+async function incrementReservationCount(env) {
+  if (!env.FITFRAME_KV) { fallbackReservationCount += 1; return fallbackReservationCount; }
+  const next = (await readReservationCount(env)) + 1;
+  await env.FITFRAME_KV.put(RESERVATION_COUNT_KEY, String(next));
+  return next;
+}
+
+async function reservationCount(request, env, rateHeaders = {}) {
+  if (request.method !== "GET") return json({ ok:false, error:"Method not allowed." }, 405, rateHeaders);
+  return json({ ok:true, count:await readReservationCount(env) }, 200, rateHeaders);
 }
 
 async function readScanCount(env) {
@@ -701,6 +756,7 @@ export default {
       if (url.pathname === "/api/create-checkout-session" && request.method === "POST") return createCheckoutSession(request, env);
       if (url.pathname === "/api/checkout-session" && request.method === "GET") return getCheckoutSession(request, env);
       if (url.pathname === "/api/stripe-webhook" && request.method === "POST") return stripeWebhook(request, env);
+      if (url.pathname === "/api/reservation-count") return reservationCount(request, env, rate.headers);
       if (url.pathname === "/api/scan-count") return scanCount(request, env, rate.headers);
       if (url.pathname === "/api/scan-complete") return scanComplete(request, env, rate.headers);
       if (url.pathname === "/api/waitlist") return waitlist(request, env, rate.headers);

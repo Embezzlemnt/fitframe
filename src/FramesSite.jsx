@@ -3,7 +3,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 // ─── Config ───────────────────────────────────────────────────────────────────
 const MAKER_EMAIL = "hello@fitframe.store";
 const DOMAIN_URL = "https://fitframe.store"; // LOCKED
-const BASE_PRICE  = 119;
+
+// ─── Reservation pricing (charged upfront via Stripe) ──────────────────────────
+const FOUNDER_LOCKED_PRICE = 60;     // the price locked for early reservers
+const RESERVE_FRAME_PRICE = 20;      // pair, at cost
+const RESERVE_SHIPPING = 1;          // shipping today
+const RESERVE_TOTAL = RESERVE_FRAME_PRICE + RESERVE_SHIPPING; // charged now: $21
 
 // ─── localStorage persistence ─────────────────────────────────────────────────
 const STORE_KEY = "fitframe_session_v1";
@@ -62,7 +67,7 @@ const MEDIAPIPE_CAMERA_UTILS_VERSION = "0.3.1675466862";
 const MEDIAPIPE_DRAWING_UTILS_VERSION = "0.3.1675466124";
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
-  ["Why is FitFrame so cheap?","FitFrame cuts out retail, opticians, and inventory. You're paying for the frame and the fit, not the overhead. $119 is the honest price for what this is."],
+  ["Why is the founder's cut so cheap?","The first 25 pairs go out at cost. There's no retail, no optician, no inventory, and no markup yet - you're an early founder helping shape the real product, so you pay what it costs us to make it."],
   ["Who is behind FitFrame?","FitFrame is built and operated by its founder, who designs the frames, runs the scans, and fulfills every order personally. It's a small operation by choice - every pair gets real attention."],
   ["How accurate is the FitFrame scan?","FitFrame uses MediaPipe Face Mesh, iris landmark calibration, an 11.8mm HVID reference, and optional card calibration. The target accuracy is within 1-2mm for non-Rx frame fitting."],
   ["What if my FitFrame frames don't fit?","FitFrame includes one free reprint if the first pair does not fit."],
@@ -278,38 +283,11 @@ function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
 // ─── Data ─────────────────────────────────────────────────────────────────────
 const FITFRAME_FRAME = { id:"fitframe-core", label:"fitframe core", desc:"one shape, built to your measurements." };
 
-const STYLE_QUESTIONS = [
-  { id:"fit",      q:"How do glasses usually feel on you?", options:[
-    { label:"Too tight at my temples",           tags:["slim","minimal","soft"] },
-    { label:"They slide down constantly",        tags:["adjustable","sporty","practical"] },
-    { label:"I've never found a pair that fits", tags:["adjustable","bold","sporty"] },
-    { label:"Fine mostly, just never perfect",   tags:["classic","clean","modern"] },
-  ]},
-  { id:"vibe",     q:"What's your visual instinct?", options:[
-    { label:"Quiet. Clean lines, nothing extra",    tags:["minimal","clean","soft"] },
-    { label:"Present. Something people notice",     tags:["bold","statement","confident"] },
-    { label:"Timeless. Classic shapes, no trends",  tags:["retro","classic","vintage"] },
-    { label:"Relaxed. Comfortable over everything", tags:["sporty","practical","soft"] },
-  ]},
-  { id:"use",      q:"Where will you wear them most?", options:[
-    { label:"At a desk, most of the day",        tags:["minimal","sleek","clean"] },
-    { label:"Out and about, always on",          tags:["sporty","practical","bold"] },
-    { label:"Both - they need to do everything", tags:["clean","modern","classic"] },
-    { label:"Special occasions only",            tags:["bold","expressive","statement"] },
-  ]},
-  { id:"priority", q:"What matters most in a frame?", options:[
-    { label:"It disappears on my face",       tags:["minimal","soft","clean"] },
-    { label:"It says something about me",     tags:["bold","statement","editorial"] },
-    { label:"It holds up to daily use",       tags:["sporty","practical","modern"] },
-    { label:"It fits without any adjustment", tags:["classic","adjustable","clean"] },
-  ]},
-];
-
-const DEFAULT_LENS = { id:"bluelight", label:"blue light", price:0 };
-const LENS_OPTIONS = [
-  { id:"bluelight", label:"blue light", desc:"screen-comfort polycarbonate lenses.", price:0, status:"included", selectable:true },
-  { id:"transition", label:"transition lenses", desc:"adaptive tint for bright days.", price:40, status:"coming soon", selectable:false },
-  { id:"prescription", label:"prescription", desc:"rx lens support after launch.", price:60, status:"coming soon", selectable:false },
+// The two short-text questions of the founder agreement. The third (the photo +
+// review commitment) is a yes/no toggle handled inline — "yes" is required to reserve.
+const FOUNDER_QUESTIONS = [
+  { id:"wearNow",     q:"what do you wear now?",   placeholder:"e.g. ray-ban wayfarers, drugstore readers..." },
+  { id:"whatsWrong",  q:"what's wrong with them?", placeholder:"e.g. slide down my nose, too wide..." },
 ];
 
 const SCAN_SEQ = [
@@ -363,6 +341,26 @@ const css = `
   @keyframes statRise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
   .scan-stat-num{font-family:'Geist Mono',monospace;font-weight:500;font-variant-numeric:tabular-nums;color:var(--text);}
   .hero-cta{width:100%;}
+  /* ── Founder's Cut ── */
+  .founder-counter{display:inline-flex;align-items:center;gap:7px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.04em;color:var(--dim);white-space:nowrap;}
+  .founder-counter-num{color:var(--accent);font-weight:500;font-variant-numeric:tabular-nums;}
+  .founder-dot{width:7px;height:7px;border-radius:999px;background:var(--accent);box-shadow:0 0 0 0 rgba(76,175,125,.5);animation:founderPulse 2s ease-out infinite;flex:none;}
+  @keyframes founderPulse{0%{box-shadow:0 0 0 0 rgba(76,175,125,.45);}70%{box-shadow:0 0 0 7px rgba(76,175,125,0);}100%{box-shadow:0 0 0 0 rgba(76,175,125,0);}}
+  @media (prefers-reduced-motion:reduce){.founder-dot{animation:none;}}
+  .eyebrow-accent{color:var(--accent);}
+  .meas-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 18px;}
+  .meas-cell{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:13px 14px;}
+  .meas-cell.wide{grid-column:1 / -1;}
+  .meas-label{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--soft);margin-bottom:5px;}
+  .meas-value{font-family:'Geist Mono',monospace;font-size:22px;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+  .meas-unit{font-size:12px;color:var(--dim);font-weight:300;margin-left:2px;}
+  .founder-q{margin-bottom:18px;}
+  .founder-q-label{font-size:15px;font-weight:500;color:var(--text);letter-spacing:-.02em;margin-bottom:9px;}
+  .share-toggle{display:flex;gap:8px;}
+  .share-opt{flex:1;min-height:46px;border:1px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font-family:'Geist',sans-serif;font-size:14px;font-weight:400;cursor:pointer;transition:border-color .12s,background .12s;}
+  .share-opt.sel{border-color:var(--accent);background:var(--accent-bg);}
+  .reserve-note{font-size:12px;color:var(--dim);line-height:1.55;font-weight:300;margin:14px 0 4px;}
+  .confirm-pair{font-family:'Geist Mono',monospace;font-size:44px;font-weight:600;color:var(--text);letter-spacing:-.03em;margin-bottom:14px;}
   .trust-row{display:flex;flex-wrap:wrap;gap:12px 16px;margin:20px 0 2px;}
   .trust-item{display:flex;flex:1 1 42%;align-items:center;gap:7px;font-size:12px;color:var(--mid);font-weight:300;}
   .trust-icon{color:var(--accent);flex:0 0 auto;}
@@ -1134,9 +1132,9 @@ function useFitFrameJsonLd(){
         },
         offers:{
           "@type":"Offer",
-          price:"119",
+          price:"21",
           priceCurrency:"USD",
-          availability:"https://schema.org/InStock",
+          availability:"https://schema.org/LimitedAvailability",
           url:DOMAIN_URL,
         },
       },
@@ -1281,14 +1279,11 @@ export default function FramesSite(){
   useFitFrameJsonLd();
   const saved=loadSession()||{};
 
-  const savedStep = Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 5 ? saved.step : 0;
+  const savedStep = Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 4 ? saved.step : 0;
   const [step,          setStep]          = useState(savedStep);
   const [confirmedMeas, setConfirmedMeas] = useState(saved.confirmedMeas??null);
   const [calibration,   setCalibration]   = useState(saved.calibration??null);
-  const [styleAnswers,  setStyleAnswers]  = useState(saved.styleAnswers??{});
-  const [styleQIdx,     setStyleQIdx]     = useState(saved.styleQIdx??0);
-  const [tapped,        setTapped]        = useState(null);
-  const [selectedLens,  setSelectedLens]  = useState(saved.selectedLens??DEFAULT_LENS.id);
+  const [founderAnswers,setFounderAnswers]= useState(saved.founderAnswers??{wearNow:"",whatsWrong:"",willShare:null,marketingOptIn:false});
   const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{email:""});
   const [scanning,      setScanning]      = useState(false);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
@@ -1302,14 +1297,9 @@ export default function FramesSite(){
   const [sent,          setSent]          = useState(false);
   const [orderId,       setOrderId]       = useState(()=>saved.orderId??genOrderId());
   const [scanCount,     setScanCount]     = useState(null);
-  const [waitlistPosition,setWaitlistPosition] = useState(null);
-  const [waitlistError, setWaitlistError] = useState("");
+  const [pairNumber,    setPairNumber]    = useState(null);
+  const [reserveError,  setReserveError]  = useState("");
   const [botField,      setBotField]      = useState("");
-  const [creatorKey,    setCreatorKey]    = useState(saved.creatorKey??null);
-  const [creatorName,   setCreatorName]   = useState(saved.creatorName??null);
-  const [creatorAccess, setCreatorAccess] = useState(false);
-  const [submittedAsCreator,setSubmittedAsCreator] = useState(false);
-  const [creatorFullSite, setCreatorFullSite] = useState(false);
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
   const scanCompletePostedRef              = useRef(false);
   const processingTimerRef                 = useRef(null);
@@ -1390,53 +1380,15 @@ export default function FramesSite(){
   useEffect(()=>{
     if (step===0||sent) return;
     saveSession({
-      step,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedLens,customerInfo,orderId,
-      creatorKey:creatorAccess?creatorKey:null,
-      creatorName:creatorAccess?creatorName:null,
+      step,confirmedMeas,calibration,founderAnswers,customerInfo,orderId,
     });
-  },[step,sent,confirmedMeas,calibration,styleAnswers,styleQIdx,selectedLens,customerInfo,orderId,creatorAccess,creatorKey,creatorName]);
+  },[step,sent,confirmedMeas,calibration,founderAnswers,customerInfo,orderId]);
 
-  useEffect(()=>{
-    let cancelled=false;
-    const params=new URLSearchParams(window.location.search);
-    const urlKey=params.get("key")?.trim().toLowerCase()||null;
-    // Read the persisted key directly from storage (not the render-scoped `saved`
-    // object) so this mount-only effect has no reactive dependencies.
-    const sessionKey=(()=>{ const s=loadSession(); return typeof s?.creatorKey==="string"?s.creatorKey:null; })();
-    const keyToCheck=urlKey||sessionKey;
-    if (!keyToCheck) return;
-    fetch(`/api/creator-key?key=${encodeURIComponent(keyToCheck)}`)
-      .then(r=>r.ok?r.json():{valid:false})
-      .then(d=>{
-        if (cancelled) return;
-        if (d?.valid&&d.name){
-          setCreatorKey(keyToCheck);
-          setCreatorName(d.name);
-          setCreatorAccess(true);
-        } else {
-          setCreatorKey(null);
-          setCreatorName(null);
-          setCreatorAccess(false);
-        }
-      })
-      .catch(()=>{
-        if (!cancelled){
-          setCreatorKey(null);
-          setCreatorName(null);
-          setCreatorAccess(false);
-        }
-      });
-    return ()=>{ cancelled=true; };
-  },[]);
-
-  const lensData=LENS_OPTIONS.find(lens=>lens.id===selectedLens&&lens.selectable)||DEFAULT_LENS;
-  const totalPrice=BASE_PRICE+(lensData?.price||0);
   const chosenFrame=FITFRAME_FRAME;
 
   useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
   useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); } },[scan.done]);
-  useEffect(()=>{ setTapped(null); },[styleQIdx]);
-  useEffect(()=>()=>{ 
+  useEffect(()=>()=>{
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
   },[]);
@@ -1456,6 +1408,30 @@ export default function FramesSite(){
     const onVisible=()=>{ if(document.visibilityState==="visible") load(); };
     document.addEventListener("visibilitychange",onVisible);
     return ()=>{ cancelled=true; clearInterval(id); document.removeEventListener("visibilitychange",onVisible); };
+  },[]);
+
+  // Return path from Stripe Checkout. Stripe only hits ?checkout=success after payment —
+  // trust that and show confirmation immediately; webhook handles backend state separately.
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const checkout=params.get("checkout");
+    if (!checkout) return;
+    const clearQuery=()=>window.history.replaceState({}, "", window.location.pathname);
+    if (checkout==="cancelled"){ clearQuery(); return; }
+    if (checkout!=="success") return;
+    // Read the pair number optimistically; if the webhook hasn't fired yet it may be stale — that's ok.
+    let cancelled=false;
+    (async()=>{
+      const cr=await fetch("/api/reservation-count").then(r=>r.ok?r.json():null).catch(()=>null);
+      if (cancelled) return;
+      const count=cr?.ok&&Number.isFinite(cr.count)?cr.count:null;
+      if (count!=null) setPairNumber(count);
+      clearSession();
+      setSent(true);
+      setStep(4);
+      clearQuery();
+    })();
+    return ()=>{ cancelled=true; };
   },[]);
   useEffect(()=>{
     if (!scan.done) return;
@@ -1488,6 +1464,7 @@ export default function FramesSite(){
         }
         setScanProcessing(false);
         processingTimerRef.current=null;
+        setStep(2); // advance automatically to the measurements payoff
       },2000);
     }
   },[confirmedMeas,scan.done,scan.measurements,scan.quality,scan.validPct,scanProcessing]);
@@ -1505,14 +1482,6 @@ export default function FramesSite(){
     setStep(2);
   }
 
-  function selectOption(opt){
-    setTapped(opt.label);
-    const qId=STYLE_QUESTIONS[styleQIdx].id;
-    setStyleAnswers(prev=>({...prev,[qId]:opt}));
-    if (styleQIdx<STYLE_QUESTIONS.length-1){ setTimeout(()=>setStyleQIdx(i=>i+1),220); }
-    else { setTimeout(()=>setStep(3),300); }
-  }
-
   function startFreshScan(){
     clearSession();
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
@@ -1524,9 +1493,8 @@ export default function FramesSite(){
     setScanRestartCopy("");
     setConfirmedMeas(null);
     setCalibration(null);
-    setStyleAnswers({});
-    setStyleQIdx(0);
-    setSelectedLens(DEFAULT_LENS.id);
+    setFounderAnswers({wearNow:"",whatsWrong:"",willShare:null,marketingOptIn:false});
+    setReserveError("");
     scan.reset();
     setScanning(false);
     setCameraIntro(false);
@@ -1548,19 +1516,13 @@ export default function FramesSite(){
     setScanRestartCopy("");
     setConfirmedMeas(null);
     setCalibration(null);
-    setStyleAnswers({});
-    setStyleQIdx(0);
-    setTapped(null);
-    setSelectedLens(DEFAULT_LENS.id);
+    setFounderAnswers({wearNow:"",whatsWrong:"",willShare:null,marketingOptIn:false});
+    setReserveError("");
+    setPairNumber(null);
     setCustomerInfo({email:""});
     setOrderId(genOrderId());
     setSubmitting(false);
     setSent(false);
-    setCreatorKey(null);
-    setCreatorName(null);
-    setCreatorAccess(false);
-    setSubmittedAsCreator(false);
-    setCreatorFullSite(false);
     scan.reset();
     setScanning(false);
     setCameraIntro(false);
@@ -1595,46 +1557,51 @@ export default function FramesSite(){
     startCamera();
   }
 
-  async function joinWaitlist(e){
+  const shareYes=founderAnswers.willShare===true;
+  const canReserve=isValidEmail(customerInfo.email.trim())&&shareYes
+    &&founderAnswers.wearNow.trim()&&founderAnswers.whatsWrong.trim();
+
+  async function reserve(e){
     if (e?.preventDefault) e.preventDefault();
     if (botField) return; // honeypot — silently ignore bots
     const email=customerInfo.email.trim();
-    if (!isValidEmail(email)){ setWaitlistError("enter a valid email."); return; }
-    setSubmitting(true); setWaitlistError("");
+    if (!isValidEmail(email)){ setReserveError("enter a valid email."); return; }
+    if (!shareYes){ setReserveError("a founder photo + honest review is part of the deal."); return; }
+    setSubmitting(true); setReserveError("");
     const m=currentMeas||scan.measurements||{};
-    const measurements={
-      pd:m.pd, pdLeft:m.pdLeft, pdRight:m.pdRight,
-      bridge:m.bridge, temple:m.temple, lensH:m.lensH, faceW:m.faceW,
-      scaleSource:m.scaleSource, scanQuality:m.scanQuality, validPct:m.validPct,
-    };
     try {
-      const res=await fetch("/api/waitlist",{
+      const res=await fetch("/api/create-checkout-session",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          email,
           order_id:orderId,
-          measurements,
-          frame_id:chosenFrame?.id||"fitframe-core",
-          lens:lensData?.label||"blue light",
-          lens_price:lensData?.price||0,
-          total:totalPrice,
+          customer_email:email,
+          frame_id:chosenFrame?.id||"fitframe-founders",
+          frame:"Founder's Cut · PA12 nylon",
+          lens:"blue light",
+          // founder agreement answers
+          wear_now:founderAnswers.wearNow.trim(),
+          whats_wrong:founderAnswers.whatsWrong.trim(),
+          will_share:"yes",
+          marketing_opt_in:founderAnswers.marketingOptIn?"yes":"no",
+          // measurements
+          pd_binocular:m.pd, pd_left:m.pdLeft, pd_right:m.pdRight,
+          bridge_width_mm:m.bridge, temple_mm:m.temple,
+          face_height_mm:m.lensH, face_width_mm:m.faceW,
+          scan_quality:m.scanQuality, valid_frames_pct:m.validPct,
+          scale_source:m.scaleSource,
           timestamp:new Date().toISOString(),
           website:botField,
-          ...(creatorAccess&&creatorKey?{creator_key:creatorKey}:{}),
         }),
       });
       const data=await res.json().catch(()=>null);
-      if (res.ok&&data?.ok){
-        setSubmittedAsCreator(Boolean(creatorAccess&&creatorKey));
-        setWaitlistPosition(Number.isFinite(data.position)?data.position:null);
-        clearSession();
-        setSent(true);
-      } else {
-        setWaitlistError(data?.error||"something went wrong. please try again.");
+      if (res.ok&&data?.ok&&data.url){
+        window.location.assign(data.url); // hand off to Stripe-hosted checkout
+        return;
       }
+      setReserveError(data?.error||"couldn't open checkout. please try again.");
     } catch {
-      setWaitlistError("network error. please try again.");
+      setReserveError("network error. please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -1698,30 +1665,12 @@ export default function FramesSite(){
 
         <div className="container">
 
-          {/* ── 0: Creator landing ── */}
-          {step===0&&creatorAccess&&creatorName&&!creatorFullSite&&(
-            <div className="section hero">
-              <h1 className="display hero-headline">hey <span style={{color:"var(--accent)"}}>{creatorName}</span> — this pair is on us.</h1>
-              <p className="body-lg hero-sub">custom eyewear printed to your exact face. built for people who live in front of a screen.</p>
-              <ol className="feature-list">
-                <li><span className="feature-num">1</span><span className="feature-text">scan your face — 60 seconds, right here in the browser</span></li>
-                <li><span className="feature-num">2</span><span className="feature-text">I print your frame to your measurements and finish it by hand</span></li>
-                <li><span className="feature-num">3</span><span className="feature-text">it ships to you free. if the fit isn't perfect, I reprint until it is</span></li>
-              </ol>
-              <div className="btn-row" style={{marginTop:24}}>
-                <button className="btn btn-primary hero-cta" onClick={startFreshScan}>start my scan →</button>
-              </div>
-              <div className="trust-line" style={{marginTop:13}}>made in america · PA12 nylon · blue light lenses included</div>
-              <button type="button" className="btn btn-ghost" style={{marginTop:12}} onClick={()=>setCreatorFullSite(true)}>see the full site</button>
-            </div>
-          )}
-
           {/* ── 0: Hero ── */}
-          {step===0&&(!creatorAccess||!creatorName||creatorFullSite)&&(
+          {step===0&&(
             <div className="section hero">
               <div className="eyebrow">made-to-measure eyewear</div>
               <h1 className="display hero-headline">frames built for <em>your</em> face.</h1>
-              <p className="body-lg hero-sub">scan your face. answer four questions. get frames built to your exact measurements.</p>
+              <p className="body-lg hero-sub">scan your face. answer a few questions. get frames built to your exact measurements.</p>
               <ScanCounter count={scanCount}/>
               <div className="btn-row">
                 <button className="btn btn-accent hero-cta" onClick={startFreshScan}>scan your face to join early access →</button>
@@ -1735,26 +1684,26 @@ export default function FramesSite(){
               </div>
 
               <div className="price-block">
-                <div className="price-big">$119</div>
-                <div className="price-sub">blue light lenses included</div>
+                <div className="price-big">$21</div>
+                <div className="price-sub">$20 frame + $1 shipping · US only</div>
               </div>
 
               <ol className="feature-list">
                 <li><span className="feature-num">01</span><span className="feature-text"><span className="feature-lead">your phone does what an optician does.</span> no appointment, no store.</span></li>
                 <li><span className="feature-num">02</span><span className="feature-text"><span className="feature-lead">every measurement captured —</span> pd, bridge, temple, face width, face height.</span></li>
-                <li><span className="feature-num">03</span><span className="feature-text"><span className="feature-lead">3D printed to your spec in carbon fiber nylon.</span> light, precise, durable.</span></li>
+                <li><span className="feature-num">03</span><span className="feature-text"><span className="feature-lead">3D printed to your spec in pa12 nylon.</span> light, precise, durable.</span></li>
                 <li><span className="feature-num">04</span><span className="feature-text"><span className="feature-lead">first batch is limited.</span> you're early.</span></li>
               </ol>
 
               <div className="why-block">
                 <p className="why-lead">glasses are built for an average face. most of us aren't average.</p>
-                <p className="why-body">FitFrame exists for the person who gave up without realizing it. one browser-based scan maps your face to real millimeter measurements. a carbon fiber nylon frame gets printed to those numbers — zero inventory, zero waste, built to your geometry. <span className="why-emph">not adjusted. not approximated. yours.</span></p>
+                <p className="why-body">FitFrame exists for the person who gave up without realizing it. after the scan, we print down to your specific measurements in our proprietary carbon fiber nylon — to your exact geometry. <span className="why-emph">no standardization. zero waste. yours.</span></p>
               </div>
 
               <div className="build-block">
                 <div className="eyebrow build-eyebrow">how we build it</div>
                 <p className="build-body">every pair starts with a browser-based scan. a facial landmark system maps your face from the camera feed and extracts the measurements that define a frame's fit — pupillary distance, bridge width, temple length, lens height, face width. a credit card or your own iris gives the scan a real millimeter scale. nothing leaves your device but the numbers.</p>
-                <p className="build-body">those measurements go straight into a parametric print file. each frame is printed in carbon-fiber nylon — light, durable, dimensionally precise — then hand-finished, fitted with US lab-cut blue light lenses, and shipped from America. zero inventory: nothing is made until you order it.</p>
+                <p className="build-body">those measurements go straight into a parametric print file. each frame is printed in pa12 nylon — light, durable, dimensionally precise — then hand-finished, fitted with US lab-cut blue light lenses, and shipped from America. zero inventory: nothing is made until you order it.</p>
                 <p className="build-body">it's made-to-measure manufacturing run lean and built to scale carefully. if you care how things are actually made, this is the part for you.</p>
               </div>
 
@@ -1880,10 +1829,10 @@ export default function FramesSite(){
                     <div className="quality-title">your face is mapped.</div>
                   </div>
                   <p className="quality-copy">
-                    you're all set — continue to pick your frame.
+                    here are your measurements.
                   </p>
                   <div className="btn-row">
-                    <button className="btn btn-primary" onClick={acceptMeasurements}>continue &rarr;</button>
+                    <button className="btn btn-primary" onClick={acceptMeasurements}>see my measurements &rarr;</button>
                     <button className="btn btn-ghost" onClick={rescan}>rescan</button>
                   </div>
                 </div>
@@ -1891,164 +1840,109 @@ export default function FramesSite(){
             </div>
           )}
 
-          {/* ── 2: Style ── */}
+          {/* ── 2: Your measurements (the free payoff) ── */}
           {step===2&&(()=>{
-            const q=STYLE_QUESTIONS[styleQIdx];
+            const m=confirmedMeas||currentMeas||{};
+            const fmt=v=>Number.isFinite(Number(v))&&v!=null&&v!==""?Number(v).toFixed(1):"—";
+            const cells=[
+              {label:"pupillary distance",value:fmt(m.pd),unit:"mm",wide:true},
+              {label:"bridge",value:fmt(m.bridge),unit:"mm"},
+              {label:"temple",value:fmt(m.temple),unit:"mm"},
+              {label:"lens height",value:fmt(m.lensH),unit:"mm"},
+              {label:"face width",value:fmt(m.faceW),unit:"mm"},
+            ];
             return (
-              <div className="section" key={styleQIdx}>
-                <div className="eyebrow">Style</div>
-                <div className="q-meta"><span className="q-counter">{styleQIdx+1} / {STYLE_QUESTIONS.length}</span></div>
-                <div className="q-label">{q.q}</div>
-                <div className="choices">
-                  {q.options.map((opt,i)=>(
-                    <button key={`q${styleQIdx}-o${i}`} className={`choice ${tapped===opt.label?"chosen":""}`}
-                      onClick={()=>selectOption(opt)}>{opt.label}</button>
+              <div className="section">
+                <div className="eyebrow eyebrow-accent">your measurements</div>
+                <div className="step-head">these are yours.</div>
+                <div className="meas-grid">
+                  {cells.map(c=>(
+                    <div key={c.label} className={`meas-cell ${c.wide?"wide":""}`}>
+                      <div className="meas-label">{c.label}</div>
+                      <div className="meas-value">{c.value}<span className="meas-unit">{c.unit}</span></div>
+                    </div>
                   ))}
                 </div>
-                {styleQIdx>0&&(
-                  <div style={{marginTop:20}}>
-                    <button className="btn btn-ghost" onClick={()=>{
-                      const prev={...styleAnswers};
-                      delete prev[STYLE_QUESTIONS[styleQIdx-1].id];
-                      setStyleAnswers(prev); setStyleQIdx(i=>i-1);
-                    }}>← Back</button>
-                  </div>
-                )}
+                <p className="reserve-note">these are yours. we don't keep your scan unless you claim a spot.</p>
+                <div className="btn-row" style={{marginTop:8}}>
+                  <button className="btn btn-accent" onClick={()=>{setReserveError("");setStep(3);}}>claim my founder pair →</button>
+                  <button className="btn btn-ghost" onClick={startFreshScan}>rescan</button>
+                </div>
               </div>
             );
           })()}
 
-          {/* Frame */}
-          {step===3&&(
+          {/* ── 3: The founder agreement ── */}
+          {step===3&&!sent&&(
             <div className="section">
-              <div className="step-head">your frame.</div>
-              <p className="step-sub">built to your measurements — printed in matte carbon-fiber nylon, hand-finished, shipped from America.</p>
-              <div className="btn-row" style={{marginTop:18}}>
-                <button className="btn btn-primary" onClick={()=>setStep(4)}>
-                  choose lenses →
-                </button>
-                <button className="btn btn-ghost" onClick={()=>setStep(2)}>Back</button>
-              </div>
-            </div>
-          )}
+              <div className="step-head">claim your founder pair.</div>
 
-          {/* Lenses */}
-          {step===4&&!sent&&(
-            <div className="section">
-              <div className="step-head">lens options.</div>
-              <p className="step-sub">blue light is included for founding pairs. more options are on the roadmap.</p>
-              <div className="lens-list">
-                {LENS_OPTIONS.map(option=>(
-                  <button
-                    key={option.id}
-                    className={`lens-row ${selectedLens===option.id?"sel":""} ${!option.selectable?"disabled":""}`}
-                    disabled={!option.selectable}
-                    onClick={()=>option.selectable&&setSelectedLens(option.id)}
-                    type="button"
-                  >
-                    <div className="lens-info">
-                      <div className="lens-name">{option.label}</div>
-                      <div className="lens-desc">{option.desc}</div>
-                    </div>
-                    <div className="lens-meta">
-                      {(!creatorAccess||option.selectable)&&(
-                        <div className="lens-price-tag" style={creatorAccess?{color:"var(--accent)"}:undefined}>
-                          {creatorAccess?"covered for you":`$${BASE_PRICE+option.price}`}
-                        </div>
-                      )}
-                      <div className={`lens-tag ${option.selectable?"lens-tag-included":""}`}>{option.status}</div>
-                    </div>
-                  </button>
+              <form onSubmit={reserve}>
+                <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
+                  value={botField} onChange={e=>setBotField(e.target.value)}/>
+
+                {FOUNDER_QUESTIONS.map(q=>(
+                  <div className="founder-q" key={q.id}>
+                    <div className="founder-q-label">{q.q}</div>
+                    <input className="field" style={{marginBottom:0}} type="text" placeholder={q.placeholder}
+                      aria-label={q.q} value={founderAnswers[q.id]}
+                      onChange={e=>{setFounderAnswers(p=>({...p,[q.id]:e.target.value}));setReserveError("");}}/>
+                  </div>
                 ))}
-              </div>
-              <div className="btn-row" style={{marginTop:8}}>
-                <button className="btn btn-primary" onClick={()=>setStep(5)}>continue →</button>
-                <button className="btn btn-ghost" onClick={()=>setStep(3)}>Back</button>
-              </div>
-            </div>
-          )}
 
-          {/* Waitlist wall / creator submit */}
-          {step===5&&!sent&&(
-            creatorAccess?(
-              <div className="section">
-                <div className="step-head">your pair is ready.</div>
-                <p className="step-sub">send your spec to the maker — we'll build your custom pair.</p>
-                <div className="pair-summary">
-                  <div className="receipt">
-                    <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
-                    <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
-                    <div className="receipt-total"><span>total</span><span style={creatorAccess?{color:"var(--accent)"}:undefined}>{creatorAccess?"covered for you":`$${totalPrice}`}</span></div>
+                <div className="founder-q">
+                  <div className="founder-q-label">will you share a photo + an honest review once your pair arrives?</div>
+                  <div className="share-toggle" role="group" aria-label="share an honest photo and review">
+                    <button type="button" className={`share-opt ${founderAnswers.willShare===true?"sel":""}`}
+                      onClick={()=>{setFounderAnswers(p=>({...p,willShare:true}));setReserveError("");}}>yes</button>
+                    <button type="button" className={`share-opt ${founderAnswers.willShare===false?"sel":""}`}
+                      onClick={()=>{setFounderAnswers(p=>({...p,willShare:false}));}}>no</button>
                   </div>
                 </div>
-                <form onSubmit={joinWaitlist}>
-                  <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
-                    value={botField} onChange={e=>setBotField(e.target.value)}/>
-                  <input className="field" placeholder="your email" aria-label="your email" type="email" inputMode="email" autoComplete="email"
-                    value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
-                  {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
-                  <div className="btn-row" style={{marginTop:10}}>
-                    <button className="btn btn-accent" type="submit"
-                      disabled={!customerInfo.email.trim()||submitting}>
-                      {submitting?"sending...":"send my spec →"}
-                    </button>
-                    <button className="btn btn-ghost" type="button" onClick={()=>setStep(4)}>Back</button>
-                  </div>
-                </form>
-                <div className="trust-line"><Padlock/><span>no images are sent. your measurements go securely to the maker.</span></div>
-              </div>
-            ):(
-              <div className="section">
-                <div className="step-head">you're early.</div>
-                <p className="step-sub">your pair is designed. we're in final production on the first batch — join the list and we'll reach out the moment yours can be built.</p>
-                <div className="pair-summary">
-                  <div className="receipt">
-                    <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
-                    <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
-                    <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
-                  </div>
-                </div>
-                <form onSubmit={joinWaitlist}>
-                  <input className="hp-field" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true"
-                    value={botField} onChange={e=>setBotField(e.target.value)}/>
-                  <input className="field" placeholder="your email" aria-label="your email" type="email" inputMode="email" autoComplete="email"
-                    value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setWaitlistError("");}}/>
-                  {waitlistError&&<div className="waitlist-err">{waitlistError}</div>}
-                  <div className="btn-row" style={{marginTop:10}}>
-                    <button className="btn btn-accent" type="submit"
-                      disabled={!customerInfo.email.trim()||submitting}>
-                      {submitting?"joining...":"join the list →"}
-                    </button>
-                    <button className="btn btn-ghost" type="button" onClick={()=>setStep(4)}>Back</button>
-                  </div>
-                </form>
-                <div className="trust-line"><Padlock/><span>no images are sent. your measurements go securely to the maker.</span></div>
-              </div>
-            )
-          )}
 
-          {/* ── Confirmation ── */}
-          {sent&&submittedAsCreator&&creatorName&&(
-            <div className="section">
-              <div className="confirm-greeting">your frame is in the queue, {creatorName}.</div>
-              <p className="confirm-body">here's what happens next: I print your pair to the exact measurements from your scan, finish it by hand, and ship it to you directly. no charge, no card, nothing owed.</p>
-              <p className="confirm-body">one honest ask — wear them for a week. if they're the best-fitting frames you've owned, tell people. if anything is off, tell me, and I'll reprint until it's right.</p>
-              <p className="confirm-body" style={{marginTop:20}}>— ratio, founder<br/><a href="mailto:hello@fitframe.store" style={{color:"var(--accent)"}}>hello@fitframe.store</a></p>
-            </div>
-          )}
-          {sent&&!submittedAsCreator&&(
-            <div className="section">
-              <div className="confirm-greeting">you're on the list.</div>
-              <p className="confirm-body">
-                {waitlistPosition!=null&&<><strong>#{waitlistPosition}</strong> in line for the first batch. </>}we'll reach out when production opens for your pair.
-              </p>
-              <div className="pair-summary">
                 <div className="receipt">
-                  <div className="receipt-row"><span>your frame</span><span>custom fit</span></div>
-                  <div className="receipt-row"><span>{lensData?.label||"blue light"} lenses</span><span>included</span></div>
-                  <div className="receipt-total"><span>total</span><span>${totalPrice}</span></div>
+                  <div className="receipt-row"><span>founder's cut pair · pa12 nylon</span><span>at cost</span></div>
+                  <div className="receipt-row"><span>your founder price, locked forever</span><span>${FOUNDER_LOCKED_PRICE}</span></div>
+                  <div className="receipt-total"><span>today</span><span>${RESERVE_FRAME_PRICE} + ${RESERVE_SHIPPING} shipping</span></div>
                 </div>
+
+                <input className="field" placeholder="your email" aria-label="your email" type="email" inputMode="email" autoComplete="email"
+                  value={customerInfo.email} onChange={e=>{setCustomerInfo(p=>({...p,email:e.target.value}));setReserveError("");}}/>
+                <label className="marketing-opt" style={{display:"flex",alignItems:"flex-start",gap:10,marginTop:8,cursor:"pointer",fontSize:13,color:"var(--dim)",lineHeight:1.4}}>
+                  <input type="checkbox" checked={founderAnswers.marketingOptIn}
+                    onChange={e=>setFounderAnswers(p=>({...p,marketingOptIn:e.target.checked}))}
+                    style={{marginTop:2,flexShrink:0}}/>
+                  <span>keep me updated on new drops, restocks, and early access offers from FitFrame</span>
+                </label>
+                {reserveError&&<div className="waitlist-err">{reserveError}</div>}
+                <div className="btn-row" style={{marginTop:10}}>
+                  <button className="btn btn-accent" type="submit" disabled={!canReserve||submitting}>
+                    {submitting?"opening checkout...":`reserve — $${RESERVE_TOTAL}`}
+                  </button>
+                  <button className="btn btn-ghost" type="button" onClick={()=>setStep(2)}>Back</button>
+                </div>
+              </form>
+              <p className="reserve-note">as a founder you agree to send a photo wearing them and an honest review (we ask before anything goes public).</p>
+              <div className="trust-line"><Padlock/><span>no images are sent. your measurements go securely to the maker.</span></div>
+            </div>
+          )}
+
+          {/* ── 4: Confirmation ── */}
+          {sent&&step===4&&(
+            <div className="section">
+              <div className="eyebrow eyebrow-accent">you're a founder.</div>
+              {pairNumber!=null&&<div className="confirm-pair">pair #{pairNumber}</div>}
+              <p className="confirm-body">your spec is with the maker. we'll email you when your pair is printing — usually within 10 days.</p>
+              <div className="btn-row" style={{marginTop:6}}>
+                <button className="btn btn-ghost" type="button" onClick={()=>{
+                  const link=`${DOMAIN_URL}/?ref=${encodeURIComponent(orderId)}`;
+                  if (navigator.clipboard?.writeText){
+                    navigator.clipboard.writeText(link).then(()=>setReserveError("referral link copied")).catch(()=>setReserveError(link));
+                  } else { setReserveError(link); }
+                }}>↑ move up the list — refer a friend</button>
               </div>
+              {reserveError&&<div className="reserve-note" style={{color:"var(--accent)"}}>{reserveError}</div>}
+              <p className="confirm-body" style={{marginTop:16}}>founder pricing stays locked, even as it rises for everyone else.</p>
             </div>
           )}
 
