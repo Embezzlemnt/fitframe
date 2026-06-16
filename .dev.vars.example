@@ -1,0 +1,14 @@
+# Local secrets for `npm run preview` (wrangler dev). Copy to `.dev.vars` (gitignored).
+# In PRODUCTION these go in Cloudflare, NOT in code:
+#   npx wrangler secret put STRIPE_SECRET_KEY
+#   npx wrangler secret put STRIPE_WEBHOOK_SECRET
+#   npx wrangler secret put RESEND_API_KEY
+#
+# NOTE: the $21 redirect checkout creates the Stripe Checkout Session server-side
+# in worker/index.js, so it needs the SECRET key (sk_...). The publishable key
+# (pk_...) is NOT used by this flow. Use TEST keys (sk_test_ / whsec_) for
+# verification so no real cards are charged.
+
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+RESEND_API_KEY=re_xxx
