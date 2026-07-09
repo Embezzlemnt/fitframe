@@ -80,7 +80,7 @@ function Padlock(){
 }
 
 // ─── ScanStage ────────────────────────────────────────────────────────────────
-export default function ScanStage({calibration,setCalibration,confirmedMeas,setConfirmedMeas,onAdvance,onScanComplete,debugEnabled,resetToken}){
+export default function ScanStage({calibration,setCalibration,confirmedMeas,setConfirmedMeas,onAdvance,onScanComplete,onScanRestart,debugEnabled,resetToken}){
   const [phase,         setPhase]         = useState("consent"); // consent|positioning|cardlock|settling|scanning|processing
   const [cardChoice,    setCardChoice]    = useState(false);
   const [scanMode,      setScanMode]      = useState(null);
@@ -282,6 +282,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   // Guard: if scanMode is somehow null here, fall back to a full reset so we
   // never start the camera without a mode.
   function rescan(){
+    onScanRestart?.();
     if (!scanMode){ internalReset(); return; }
     resetScanState({keepMode:true});
     setCameraIntro(true);
@@ -294,6 +295,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   // stopCamera/startCamera cycle, no clearing calibration, straight back to
   // positioning with the video feed already live.
   function redoScan(){
+    onScanRestart?.();
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     if (lockBeatTimerRef.current) clearTimeout(lockBeatTimerRef.current);
@@ -317,6 +319,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   },[resetToken]);
 
   function beginScanSetup(mode){
+    setCalibration(null);
     setScanMode(mode);
     setScanRestartCopy("");
     setScanPrepDismissed(true);
@@ -422,16 +425,16 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
             )}
             {phase==="cardlock"&&!cardChoice&&(
               <div className="settle-intro">
-                <div className="settle-intro-main">{scan.cardStatus.stablePct>=1?"scale locked.":"show your card"}</div>
+                <div className="settle-intro-main">{scan.cardStatus.stablePct>=1?"scale locked — you can put the card down.":"show your card"}</div>
                 {scan.cardStatus.stablePct<1&&<div className="face-intro-sub">hold it flat under your chin, facing the camera{scan.cardStatus.reason?` — ${scan.cardStatus.reason}`:""}</div>}
               </div>
             )}
             {phase==="cardlock"&&cardChoice&&(
               <div className="face-intro" style={{pointerEvents:"auto",background:"rgba(0,0,0,.55)"}}>
                 <div className="face-intro-main">having trouble?</div>
-                <div className="face-intro-sub">we couldn't get a clean read on the card.</div>
+                <div className="face-intro-sub">{scan.cardEngineFailed?"card detection couldn't load on this connection.":"we couldn't get a clean read on the card."}</div>
                 <div className="btn-row" style={{marginTop:14}}>
-                  <button className="btn btn-primary" onClick={()=>{setCardChoice(false);scan.retryCardLock();}}>retry card</button>
+                  {!scan.cardEngineFailed&&<button className="btn btn-primary" onClick={()=>{setCardChoice(false);scan.retryCardLock();}}>retry card</button>}
                   <button className="btn btn-ghost" onClick={continueWithIris}>continue with iris</button>
                 </div>
               </div>

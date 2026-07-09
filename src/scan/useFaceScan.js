@@ -53,6 +53,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
   const [validPct,     setValidPct]     = useState(0);
   const [cardStatus,   setCardStatus]   = useState({label:"scale — iris reference",stablePct:0,reason:""});
   const [debugInfo,    setDebugInfo]    = useState(null);
+  const [cardEngineFailed, setCardEngineFailed] = useState(false);
 
   useEffect(()=>{ scanningRef.current=scanning; },[scanning]);
   useEffect(()=>{ doneRef.current=done; },[done]);
@@ -175,6 +176,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     if (!engineActive||!wantsCard) return;
     loadOpenCv().then(()=>setCvReady(true)).catch(()=>{
       cardLoadFailedRef.current=true;
+      setCardEngineFailed(true);
       setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     });
   },[engineActive,wantsCard]);
@@ -257,6 +259,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     if (nextFill>fillRef.current){ fillRef.current=nextFill; setFill(nextFill); }
     if ((elapsed>=SCAN_BASE_MS&&validRef.current>=TARGET_VALID_SAMPLES)||elapsed>=SCAN_MAX_MS){
       setFill(1); fillRef.current=1;
+      doneRef.current=true;
       setDone(true);
       clearScanCanvas();
       finishScan();
@@ -405,6 +408,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
         }
         init(true);
       }).catch(e=>console.error("MediaPipe:",e));
+    return ()=>{ fmRef.current?.close?.(); fmRef.current=null; };
   },[engineActive]);
 
   useEffect(()=>{
@@ -445,5 +449,5 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     holdRef.current=0; autoStarted.current=false; abortingRef.current=false; scanStartRef.current=null;
   },[resetSampleState]);
 
-  return {fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset,retryCardLock};
+  return {fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset,retryCardLock,cardEngineFailed};
 }

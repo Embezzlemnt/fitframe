@@ -151,7 +151,6 @@ const css = `
   .oval-waiting{animation:ovalPulse 2.2s ease-in-out infinite;}
   .cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:5;padding:28px 16px 15px;background:linear-gradient(transparent,rgba(0,0,0,.68));display:flex;flex-direction:column;align-items:center;gap:4px;}
   @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
-  @keyframes lockIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}
   .scan-inst-lost{font-size:12px;font-weight:300;color:rgba(255,255,255,.72);line-height:1.35;max-width:280px;}
   .face-intro{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.16);pointer-events:none;animation:introFade 2s ease both;}
@@ -161,8 +160,6 @@ const css = `
   .settle-intro{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;text-align:center;background:rgba(0,0,0,.1);pointer-events:none;animation:settleFade 1s ease both;}
   .settle-intro-main{font-size:24px;font-weight:600;color:rgba(255,255,255,.95);letter-spacing:-.025em;}
   @keyframes settleFade{0%{opacity:0}18%{opacity:1}82%{opacity:1}100%{opacity:0}}
-  .scale-lock{font-size:12px;color:var(--accent);font-family:'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.06em;animation:lockIn .28s ease both;}
-  .scan-note{font-size:12px;color:var(--dim);line-height:1.55;text-align:center;margin:-4px auto 16px;max-width:310px;font-weight:300;}
   .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--dim);}
   .calibration-strip strong{color:var(--accent);font-weight:500;}
   .scale-badge{display:inline-block;margin:2px 0 10px;padding:5px 11px;border:1px solid var(--border);border-radius:999px;font-size:10.5px;color:var(--dim);font-family:'Geist Mono',monospace;letter-spacing:.02em;}
@@ -691,6 +688,7 @@ export default function FramesSite(){
               setConfirmedMeas={setConfirmedMeas}
               onAdvance={()=>setStep(2)}
               onScanComplete={postScanComplete}
+              onScanRestart={()=>{scanCompletePostedRef.current=false;}}
               debugEnabled={debugEnabled}
               resetToken={resetToken}
             />
@@ -723,7 +721,7 @@ export default function FramesSite(){
                 <p className="reserve-note">these are yours. we don't keep your scan unless you claim a spot.</p>
                 <div className="btn-row" style={{marginTop:8}}>
                   <button className="btn btn-accent" onClick={()=>{setReserveError("");setStep(3);}}>claim my founder pair →</button>
-                  <button className="btn btn-ghost" onClick={()=>{setConfirmedMeas(null);setCalibration(null);setResetToken(t=>t+1);setStep(1);}}>rescan</button>
+                  <button className="btn btn-ghost" onClick={()=>{scanCompletePostedRef.current=false;setConfirmedMeas(null);setCalibration(null);setResetToken(t=>t+1);setStep(1);}}>rescan</button>
                 </div>
               </div>
             );
