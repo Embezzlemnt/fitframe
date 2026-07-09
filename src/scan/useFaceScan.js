@@ -6,6 +6,7 @@ import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WI
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
+const REDUCE_MOTION = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", cardLockActive=false, wantsCard=false, faceEnabled=true, engineActive=true, debugScan=false, onCardLocked, onCardTimeout, onAutoStart, onScanAbort }) {
   const fmRef          = useRef(null);
   const workCanvasRef  = useRef(null);
@@ -41,8 +42,6 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
   const scanStartRef   = useRef(null);
   const constAlphaRef  = useRef(0);
   const lastFrameTsRef = useRef(0);
-  // Computed once per hook instance — cheap, and a plain const avoids a ref indirection.
-  const reduceMotion=typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const [fill,         setFill]         = useState(0);
   const [done,         setDone]         = useState(false);
@@ -342,7 +341,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     lastFrameTsRef.current=now;
     const targetAlpha=scanningRef.current?1:0;
     constAlphaRef.current+= (targetAlpha-constAlphaRef.current)*Math.min(1,dt/600);
-    drawConstellation(ctx,pts,now,constAlphaRef.current,reduceMotion);
+    drawConstellation(ctx,pts,now,constAlphaRef.current,REDUCE_MOTION);
 
     const lId=iris.lId||0;
     const rId=iris.rId||0;
@@ -383,7 +382,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       }
       checkScanCompletion();
     }
-  },[abortActiveScan,canvasRef,checkScanCompletion,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,processCardFrame,reduceMotion,videoRef]);
+  },[abortActiveScan,canvasRef,checkScanCompletion,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,processCardFrame,videoRef]);
 
   // The results callback changes identity as scan state changes; route it through a
   // ref so FaceMesh (a heavy wasm graph) is constructed exactly once per session
