@@ -249,7 +249,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
   // hanging forever.
   const checkScanCompletion=useCallback(()=>{
     const elapsed=performance.now()-(scanStartRef.current||performance.now());
-    const nextFill=Math.min(validRef.current/TARGET_VALID_SAMPLES,1);
+    const nextFill=Math.min(validRef.current/TARGET_VALID_SAMPLES, elapsed/SCAN_BASE_MS, 1);
     if (nextFill>fillRef.current){ fillRef.current=nextFill; setFill(nextFill); }
     if ((elapsed>=SCAN_BASE_MS&&validRef.current>=TARGET_VALID_SAMPLES)||elapsed>=SCAN_MAX_MS){
       setFill(1); fillRef.current=1;
