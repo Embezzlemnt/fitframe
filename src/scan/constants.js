@@ -27,12 +27,9 @@ export const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
 // This is the final published version of the legacy MediaPipe JS face_mesh solution.
 export const MEDIAPIPE_FACE_MESH_VERSION = "0.4.1633559619";
 
-export const SCAN_SEQ = [
-  { holdMs:1500, fill:0.08 },
-  { holdMs:3000, fill:0.35 },
-  { holdMs:3000, fill:0.65 },
-  { holdMs:2500, fill:0.88 },
-  { holdMs:1500, fill:1.00 },
-];
 export const PRE_SCAN_SETTLE_MS = 1000;
 export const SCAN_DURATION_SECONDS_PLACEHOLDER = 12;
+export const SCAN_BASE_MS = 12000;
+export const SCAN_MAX_MS = 18000;
+export const TARGET_VALID_SAMPLES = 150;
+export const REDO_MIN_SAMPLES = 40;

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements, calcEAR } from "./faceMetrics.js";
+import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements, calcEAR, redoReason } from "./faceMetrics.js";
 import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, drawCardBlurMask, detectionSimilarity } from "./cardDetection.js";
-import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, SCAN_SEQ, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY } from "./constants.js";
+import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY, SCAN_BASE_MS, SCAN_MAX_MS, TARGET_VALID_SAMPLES, REDO_MIN_SAMPLES } from "./constants.js";
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
@@ -37,8 +37,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
   const autoStarted    = useRef(false);
   const fillRef        = useRef(0);
   const abortingRef    = useRef(false);
+  const scanStartRef   = useRef(null);
 
-  const [seqIdx,       setSeqIdx]       = useState(-1);
   const [fill,         setFill]         = useState(0);
   const [done,         setDone]         = useState(false);
   const [measurements, setMeasurements] = useState(null);
@@ -97,14 +97,14 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     if (abortingRef.current) return;
     abortingRef.current=true;
     clearScanCanvas();
-    setSeqIdx(-1); setFill(0); fillRef.current=0;
+    setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
     setValidPct(0); setAutoStartPct(0); setPoseHint(null); setFacePresent(false);
     setDebugInfo(null);
     setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     resetSampleState();
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null; cardTimeoutFiredRef.current=false;
-    holdRef.current=0; autoStarted.current=false;
+    holdRef.current=0; autoStarted.current=false; scanStartRef.current=null;
     onScanAbort?.(reason);
     requestAnimationFrame(()=>{ abortingRef.current=false; });
   },[clearScanCanvas,onScanAbort,resetSampleState]);
@@ -175,6 +175,90 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     });
   },[engineActive,wantsCard]);
 
+  // Runs exactly once per scan (guarded by doneRef being flipped by the caller
+  // before this fires) — computes trimmed weighted averages and a quality verdict,
+  // or routes to a re-do prompt when too few clean samples were captured.
+  const finishScan=useCallback(()=>{
+    const s=samplesRef.current;
+    const vp=totalRef.current>0?validRef.current/totalRef.current:0;
+    const facePct=totalRef.current>0?facePresentFramesRef.current/totalRef.current:0;
+    const posePct=totalRef.current>0?poseValidFramesRef.current/totalRef.current:0;
+    setValidPct(Math.round(vp*100));
+    if (s.length<REDO_MIN_SAMPLES){
+      setQuality({label:"let's try that again",rescan:true,reason:redoReason(discardRef.current)});
+      setMeasurements(null);
+      logScanDebug("complete",{sampleCount:s.length,quality:"redo",discarded:{...discardRef.current}});
+    } else {
+      const cardSamples=s.filter(m=>m.scaleSource==="credit-card");
+      const sourceSamples=cardSamples.length>=MIN_VALID_SAMPLES?cardSamples:s;
+      const finalScaleSource=cardSamples.length>=MIN_VALID_SAMPLES?"credit-card":sourceSamples[0]?.scaleSource||scaleSourceRef.current;
+      const sorted=[...sourceSamples].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
+      const trim=Math.floor(sorted.length*.15);
+      const good=trim>0&&sorted.length>(trim*2+MIN_VALID_SAMPLES-1)
+        ?sorted.slice(trim,sorted.length-trim)
+        :sorted;
+      const weightedAvg=k=>{
+        const total=good.reduce((sum,m)=>sum+parseFloat(m[k])*(m.sampleWeight||1),0);
+        const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
+        return total/weights;
+      };
+      const weightedStd=k=>{
+        const vals=good.map(m=>parseFloat(m[k]));
+        const mean=weightedAvg(k);
+        const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
+        const variance=vals.reduce((sum,v,i)=>sum+((v-mean)**2)*(good[i].sampleWeight||1),0)/weights;
+        return Math.sqrt(variance);
+      };
+      const pd=weightedAvg("pd"),br=weightedAvg("bridge"),face=weightedAvg("faceW");
+      const lMono=weightedAvg("pdLeft"),rMono=weightedAvg("pdRight");
+      const monoSum=lMono+rMono;
+      const directPdSane=pd>=PD_ADULT_MIN&&pd<=PD_ADULT_MAX;
+      const monoSumSane=monoSum>=PD_ADULT_MIN&&monoSum<=PD_ADULT_MAX;
+      const finalPd=Math.abs(monoSum-pd)>2&&monoSumSane?monoSum:pd;
+      const pdStd=weightedStd("pd");
+      const bridgeStd=weightedStd("bridge");
+      const stable=pdStd<=2.0&&bridgeStd<=1.5;
+      const hardOutOfRange=!directPdSane&&!monoSumSane;
+      const reviewRangeIssue=br<BRIDGE_MIN||br>BRIDGE_MAX||Math.abs(lMono-rMono)>MONOCULAR_SYMMETRY;
+      setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:finalScaleSource});
+      const nextQuality=hardOutOfRange
+        ?{label:"Out of range",rescan:false,reason:"The PD landed outside the frame-fitting range. Review before continuing."}
+        :s.length<MIN_VALID_SAMPLES||vp<.25
+          ?{label:"Double-check these",rescan:false,reason:"We captured a small sample. Double-check the numbers below."}
+          :reviewRangeIssue||pdStd>4.5||bridgeStd>3
+            ?{label:"Review your numbers",rescan:false,reason:"Usable scan with some movement. Review the numbers below."}
+            :stable&&vp>=.6
+              ?{label:"Clean scan",rescan:false,reason:"The scan had steady tracking and enough usable frames."}
+              :{label:"Fair scan",rescan:false,reason:"Usable scan with natural movement. Review the numbers below."};
+      setQuality(nextQuality);
+      logScanDebug("complete",{
+        finalPd:Number(finalPd.toFixed(1)),
+        pdStd:Number(pdStd.toFixed(2)),
+        bridgeStd:Number(bridgeStd.toFixed(2)),
+        sampleCount:s.length,
+        facePct:Number(facePct.toFixed(2)),
+        posePct:Number(posePct.toFixed(2)),
+        quality:nextQuality.label,
+      });
+    }
+  },[logScanDebug]);
+
+  // Per-frame completion check — sample-driven fill plus an adaptive time window.
+  // Runs at the end of the scanning branch on every frame (face present or not)
+  // so a scan that can't see a face still times out at SCAN_MAX_MS instead of
+  // hanging forever.
+  const checkScanCompletion=useCallback(()=>{
+    const elapsed=performance.now()-(scanStartRef.current||performance.now());
+    const nextFill=Math.min(validRef.current/TARGET_VALID_SAMPLES,1);
+    if (nextFill>fillRef.current){ fillRef.current=nextFill; setFill(nextFill); }
+    if ((elapsed>=SCAN_BASE_MS&&validRef.current>=TARGET_VALID_SAMPLES)||elapsed>=SCAN_MAX_MS){
+      setFill(1); fillRef.current=1;
+      setDone(true);
+      clearScanCanvas();
+      finishScan();
+    }
+  },[clearScanCanvas,finishScan]);
+
   const handleResults=useCallback((results)=>{
     const video=videoRef.current, canvas=canvasRef.current;
     if (!canvas||!video) return;
@@ -197,6 +281,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
         markDiscard("no-face");
         if (totalRef.current%15===0) logScanDebug("sampling");
         if (faceLostRef.current>=FACE_ABORT_FRAMES) abortActiveScan();
+        else checkScanCompletion();
       }
       return;
     }
@@ -282,8 +367,9 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
           tiltRatio:iris.tiltRatio?Number(iris.tiltRatio.toFixed(3)):null,
         });
       }
+      checkScanCompletion();
     }
-  },[abortActiveScan,canvasRef,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,processCardFrame,videoRef]);
+  },[abortActiveScan,canvasRef,checkScanCompletion,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,processCardFrame,videoRef]);
 
   // The results callback changes identity as scan state changes; route it through a
   // ref so FaceMesh (a heavy wasm graph) is constructed exactly once per session
@@ -331,105 +417,20 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       resetSampleState();
       cardStartedRef.current=null; cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false;
       setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
-      setSeqIdx(0);
+      setFill(0); fillRef.current=0;
+      scanStartRef.current=performance.now();
     }
   },[done,resetSampleState,scanning]);
 
-  useEffect(()=>{
-    if (seqIdx<0||seqIdx>=SCAN_SEQ.length) return;
-    const step=SCAN_SEQ[seqIdx], start=fillRef.current, end=step.fill, t0=performance.now();
-    let raf;
-    const animate=now=>{
-      const t=Math.min((now-t0)/step.holdMs,1);
-      const v=start+(end-start)*t;
-      fillRef.current=v; setFill(v);
-      if (t<1){ raf=requestAnimationFrame(animate); }
-      else if (seqIdx<SCAN_SEQ.length-1){ setSeqIdx(i=>i+1); }
-      else {
-        setDone(true);
-        clearScanCanvas();
-        const s=samplesRef.current;
-        const vp=totalRef.current>0?validRef.current/totalRef.current:0;
-        const facePct=totalRef.current>0?facePresentFramesRef.current/totalRef.current:0;
-        const posePct=totalRef.current>0?poseValidFramesRef.current/totalRef.current:0;
-        setValidPct(Math.round(vp*100));
-        if (s.length<MIN_VALID_SAMPLES){
-          setQuality({label:"scan lost",rescan:true,reason:"scan lost. position your face and tap start again."});
-          setMeasurements(null);
-          logScanDebug("complete",{
-            sampleCount:s.length,
-            quality:"scan lost",
-            facePct:Number(facePct.toFixed(2)),
-            posePct:Number(posePct.toFixed(2)),
-          });
-        } else {
-          const cardSamples=s.filter(m=>m.scaleSource==="credit-card");
-          const sourceSamples=cardSamples.length>=MIN_VALID_SAMPLES?cardSamples:s;
-          const finalScaleSource=cardSamples.length>=MIN_VALID_SAMPLES?"credit-card":sourceSamples[0]?.scaleSource||scaleSourceRef.current;
-          const sorted=[...sourceSamples].sort((a,b)=>parseFloat(a.pd)-parseFloat(b.pd));
-          const trim=Math.floor(sorted.length*.15);
-          const good=trim>0&&sorted.length>(trim*2+MIN_VALID_SAMPLES-1)
-            ?sorted.slice(trim,sorted.length-trim)
-            :sorted;
-          const weightedAvg=k=>{
-            const total=good.reduce((sum,m)=>sum+parseFloat(m[k])*(m.sampleWeight||1),0);
-            const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
-            return total/weights;
-          };
-          const weightedStd=k=>{
-            const vals=good.map(m=>parseFloat(m[k]));
-            const mean=weightedAvg(k);
-            const weights=good.reduce((sum,m)=>sum+(m.sampleWeight||1),0);
-            const variance=vals.reduce((sum,v,i)=>sum+((v-mean)**2)*(good[i].sampleWeight||1),0)/weights;
-            return Math.sqrt(variance);
-          };
-          const pd=weightedAvg("pd"),br=weightedAvg("bridge"),face=weightedAvg("faceW");
-          const lMono=weightedAvg("pdLeft"),rMono=weightedAvg("pdRight");
-          const monoSum=lMono+rMono;
-          const directPdSane=pd>=PD_ADULT_MIN&&pd<=PD_ADULT_MAX;
-          const monoSumSane=monoSum>=PD_ADULT_MIN&&monoSum<=PD_ADULT_MAX;
-          const finalPd=Math.abs(monoSum-pd)>2&&monoSumSane?monoSum:pd;
-          const pdStd=weightedStd("pd");
-          const bridgeStd=weightedStd("bridge");
-          const stable=pdStd<=2.0&&bridgeStd<=1.5;
-          const hardOutOfRange=!directPdSane&&!monoSumSane;
-          const reviewRangeIssue=br<BRIDGE_MIN||br>BRIDGE_MAX||Math.abs(lMono-rMono)>MONOCULAR_SYMMETRY;
-          setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:finalScaleSource});
-          const nextQuality=hardOutOfRange
-            ?{label:"Out of range",rescan:false,reason:"The PD landed outside the frame-fitting range. Review before continuing."}
-            :s.length<MIN_VALID_SAMPLES||vp<.25
-              ?{label:"Double-check these",rescan:false,reason:"We captured a small sample. Double-check the numbers below."}
-              :reviewRangeIssue||pdStd>4.5||bridgeStd>3
-                ?{label:"Review your numbers",rescan:false,reason:"Usable scan with some movement. Review the numbers below."}
-                :stable&&vp>=.6
-                  ?{label:"Clean scan",rescan:false,reason:"The scan had steady tracking and enough usable frames."}
-                  :{label:"Fair scan",rescan:false,reason:"Usable scan with natural movement. Review the numbers below."};
-          setQuality(nextQuality);
-          logScanDebug("complete",{
-            finalPd:Number(finalPd.toFixed(1)),
-            pdStd:Number(pdStd.toFixed(2)),
-            bridgeStd:Number(bridgeStd.toFixed(2)),
-            sampleCount:s.length,
-            facePct:Number(facePct.toFixed(2)),
-            posePct:Number(posePct.toFixed(2)),
-            quality:nextQuality.label,
-          });
-        }
-      }
-    };
-    raf=requestAnimationFrame(animate);
-    return ()=>cancelAnimationFrame(raf);
-  },[clearScanCanvas,logScanDebug,seqIdx]);
-
   const reset=useCallback(()=>{
-    setSeqIdx(-1); setFill(0); fillRef.current=0;
+    setFill(0); fillRef.current=0;
     setDone(false); setMeasurements(null); setQuality(null);
     setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
     setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     resetSampleState();
     cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null; cardTimeoutFiredRef.current=false;
-    holdRef.current=0; autoStarted.current=false; abortingRef.current=false;
+    holdRef.current=0; autoStarted.current=false; abortingRef.current=false; scanStartRef.current=null;
   },[resetSampleState]);
 
-  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset,retryCardLock};
+  return {fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset,retryCardLock};
 }

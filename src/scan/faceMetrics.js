@@ -67,6 +67,19 @@ export function calcEAR(d) {
   return { left, right, min: Math.min(left, right) };
 }
 
+export function redoReason(discards){
+  const top=Object.entries(discards).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  switch(top){
+    case "blink": return "we caught too many blinks — keep your eyes relaxed and open, then go again.";
+    case "no-face": return "we lost your face — keep it inside the oval this time.";
+    case "pose": case "yaw": return "too much head movement — face the camera straight on and hold steady.";
+    case "too-far": return "you're a bit far away — bring the phone to about arm's length.";
+    case "too-close": return "you're too close — ease back to about arm's length.";
+    case "iris-lost": case "iris-mismatch": return "we lost track of your eyes — try facing a light so your eyes are clearly lit.";
+    default: return "the scan couldn't get enough clean frames — find even light, hold steady, and go again.";
+  }
+}
+
 export function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null, precomputedIris=null) {
   const pts = lm.map(p => ({ x:p.x*W, y:p.y*H }));
   const d   = (a,b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);

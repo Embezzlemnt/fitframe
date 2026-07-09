@@ -195,8 +195,11 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   useEffect(()=>()=>stopCamera(),[stopCamera]);
   // Release the camera as soon as the scan finishes — the video is hidden at that
   // point, and leaving the stream (and the camera light) on undermines the
-  // "scan stays on this device" promise while the user reviews results.
-  useEffect(()=>{ if(scan.done){ stopCamera(); } },[scan.done,stopCamera]);
+  // "scan stays on this device" promise while the user reviews results. Redo-grade
+  // scans (too few clean samples) are the exception: the re-do card invites an
+  // immediate retry, so the camera stays warm instead of shutting down and
+  // reopening a moment later.
+  useEffect(()=>{ if(scan.done&&!scan.quality?.rescan){ stopCamera(); } },[scan.done,scan.quality,stopCamera]);
   useEffect(()=>()=>{
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
@@ -283,6 +286,25 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     resetScanState({keepMode:true});
     setCameraIntro(true);
     startCamera();
+  }
+
+  // Re-do (the "let's try that again" card after a too-few-samples scan): the
+  // camera never stopped for a redo-grade finish, and any locked card
+  // calibration is still good, so this is lighter than rescan() — no
+  // stopCamera/startCamera cycle, no clearing calibration, straight back to
+  // positioning with the video feed already live.
+  function redoScan(){
+    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    if (lockBeatTimerRef.current) clearTimeout(lockBeatTimerRef.current);
+    processingTimerRef.current=null;
+    settleTimerRef.current=null;
+    lockBeatTimerRef.current=null;
+    setScanRestartCopy("");
+    setCardChoice(false);
+    scan.reset();
+    setConfirmedMeas(null);
+    setPhase("positioning");
   }
 
   // FramesSite increments resetToken instead of calling scan.reset()/rescan
@@ -463,7 +485,15 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
         </div>
       )}
 
-      {scan.done&&!scanProcessing&&!currentMeas&&(
+      {scan.done&&!scanProcessing&&scan.quality?.rescan&&(
+        <div className="cam-placeholder" style={{marginTop:0}}>
+          <div className="cam-label">{scan.quality.label}</div>
+          <div className="cam-sub">{scan.quality.reason}</div>
+          <button className="btn btn-primary" style={{marginTop:4}} onClick={redoScan}>scan again &rarr;</button>
+        </div>
+      )}
+
+      {scan.done&&!scanProcessing&&!currentMeas&&!scan.quality?.rescan&&(
         <div className="cam-placeholder" style={{marginTop:0}}>
           <div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label||"No face data captured."}</div>
           <div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div>
