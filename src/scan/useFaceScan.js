@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements } from "./faceMetrics.js";
+import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements, calcEAR } from "./faceMetrics.js";
 import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, drawCardBlurMask, detectionSimilarity } from "./cardDetection.js";
-import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, SCAN_SEQ, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY } from "./constants.js";
+import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, SCAN_SEQ, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY } from "./constants.js";
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
@@ -210,12 +210,14 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     const yawRatio=calcYawRatio(pts,d);
     const yawValid=yawRatio<FACE_YAW_MAX;
     const debugScale=(scaleRef.current || (iris.valid ? IRIS_MM / iris.avgDiam : null));
+    const ear=calcEAR(d);
     setDebugInfo({
       lIrisPx:iris.lId?Number(iris.lId.toFixed(1)):null,
       rIrisPx:iris.rId?Number(iris.rId.toFixed(1)):null,
       scaleFactor:debugScale?Number(debugScale.toFixed(4)):null,
       rawPd:debugScale?Number((d(468,473)*debugScale).toFixed(1)):null,
       yawRatio:Number(yawRatio.toFixed(3)),
+      earMin:Number(ear.min.toFixed(3)),
       validFrames:validRef.current,
       totalFrames:totalRef.current,
       discarded:{...discardRef.current},
@@ -258,8 +260,11 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     }
 
     if (scanningRef.current){
+      const ear=calcEAR(d);
       if (!iris.valid){
         markDiscard(iris.reason);
+      } else if (ear.min<EAR_BLINK_MIN){
+        markDiscard("blink");
       } else {
         const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef,iris);
         if (m){

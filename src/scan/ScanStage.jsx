@@ -420,6 +420,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
                 <div>R iris: {scan.debugInfo?.rIrisPx ?? "-"}px</div>
                 <div>Scale: {scan.debugInfo?.scaleFactor ?? "-"}</div>
                 <div>Raw PD: {scan.debugInfo?.rawPd ?? "-"}mm</div>
+                <div>EAR: {scan.debugInfo?.earMin ?? "-"}</div>
                 <div>Frames: {scan.debugInfo?.validFrames ?? 0}/{scan.debugInfo?.totalFrames ?? 0}</div>
                 <div>Source: {scan.debugInfo?.scaleSource ?? "iris-fallback"}</div>
                 <div>Discard: {scan.debugInfo?.discarded ? Object.entries(scan.debugInfo.discarded).map(([k,v])=>`${k}:${v}`).join(", ") : "-"}</div>

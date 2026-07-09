@@ -58,6 +58,15 @@ export function calcYawRatio(pts, d) {
   return Math.abs(pts[1].x - eyeMidX) / eyeDist;
 }
 
+export function calcEAR(d) {
+  // eye-aspect-ratio: vertical lid gap over horizontal eye width, per eye.
+  // left: lids 159/145 over corners 33/133 · right: lids 386/374 over corners 362/263
+  const lw = d(33, 133), rw = d(362, 263);
+  const left = lw ? d(159, 145) / lw : 0;
+  const right = rw ? d(386, 374) / rw : 0;
+  return { left, right, min: Math.min(left, right) };
+}
+
 export function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null, precomputedIris=null) {
   const pts = lm.map(p => ({ x:p.x*W, y:p.y*H }));
   const d   = (a,b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);

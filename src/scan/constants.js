@@ -13,6 +13,7 @@ export const IRIS_MISMATCH_MAX = 0.30;// Launch-tolerant left/right iris diamete
 export const MIN_VALID_SAMPLES = 3;   // Review-screen safety net handles small usable samples
 export const FACE_ABORT_FRAMES = 80;  // ~2.5s of sustained face/pose loss during active scan (~32fps)
 export const FACE_YAW_MAX = 0.15;
+export const EAR_BLINK_MIN = 0.16;
 export const SCALE_HISTORY_FRAMES = 10;
 export const CREDIT_CARD_WIDTH_MM = 85.6;
 export const CREDIT_CARD_HEIGHT_MM = 54;
