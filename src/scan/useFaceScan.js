@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements } from "./faceMetrics.js";
-import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, detectionSimilarity } from "./cardDetection.js";
+import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, drawCardBlurMask, detectionSimilarity } from "./cardDetection.js";
 import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, SCAN_SEQ, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY } from "./constants.js";
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       cardStableRef.current=similar&&highConfidence&&flatEnough?Math.min(CARD_STABLE_FRAMES,cardStableRef.current+1):1;
       lastCardRef.current=detection;
       const stablePct=cardStableRef.current/CARD_STABLE_FRAMES;
-      if (ctx) drawDetectedCard(ctx,detection,stablePct);
+      if (ctx){ drawCardBlurMask(ctx,videoRef.current,detection); drawDetectedCard(ctx,detection,stablePct); }
       const reason=!highConfidence?"both long sides visible, card facing the camera.":!flatEnough?"hold the card flatter.":"";
       setCardStatus({label:stablePct>=1?"scale — card reference":"scale — iris reference",stablePct,reason,confidence:detection.confidence});
       if (stablePct>=1&&!cardLockedRef.current){

@@ -48,6 +48,29 @@ export function detectionSimilarity(a,b){
   return centerDelta+sizeDelta*.5+angleDelta*3;
 }
 
+let blurCanvas;
+export function drawCardBlurMask(ctx,video,detection){
+  const {quad,center}=detection;
+  const inflated=quad.map(p=>({x:center.x+(p.x-center.x)*1.08,y:center.y+(p.y-center.y)*1.08}));
+  const xs=inflated.map(p=>p.x),ys=inflated.map(p=>p.y);
+  const x0=Math.max(0,Math.min(...xs)),y0=Math.max(0,Math.min(...ys));
+  const w=Math.min(ctx.canvas.width,Math.max(...xs))-x0,h=Math.min(ctx.canvas.height,Math.max(...ys))-y0;
+  if (w<8||h<8) return;
+  blurCanvas=blurCanvas||document.createElement("canvas");
+  const bw=Math.max(2,Math.round(w/14)),bh=Math.max(2,Math.round(h/14));
+  blurCanvas.width=bw; blurCanvas.height=bh;
+  blurCanvas.getContext("2d").drawImage(video,x0,y0,w,h,0,0,bw,bh);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(inflated[0].x,inflated[0].y);
+  inflated.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.closePath();
+  ctx.clip();
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(blurCanvas,0,0,bw,bh,x0,y0,w,h);
+  ctx.restore();
+}
+
 export function drawDetectedCard(ctx,detection,stablePct){
   const quad=detection.quad;
   ctx.save();
