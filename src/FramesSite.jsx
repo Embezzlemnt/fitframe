@@ -175,6 +175,9 @@ const css = `
   .setup-diagram rect{fill:rgba(76,175,125,0.06);}
   .setup-list{display:grid;gap:6px;width:100%;font-size:12px;color:var(--dim);line-height:1.45;}
   .pre-scan-card .privacy-inline{align-self:center;text-align:center;margin-top:4px;}
+  .consent-choices{display:grid;gap:9px;width:100%;margin-top:2px;}
+  .consent-btn{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;padding:13px 16px;}
+  .consent-sub{font-size:11px;font-weight:300;opacity:.72;letter-spacing:.01em;}
   .cam-icon{width:42px;height:42px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;color:var(--dim);}
   .cam-label{font-size:14px;color:var(--text);font-weight:500;}
   .cam-sub{font-size:12px;color:var(--dim);line-height:1.6;max-width:250px;font-weight:300;}

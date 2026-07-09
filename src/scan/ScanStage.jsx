@@ -82,6 +82,7 @@ function Padlock(){
 // ─── ScanStage ────────────────────────────────────────────────────────────────
 export default function ScanStage({calibration,setCalibration,confirmedMeas,setConfirmedMeas,onAdvance,onScanComplete,debugEnabled,resetToken}){
   const [scanning,      setScanning]      = useState(false);
+  const [scanMode,      setScanMode]      = useState(null);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
   const [cameraIntro,   setCameraIntro]   = useState(false);
   const [scanSettling,  setScanSettling]  = useState(false);
@@ -150,7 +151,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     canvasRef,
     scaleMmPerPx:calibration?.mmPerPx||null,
     scaleSource:calibration?.source||"iris-fallback",
-    needsCard:camReady&&!cameraIntro&&scanning,
+    needsCard:scanMode==="card"&&camReady&&!cameraIntro&&scanning,
     faceEnabled:camReady&&!cameraIntro,
     debugScan:debugEnabled,
     onCardLocked:handleCardLocked,
@@ -231,6 +232,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     setConfirmedMeas(null);
     setCalibration(null);
     setScanPrepDismissed(false);
+    setScanMode(null);
     stopCamera();
   }
 
@@ -247,10 +249,12 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[resetToken]);
 
-  function beginScanSetup(){
+  function beginScanSetup(mode){
+    setScanMode(mode);
     setScanRestartCopy("");
     setScanPrepDismissed(true);
     setCameraIntro(true);
+    if (mode==="iris") handleCardSkipped();
     startCamera();
   }
 
@@ -307,18 +311,23 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
 
       {showScanPrep&&(
         <div className="cam-placeholder pre-scan-card">
-          <div className="pre-scan-line">this scan takes about {SCAN_DURATION_SECONDS_PLACEHOLDER} seconds.</div>
-          <div className="pre-scan-line">have a credit or ID card ready.</div>
+          <div className="pre-scan-line">this scan takes about {SCAN_DURATION_SECONDS_PLACEHOLDER} seconds and runs entirely in your browser.</div>
           <ScanSetupDiagram/>
-          <div className="pre-scan-support">hold a card flat under your chin, facing the camera.</div>
-          <div className="pre-scan-support">this gives the scan a much better size reference.</div>
-          <div className="pre-scan-support">no card? just hold still — we'll measure from your iris.</div>
+          <div className="pre-scan-support">a credit or ID card is a fixed, known size — 85.6mm exactly. holding one under your chin anchors your measurements to the real world.</div>
+          <div className="pre-scan-support">no rush — this screen waits while you grab one.</div>
+          <div className="consent-choices">
+            <button className="btn btn-primary consent-btn" onClick={()=>beginScanSetup("card")}>
+              <span>i have a card</span><span className="consent-sub">most accurate</span>
+            </button>
+            <button className="btn btn-ghost consent-btn" onClick={()=>beginScanSetup("iris")}>
+              <span>use iris only</span><span className="consent-sub">still good — measured from your eye</span>
+            </button>
+          </div>
           <div className="setup-list">
             <div>arm's length from your phone</div>
             <div>good overhead light, face it directly</div>
           </div>
-          <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready →</button>
-          <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
+          <div className="privacy-inline"><Padlock/><span>everything runs on this device. no photos or video are ever transmitted or stored — only your final millimeter numbers leave. your card is never read, only measured, and we blur it on screen automatically.</span></div>
         </div>
       )}
 
