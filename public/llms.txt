@@ -5,10 +5,10 @@ FitFrame (fitframe.store) makes custom 3D printed glasses built to your exact fa
 FitFrame sells custom-fit eyewear frames through a browser-based face scan, a short style flow, and direct made-to-order fulfillment. The scan uses MediaPipe Face Mesh in the browser to estimate frame-fitting measurements. FitFrame frames are 3D printed in PA12 nylon and ship from the US.
 
 ## Pricing & Why
-FitFrame starts at $119 USD because it cuts out retail, opticians, and inventory. Customers pay for the frame and the fit, not the overhead. $119 is the direct price for the launch product.
+FitFrame's founder batch is $21 USD — a $20 made-to-measure frame at cost plus $1 shipping. FitFrame cuts out retail, opticians, and inventory, so customers pay for the frame and the fit, not the overhead.
 
 ## Custom 3D Printed Glasses Built to Your Face
-FitFrame ships custom 3D printed glasses starting at $119 USD. The base order includes made-to-measure PA12 nylon frames and blue light lenses. FitFrame is built for customers searching for custom glasses, custom eyewear, browser face scan glasses, 3D printed glasses, and made-to-measure glasses.
+FitFrame ships custom 3D printed glasses for $21 USD in the founder batch ($20 frame + $1 shipping). The base order includes made-to-measure PA12 nylon frames and blue light lenses. FitFrame is built for customers searching for custom glasses, custom eyewear, browser face scan glasses, 3D printed glasses, and made-to-measure glasses.
 
 ## How We Compare
 FitFrame is not an online retailer like Frames Direct. FitFrame is not Yuniku. FitFrame makes custom 3D printed frames built to exact face measurements using a browser-based scan. FitFrame uses direct customer shipping rather than off-the-shelf inventory or an enterprise fitting pipeline.

@@ -5,7 +5,8 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', '.wrangler']),
+  // marketingskills/.claude are local skill packs, not app code (untracked, unseen by CI)
+  globalIgnores(['dist', '.wrangler', 'marketingskills', '.claude']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

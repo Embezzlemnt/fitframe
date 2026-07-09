@@ -29,7 +29,7 @@ VITE_API_PROXY=prod npm run dev
 
 **Interactive prompts:** first `wrangler dev` run may ask about Cloudflare AI skills — answer `n`. If a crash-report prompt appears, answer `n` as well.
 
-Optional secrets in `.dev.vars` (gitignored): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`. Waitlist and scan-count work without them (in-memory Worker fallbacks).
+Optional secrets in `.dev.vars` (gitignored): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`. Scan-count and counters work without them (in-memory Worker fallbacks); checkout returns 501 until `STRIPE_SECRET_KEY` is set.
 
 ### Lint / build / tests
 
@@ -46,14 +46,14 @@ No `npm test` script. Manual browser verification is the test path. CI (GitHub A
 
 ### Key files
 
-- `src/FramesSite.jsx` — the live app: full flow (landing → scan → style → frame → lens → waitlist submission) with the MediaPipe scan, camera, and measurement logic all inline. This is the only frontend source file besides `src/main.jsx`.
-- `worker/index.js` — `/api/*` routes (scan-count, waitlist, creator-key, and a dormant Stripe checkout path that the live flow does not use), static asset serving, security headers, rate limiting.
+- `src/FramesSite.jsx` — the live app: full flow (landing → scan → measurements payoff → founder questionnaire → $21 Stripe checkout redirect → confirmation) with the MediaPipe scan, camera, and measurement logic all inline. This is the only frontend source file besides `src/main.jsx`.
+- `worker/index.js` — `/api/*` routes (scan-count, scan-complete, reservation-count, Stripe checkout session + signature-verified webhook — the live reservation flow — plus legacy waitlist/creator-key endpoints no longer called by the frontend), static asset serving, security headers, rate limiting.
 - `public/` — static content pages (`about`, `faq`, `returns`, `privacy`), `_headers` (live CSP/security headers), SEO files.
-- `wrangler.jsonc` — Worker config: KV (`FITFRAME_KV`), rate limiter binding, assets with `run_worker_first: true`.
+- `wrangler.jsonc` — Worker config: KV (`FITFRAME_KV`), rate limiter binding, static assets.
 
 ### Protected behavior — do not change casually
 
 - Scan math constants in `FramesSite.jsx` (IRIS_MM 11.8, PD ranges, card dimensions).
-- Accent color `#4caf7d`, `$119` base price, lowercase brand voice (pronoun "I" stays capitalized).
+- Accent color `#4caf7d`, founder pricing (`$20` frame + `$1` shipping = `$21` charged today), lowercase brand voice (pronoun "I" stays capitalized).
 - Worker rate limiting and security headers.
-- The dormant Stripe path stays dormant — do not wire it to the frontend without an explicit brief.
+- Stripe checkout amounts (`FOUNDER_FRAME_CENTS`, `FOUNDER_SHIPPING_CENTS`) — do not change without an explicit brief.

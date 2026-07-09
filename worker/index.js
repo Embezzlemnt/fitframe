@@ -18,6 +18,16 @@ let fallbackReservationCount = RESERVATION_COUNT_SEED;
 const fallbackWaitlist = new Set();
 
 const ALLOWED_ORIGIN = "https://fitframe.store";
+// Same-origin POSTs always carry an Origin header, so this list must cover
+// every host the SPA is actually served from: apex, www, and local dev/preview.
+// Matched by hostname (not full origin) because `wrangler dev` rewrites the
+// local origin to `http://fitframe.store` before the worker sees it.
+const ALLOWED_ORIGIN_HOSTNAMES = new Set([
+  "fitframe.store",
+  "www.fitframe.store",
+  "localhost",
+  "127.0.0.1",
+]);
 const RATE_LIMIT_POLICY = "5;w=60";
 
 const SECURITY_HEADERS = {
@@ -117,10 +127,6 @@ async function enforceRateLimit(request, env) {
   return { ok: true, headers };
 }
 
-function envMissing(...keys) {
-  return keys.filter(key => !key);
-}
-
 function metadataValue(value) {
   if (value == null || value === "") return "-";
   return String(value).slice(0, 500);
@@ -175,8 +181,7 @@ function requiredOrderFields(order) {
 // production. Keep dormant until checkout is launched with a tested plan.
 // ─────────────────────────────────────────────────────────────────────────────
 async function createCheckoutSession(request, env) {
-  const missingEnv = envMissing(env.STRIPE_SECRET_KEY);
-  if (missingEnv.length) {
+  if (!env.STRIPE_SECRET_KEY) {
     return json({ ok:false, error:"Stripe checkout is not configured. Add STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Cloudflare, then retry." }, 501);
   }
 
@@ -187,6 +192,9 @@ async function createCheckoutSession(request, env) {
     return json({ ok:false, error:"Invalid checkout payload." }, 400);
   }
 
+  // Honeypot — a filled hidden field means a bot; accept silently without a session.
+  if (order?.website) return json({ ok:true }, 200);
+
   const missing = requiredOrderFields(order);
   if (missing.length) return json({ ok:false, error:`Missing required fields: ${missing.join(", ")}` }, 400);
 
@@ -195,7 +203,7 @@ async function createCheckoutSession(request, env) {
   const metadata = orderMetadata(order);
   const form = new URLSearchParams();
   form.append("mode", "payment");
-  form.append("success_url", `${origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`);
+  form.append("success_url", `${origin}/?checkout=success`);
   form.append("cancel_url", `${origin}/?checkout=cancelled`);
   form.append("client_reference_id", metadataValue(order.order_id));
   form.append("customer_email", metadataValue(order.customer_email));
@@ -206,7 +214,7 @@ async function createCheckoutSession(request, env) {
   form.append("line_items[0][price_data][currency]", "usd");
   form.append("line_items[0][price_data][unit_amount]", String(FOUNDER_FRAME_CENTS));
   form.append("line_items[0][price_data][product_data][name]", "FitFrame founder's cut pair · PA12 nylon");
-  form.append("line_items[0][price_data][product_data][description]", "Made-to-measure PA12 nylon frame, printed to your scan. Founder price locked at $60.");
+  form.append("line_items[0][price_data][product_data][description]", "Made-to-measure PA12 nylon frame, printed to your scan.");
   form.append("line_items[1][quantity]", "1");
   form.append("line_items[1][price_data][currency]", "usd");
   form.append("line_items[1][price_data][unit_amount]", String(FOUNDER_SHIPPING_CENTS));
@@ -226,28 +234,6 @@ async function createCheckoutSession(request, env) {
   if (!stripeRes.ok) return json({ ok:false, error:stripeData?.error?.message || "Stripe checkout failed." }, 502);
 
   return json({ ok:true, id:stripeData.id, url:stripeData.url });
-}
-
-async function getCheckoutSession(request, env) {
-  if (!env.STRIPE_SECRET_KEY) return json({ ok:false, error:"Stripe checkout is not configured." }, 501);
-  const url = new URL(request.url);
-  const sessionId = url.searchParams.get("session_id");
-  if (!sessionId || !sessionId.startsWith("cs_")) return json({ ok:false, error:"Missing checkout session." }, 400);
-
-  const stripeRes = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
-    headers:{ "Authorization": `Bearer ${env.STRIPE_SECRET_KEY}` },
-  });
-  const session = await stripeRes.json();
-  if (!stripeRes.ok) return json({ ok:false, error:session?.error?.message || "Could not load checkout session." }, 502);
-
-  return json({
-    ok:true,
-    session_id:session.id,
-    payment_status:session.payment_status,
-    payment_intent:session.payment_intent,
-    customer_email:session.customer_details?.email || session.customer_email,
-    metadata:session.metadata || {},
-  });
 }
 
 function parseStripeSignature(header) {
@@ -368,9 +354,30 @@ async function stripeWebhook(request, env) {
   const session = event.data.object;
   if (session.payment_status !== "paid") return json({ ok:true, unpaid:true });
 
-  // A confirmed payment is the only thing that increments the reservation count,
-  // so the founder's-cut counter reflects genuine paid reservations only.
-  const pairNumber = await incrementReservationCount(env);
+  // Stripe can deliver an event more than once (and retries on our 500s), so the
+  // increment must be idempotent per event.id — otherwise pair numbers inflate.
+  const eventKey = event.id ? `webhook_event:${event.id}` : null;
+  let pairNumber = null;
+  if (env.FITFRAME_KV && eventKey) {
+    const seen = await env.FITFRAME_KV.get(eventKey);
+    if (seen) {
+      try {
+        const record = JSON.parse(seen);
+        if (record.emailed) return json({ ok:true, pair:record.pair, duplicate:true });
+        pairNumber = record.pair; // counted before, but the spec email still needs to go out
+      } catch { /* unreadable record — treat as unseen */ }
+    }
+  }
+
+  if (pairNumber == null) {
+    // A confirmed payment is the only thing that increments the reservation count,
+    // so the founder's-cut counter reflects genuine paid reservations only.
+    pairNumber = await incrementReservationCount(env);
+    if (env.FITFRAME_KV && eventKey) {
+      await env.FITFRAME_KV.put(eventKey, JSON.stringify({ pair:pairNumber, emailed:false }));
+    }
+  }
+
   const orderRef = session.metadata?.order_id || session.id;
 
   try {
@@ -380,10 +387,14 @@ async function stripeWebhook(request, env) {
       subject:`FitFrame founder reservation — pair #${pairNumber} (${orderRef})`,
       text:paidOrderSpec(session, pairNumber),
     });
+    if (env.FITFRAME_KV && eventKey) {
+      await env.FITFRAME_KV.put(eventKey, JSON.stringify({ pair:pairNumber, emailed:true, order:orderRef }));
+    }
     console.log(`[founder-spec] sent ok — pair #${pairNumber}, order ${orderRef}`);
   } catch (err) {
     console.error(`[founder-spec] SEND FAILED — pair #${pairNumber}, order ${orderRef}: ${err?.message || err}`);
     // The payment succeeded; surface the failure to Stripe so it retries delivery.
+    // The retry will find the stored pair number above and only re-send the email.
     return json({ ok:false, error:"reservation recorded but spec email failed", pair:pairNumber }, 500);
   }
 
@@ -594,10 +605,13 @@ async function waitlist(request, env, rateHeaders = {}) {
   const email = normalizeEmail(payload.email);
   if (!validEmail(email) || email.length > 254) return json({ ok:false, error:"Enter a valid email address." }, 400);
 
-  // Measurement sanity check
-  const pd = parseFloat(payload.measurements?.pd);
-  if (pd && (isNaN(pd) || pd < 45 || pd > 80)) {
-    return json({ ok:false, error:"invalid measurements" }, 400);
+  // Measurement sanity check — reject non-numeric or out-of-range PDs when provided
+  const pdRaw = payload.measurements?.pd;
+  if (pdRaw != null && pdRaw !== "") {
+    const pd = parseFloat(pdRaw);
+    if (!Number.isFinite(pd) || pd < 45 || pd > 80) {
+      return json({ ok:false, error:"invalid measurements" }, 400);
+    }
   }
 
   // Strip unexpected fields
@@ -651,8 +665,10 @@ async function waitlist(request, env, rateHeaders = {}) {
         created_at:submittedAt,
       }));
     } else {
-      const parsed = JSON.parse(existing);
-      position = parsed.position || 1;
+      try {
+        const parsed = JSON.parse(existing);
+        position = parsed.position || 1;
+      } catch { /* corrupt record — keep default position */ }
     }
   } else {
     duplicate = fallbackWaitlist.has(email);
@@ -724,10 +740,21 @@ async function waitlist(request, env, rateHeaders = {}) {
   }, 200, rateHeaders);
 }
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // same-origin GETs and non-browser clients (e.g. Stripe webhooks)
+  try {
+    return ALLOWED_ORIGIN_HOSTNAMES.has(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function validateOrigin(request) {
   const origin = request.headers.get("Origin");
-  if (origin && origin !== ALLOWED_ORIGIN) {
-    return new Response(null, { status: 204 });
+  if (!isAllowedOrigin(origin)) {
+    // Visible rejection — a silent empty 204 masquerades as success and hides
+    // real failures (this previously broke every POST from www and local dev).
+    return json({ ok: false, error: "Origin not allowed." }, 403);
   }
   return null;
 }
@@ -735,6 +762,12 @@ function validateOrigin(request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // Canonicalize www → apex so sessions, counters, and checkout all run on one origin.
+    if (url.hostname === "www.fitframe.store") {
+      url.hostname = "fitframe.store";
+      return Response.redirect(url.toString(), 301);
+    }
 
     if (isSensitivePath(url.pathname)) {
       return notFound();
@@ -754,7 +787,6 @@ export default {
       }
 
       if (url.pathname === "/api/create-checkout-session" && request.method === "POST") return createCheckoutSession(request, env);
-      if (url.pathname === "/api/checkout-session" && request.method === "GET") return getCheckoutSession(request, env);
       if (url.pathname === "/api/stripe-webhook" && request.method === "POST") return stripeWebhook(request, env);
       if (url.pathname === "/api/reservation-count") return reservationCount(request, env, rate.headers);
       if (url.pathname === "/api/scan-count") return scanCount(request, env, rate.headers);

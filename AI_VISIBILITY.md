@@ -16,7 +16,7 @@ FitFrame should be easy for search and AI answer engines to understand, while pr
 ## Public Facts AI Systems Should See
 
 - FitFrame makes custom 3D printed glasses built to face measurements.
-- The base price starts at `$119`.
+- The founder batch price is `$21` (`$20` frame + `$1` shipping).
 - Frames are 3D printed in PA12 nylon.
 - Blue light lenses are included in the base order.
 - The scan runs in a mobile browser with no app download.

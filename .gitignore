@@ -10,3 +10,8 @@ dist
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# local tooling / embedded repos
+.claude/
+marketingskills/
+.superpowers/

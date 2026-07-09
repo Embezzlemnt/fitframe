@@ -5,7 +5,6 @@ const MAKER_EMAIL = "hello@fitframe.store";
 const DOMAIN_URL = "https://fitframe.store"; // LOCKED
 
 // ─── Reservation pricing (charged upfront via Stripe) ──────────────────────────
-const FOUNDER_LOCKED_PRICE = 60;     // the price locked for early reservers
 const RESERVE_FRAME_PRICE = 20;      // pair, at cost
 const RESERVE_SHIPPING = 1;          // shipping today
 const RESERVE_TOTAL = RESERVE_FRAME_PRICE + RESERVE_SHIPPING; // charged now: $21
@@ -60,11 +59,9 @@ const CARD_MAX_ROTATION_DEG = 14;
 const CARD_MIN_CONFIDENCE = 0.58;
 const CARD_FALLBACK_MS = 8000;
 const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
-// Pinned MediaPipe versions — the scan engine must not float with CDN "latest".
-// These are the final published versions of the legacy MediaPipe JS solutions.
+// Pinned MediaPipe version — the scan engine must not float with CDN "latest".
+// This is the final published version of the legacy MediaPipe JS face_mesh solution.
 const MEDIAPIPE_FACE_MESH_VERSION = "0.4.1633559619";
-const MEDIAPIPE_CAMERA_UTILS_VERSION = "0.3.1675466862";
-const MEDIAPIPE_DRAWING_UTILS_VERSION = "0.3.1675466124";
 const FITFRAME_FAQ = [
   ["Is FitFrame legit?","FitFrame is a real operation based in the US. Every order is fulfilled by the person who built it. The official domain is fitframe.store."],
   ["Why is the founder's cut so cheap?","The first 25 pairs go out at cost. There's no retail, no optician, no inventory, and no markup yet - you're an early founder helping shape the real product, so you pay what it costs us to make it."],
@@ -241,10 +238,11 @@ function calcYawRatio(pts, d) {
   return Math.abs(pts[1].x - eyeMidX) / eyeDist;
 }
 
-function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null) {
+function calcMeasurements(lm, W, H, calibratedScale=null, scaleHistoryRef=null, precomputedIris=null) {
   const pts = lm.map(p => ({ x:p.x*W, y:p.y*H }));
   const d   = (a,b) => Math.sqrt((pts[a].x-pts[b].x)**2+(pts[a].y-pts[b].y)**2);
-  const iris = calcIrisMetrics(pts,d);
+  // The caller (handleResults) already computed iris metrics for this frame; reuse them.
+  const iris = precomputedIris || calcIrisMetrics(pts,d);
   if (!iris.valid) return null;
   const irisScale = IRIS_MM / iris.avgDiam;
   if (scaleHistoryRef) {
@@ -615,7 +613,7 @@ function useCamera() {
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
-function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, debugScan=false, onCardLocked, onCardSkipped, onAutoStart, onScanAbort }) {
+function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, engineActive=true, debugScan=false, onCardLocked, onCardSkipped, onAutoStart, onScanAbort }) {
   const fmRef          = useRef(null);
   const workCanvasRef  = useRef(null);
   const [mpReady,      setMpReady]      = useState(false);
@@ -784,12 +782,14 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     }
   },[canvasRef,cvReady,onCardLocked,onCardSkipped,videoRef]);
 
+  // opencv.js is ~10MB — only fetch it once the user actually enters the scan step.
   useEffect(()=>{
+    if (!engineActive) return;
     loadOpenCv().then(()=>setCvReady(true)).catch(()=>{
       cardLoadFailedRef.current=true;
       setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     });
-  },[]);
+  },[engineActive]);
 
   const handleResults=useCallback((results)=>{
     const video=videoRef.current, canvas=canvasRef.current;
@@ -875,7 +875,7 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
       if (!iris.valid){
         markDiscard(iris.reason);
       } else {
-        const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef);
+        const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef,iris);
         if (m){
           samplesRef.current.push({...m,scaleSource:scaleSourceRef.current});
           noseXRef.current.push(lm[1].x);
@@ -895,29 +895,36 @@ function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSo
     }
   },[abortActiveScan,canvasRef,clearScanCanvas,logScanDebug,markDiscard,needsCard,onAutoStart,processCardFrame,videoRef]);
 
+  // The results callback changes identity as scan state changes; route it through a
+  // ref so FaceMesh (a heavy wasm graph) is constructed exactly once per session
+  // instead of being re-instantiated (and leaked) on every dependency change.
+  const handleResultsRef=useRef(handleResults);
+  useEffect(()=>{ handleResultsRef.current=handleResults; },[handleResults]);
+
+  const mpInitStartedRef=useRef(false);
   useEffect(()=>{
-    Promise.all([
-      loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@${MEDIAPIPE_CAMERA_UTILS_VERSION}/camera_utils.js`),
-      loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@${MEDIAPIPE_DRAWING_UTILS_VERSION}/drawing_utils.js`),
-      loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${MEDIAPIPE_FACE_MESH_VERSION}/face_mesh.js`),
-    ]).then(()=>{
-      function init(retry){
-        if (!window.FaceMesh){ if(retry) setTimeout(()=>init(false),800); return; }
-        const fm=new window.FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${MEDIAPIPE_FACE_MESH_VERSION}/${f}`});
-        fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
-        fm.onResults(handleResults);
-        fm.initialize().then(()=>{ fmRef.current=fm; setMpReady(true); });
-      }
-      init(true);
-    }).catch(e=>console.error("MediaPipe:",e));
-  },[handleResults]);
+    if (!engineActive||mpInitStartedRef.current) return;
+    mpInitStartedRef.current=true;
+    loadScript(`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${MEDIAPIPE_FACE_MESH_VERSION}/face_mesh.js`)
+      .then(()=>{
+        function init(retry){
+          if (!window.FaceMesh){ if(retry) setTimeout(()=>init(false),800); return; }
+          const fm=new window.FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${MEDIAPIPE_FACE_MESH_VERSION}/${f}`});
+          fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
+          fm.onResults(results=>handleResultsRef.current?.(results));
+          fm.initialize().then(()=>{ fmRef.current=fm; setMpReady(true); });
+        }
+        init(true);
+      }).catch(e=>console.error("MediaPipe:",e));
+  },[engineActive]);
 
   useEffect(()=>{
+    if (!faceEnabled) return; // don't burn a rAF loop on steps that never process frames
     const loop=async()=>{
       const v=videoRef.current;
       if (doneRef.current||abortingRef.current){
         clearScanCanvas();
-      } else if (faceEnabled&&fmRef.current&&v&&v.readyState>=2&&!procRef.current){
+      } else if (fmRef.current&&v&&v.readyState>=2&&!procRef.current){
         procRef.current=true;
         try { await fmRef.current.send({image:v}); } catch { /* frame processing can skip while MediaPipe warms up */ }
         procRef.current=false;
@@ -1279,7 +1286,8 @@ export default function FramesSite(){
   useFitFrameJsonLd();
   const saved=loadSession()||{};
 
-  const savedStep = Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 4 ? saved.step : 0;
+  // Step 4 (confirmation) is never persisted — sessions are cleared on success.
+  const savedStep = Number.isInteger(saved.step) && saved.step >= 0 && saved.step <= 3 ? saved.step : 0;
   const [step,          setStep]          = useState(savedStep);
   const [confirmedMeas, setConfirmedMeas] = useState(saved.confirmedMeas??null);
   const [calibration,   setCalibration]   = useState(saved.calibration??null);
@@ -1371,10 +1379,13 @@ export default function FramesSite(){
     debugScan:debugEnabled,
     onCardLocked:handleCardLocked,
     onCardSkipped:handleCardSkipped,
+    engineActive:step===1,
     onAutoStart:startSettledScan,
     onScanAbort:handleScanAbort,
   });
-  const currentMeas=confirmedMeas||(scan.quality?.rescan?scan.measurements:null);
+  // Measurements worth showing: confirmed ones, or fresh scan results whose
+  // quality did NOT demand a rescan (rescan-grade scans carry null measurements).
+  const currentMeas=confirmedMeas||(!scan.quality?.rescan?scan.measurements:null);
 
   // Persist
   useEffect(()=>{
@@ -1387,7 +1398,10 @@ export default function FramesSite(){
   const chosenFrame=FITFRAME_FRAME;
 
   useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
-  useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); } },[scan.done]);
+  // Release the camera as soon as the scan finishes — the video is hidden at that
+  // point, and leaving the stream (and the camera light) on undermines the
+  // "scan stays on this device" promise while the user reviews results.
+  useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); stopCamera(); } },[scan.done,stopCamera]);
   useEffect(()=>()=>{
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
@@ -1403,11 +1417,13 @@ export default function FramesSite(){
       .then(r=>r.ok?r.json():null)
       .then(d=>{ if(!cancelled&&d?.ok&&Number.isFinite(d.count)) setScanCount(d.count); })
       .catch(()=>{});
+    // Load once + refresh on tab return. No polling interval: the worker rate
+    // limit is 5 req/min/IP shared across ALL /api routes, and a 20s poll ate
+    // 3 of those — leaving checkout itself to fight for the remainder.
     load();
-    const id=setInterval(load,20000);
     const onVisible=()=>{ if(document.visibilityState==="visible") load(); };
     document.addEventListener("visibilitychange",onVisible);
-    return ()=>{ cancelled=true; clearInterval(id); document.removeEventListener("visibilitychange",onVisible); };
+    return ()=>{ cancelled=true; document.removeEventListener("visibilitychange",onVisible); };
   },[]);
 
   // Return path from Stripe Checkout. Stripe only hits ?checkout=success after payment —
@@ -1424,7 +1440,9 @@ export default function FramesSite(){
     (async()=>{
       const cr=await fetch("/api/reservation-count").then(r=>r.ok?r.json():null).catch(()=>null);
       if (cancelled) return;
-      const count=cr?.ok&&Number.isFinite(cr.count)?cr.count:null;
+      // count>0 guard: if the webhook hasn't fired yet the counter can still be 0,
+      // and the first founder must never see "pair #0".
+      const count=cr?.ok&&Number.isFinite(cr.count)&&cr.count>0?cr.count:null;
       if (count!=null) setPairNumber(count);
       clearSession();
       setSent(true);
@@ -1444,6 +1462,15 @@ export default function FramesSite(){
     return ()=>clearTimeout(timer);
   },[camReady,cameraIntro]);
 
+  const postScanComplete=useCallback(()=>{
+    if (scanCompletePostedRef.current) return;
+    scanCompletePostedRef.current=true;
+    fetch("/api/scan-complete",{method:"POST"})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d?.ok&&Number.isFinite(d.count)) setScanCount(d.count); })
+      .catch(()=>{});
+  },[]);
+
   // Keep the user on scan review until they accept the measured spec.
   useEffect(()=>{
     if (scan.done&&scan.measurements&&scan.quality&&!scan.quality.rescan&&!confirmedMeas&&!scanProcessing&&!processingTimerRef.current){
@@ -1455,19 +1482,13 @@ export default function FramesSite(){
           scanReason:scan.quality?.reason||"",
           validPct:scan.validPct,
         });
-        if (!scanCompletePostedRef.current){
-          scanCompletePostedRef.current=true;
-          fetch("/api/scan-complete",{method:"POST"})
-            .then(r=>r.ok?r.json():null)
-            .then(d=>{ if(d?.ok&&Number.isFinite(d.count)) setScanCount(d.count); })
-            .catch(()=>{});
-        }
+        postScanComplete();
         setScanProcessing(false);
         processingTimerRef.current=null;
         setStep(2); // advance automatically to the measurements payoff
       },2000);
     }
-  },[confirmedMeas,scan.done,scan.measurements,scan.quality,scan.validPct,scanProcessing]);
+  },[confirmedMeas,postScanComplete,scan.done,scan.measurements,scan.quality,scan.validPct,scanProcessing]);
 
   function acceptMeasurements(){
     const m=currentMeas||scan.measurements;
@@ -1479,6 +1500,7 @@ export default function FramesSite(){
       validPct:m.validPct??scan.validPct,
     };
     setConfirmedMeas(accepted);
+    postScanComplete();
     setStep(2);
   }
 
@@ -1773,8 +1795,6 @@ export default function FramesSite(){
                 </div>
               )}
 
-              {step===1&&camReady&&scan.done&&<canvas ref={canvasRef} style={{display:"none"}}/>}
-
               {scanProcessing&&(
                 <div className="processing-card">
                   <div className="processing-logo">fitframe<span className="logo-dot">.</span></div>
@@ -1808,18 +1828,6 @@ export default function FramesSite(){
                   <div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label||"No face data captured."}</div>
                   <div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div>
                   <button className="btn btn-ghost" style={{marginTop:4}} onClick={rescan}>Try again</button>
-                </div>
-              )}
-
-              {currentMeas&&!scanProcessing&&scan.quality?.rescan&&(
-                <div className="cam-placeholder" style={{marginTop:0}}>
-                  <div className={`quality-pill ${scan.quality?.rescan?"bad":""}`}>{scan.quality?.label||"Rescan"}</div>
-                  <div className="cam-label">Let's try that again.</div>
-                  <div className="cam-sub">{scan.quality?.reason||"Face the camera straight on in good light and hold still."}</div>
-                  <div className="btn-row" style={{marginTop:4}}>
-                    <button className="btn btn-primary" onClick={rescan}>Rescan</button>
-                    <button className="btn btn-ghost" onClick={acceptMeasurements}>continue anyway &rarr;</button>
-                  </div>
                 </div>
               )}
 
@@ -1901,9 +1909,9 @@ export default function FramesSite(){
                 </div>
 
                 <div className="receipt">
-                  <div className="receipt-row"><span>founder's cut pair · pa12 nylon</span><span>at cost</span></div>
-                  <div className="receipt-row"><span>your founder price, locked forever</span><span>${FOUNDER_LOCKED_PRICE}</span></div>
-                  <div className="receipt-total"><span>today</span><span>${RESERVE_FRAME_PRICE} + ${RESERVE_SHIPPING} shipping</span></div>
+                  <div className="receipt-row"><span>founder's cut pair · pa12 nylon</span><span>${RESERVE_FRAME_PRICE} · at cost</span></div>
+                  <div className="receipt-row"><span>shipping</span><span>${RESERVE_SHIPPING}</span></div>
+                  <div className="receipt-total"><span>today</span><span>${RESERVE_TOTAL}</span></div>
                 </div>
 
                 <input className="field" placeholder="your email" aria-label="your email" type="email" inputMode="email" autoComplete="email"
@@ -1937,9 +1945,9 @@ export default function FramesSite(){
                 <button className="btn btn-ghost" type="button" onClick={()=>{
                   const link=`${DOMAIN_URL}/?ref=${encodeURIComponent(orderId)}`;
                   if (navigator.clipboard?.writeText){
-                    navigator.clipboard.writeText(link).then(()=>setReserveError("referral link copied")).catch(()=>setReserveError(link));
+                    navigator.clipboard.writeText(link).then(()=>setReserveError("link copied")).catch(()=>setReserveError(link));
                   } else { setReserveError(link); }
-                }}>↑ move up the list — refer a friend</button>
+                }}>share fitframe with a friend</button>
               </div>
               {reserveError&&<div className="reserve-note" style={{color:"var(--accent)"}}>{reserveError}</div>}
               <p className="confirm-body" style={{marginTop:16}}>founder pricing stays locked, even as it rises for everyone else.</p>
