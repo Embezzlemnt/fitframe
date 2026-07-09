@@ -1,8 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import useCamera from "./scan/useCamera.js";
-import useFaceScan from "./scan/useFaceScan.js";
-import { clamp } from "./scan/faceMetrics.js";
-import { PRE_SCAN_SETTLE_MS, SCAN_DURATION_SECONDS_PLACEHOLDER } from "./scan/constants.js";
+import ScanStage from "./scan/ScanStage.jsx";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const MAKER_EMAIL = "hello@fitframe.store";
@@ -277,73 +274,6 @@ const css = `
   }
 `;
 
-// ─── FaceGuide ────────────────────────────────────────────────────────────────
-function FaceGuide({fill,poseHint,done=false}){
-  const VW=400,VH=300,cx=200,cy=150,rx=78,ry=108;
-  const activeFill=clamp(done?0:fill,0,1);
-  const waiting=!done&&activeFill<=0;
-  return (
-    <svg className="face-guide" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <defs>
-        <filter id="scanGlow">
-          <feGaussianBlur stdDeviation="2.5" result="b"/>
-          <feMerge>
-            <feMergeNode in="b"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-      <ellipse
-        className={waiting?"oval-waiting":undefined}
-        cx={cx} cy={cy} rx={rx} ry={ry}
-        fill="none"
-        stroke="rgba(255,255,255,0.28)"
-        strokeWidth="1.5"
-      />
-      <path
-        d={`M${cx},${cy+ry} A${rx},${ry} 0 0,1 ${cx},${cy-ry}`}
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        pathLength="1"
-        strokeDasharray="1"
-        strokeDashoffset={1 - activeFill}
-        filter="url(#scanGlow)"
-      />
-      <path
-        d={`M${cx},${cy+ry} A${rx},${ry} 0 0,0 ${cx},${cy-ry}`}
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        pathLength="1"
-        strokeDasharray="1"
-        strokeDashoffset={1 - activeFill}
-        filter="url(#scanGlow)"
-      />
-      {poseHint&&<text x={cx} y={cy+ry+22} textAnchor="middle" fill="rgba(255,255,255,.72)"
-        fontSize="13" fontFamily="'Geist',-apple-system,sans-serif" fontWeight="400">{poseHint}</text>}
-    </svg>
-  );
-}
-
-function ScanSetupDiagram(){
-  return (
-    <div className="setup-diagram" aria-hidden="true">
-      <svg viewBox="0 0 360 195" fill="none">
-        <path d="M58 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
-        <path d="M220 96h82" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 5"/>
-        <circle cx="180" cy="78" r="43" stroke="rgba(242,240,232,.72)" strokeWidth="2"/>
-        <path d="M156 86c11 9 37 9 48 0" stroke="rgba(242,240,232,.5)" strokeWidth="1.5" strokeLinecap="round"/>
-        <rect x="116" y="133" width="128" height="50" rx="7" stroke="#4caf7d" strokeWidth="2"/>
-        <path d="M180 121v12" stroke="#4caf7d" strokeWidth="2" strokeLinecap="round"/>
-        <text x="180" y="164" textAnchor="middle" fill="rgba(242,240,232,.72)" fontSize="10" fontFamily="'Geist Mono',monospace">CARD</text>
-      </svg>
-    </div>
-  );
-}
-
 // ─── Padlock ──────────────────────────────────────────────────────────────────
 function Padlock(){
   return <svg width="11" height="12" viewBox="0 0 11 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
@@ -526,14 +456,8 @@ export default function FramesSite(){
   const [calibration,   setCalibration]   = useState(saved.calibration??null);
   const [founderAnswers,setFounderAnswers]= useState(saved.founderAnswers??{wearNow:"",whatsWrong:"",willShare:null,marketingOptIn:false});
   const [customerInfo,  setCustomerInfo]  = useState(saved.customerInfo??{email:""});
-  const [scanning,      setScanning]      = useState(false);
-  const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
-  const [cameraIntro,   setCameraIntro]   = useState(false);
-  const [scanSettling,  setScanSettling]  = useState(false);
-  const [scanRestartCopy,setScanRestartCopy] = useState("");
   const [introReady,    setIntroReady]    = useState(false);
   const [introDone,     setIntroDone]     = useState(false);
-  const [scanProcessing,setScanProcessing] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [sent,          setSent]          = useState(false);
   const [orderId,       setOrderId]       = useState(()=>saved.orderId??genOrderId());
@@ -542,83 +466,13 @@ export default function FramesSite(){
   const [reserveError,  setReserveError]  = useState("");
   const [botField,      setBotField]      = useState("");
   const [debugEnabled]                     = useState(()=>new URLSearchParams(window.location.search).get("debug")==="1");
+  const [resetToken,    setResetToken]    = useState(0);
   const scanCompletePostedRef              = useRef(false);
-  const processingTimerRef                 = useRef(null);
-  const settleTimerRef                     = useRef(null);
 
-  const canvasRef=useRef(null);
-  const {
-    videoRef,
-    ready: camReady,
-    requesting: camRequesting,
-    camErr,
-    start: startCamera,
-    stop: stopCamera,
-  } = useCamera();
-  const startSettledScan=useCallback(()=>{
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    setScanRestartCopy("");
-    setScanSettling(true);
-    setScanning(false);
-    settleTimerRef.current=setTimeout(()=>{
-      setScanSettling(false);
-      setScanning(true);
-      settleTimerRef.current=null;
-    },PRE_SCAN_SETTLE_MS);
-  },[]);
-  const handleCardLocked=useCallback((card)=>{
-    setCalibration({
-      source:"credit-card",
-      cardWidthMm:card.cardWidthMm,
-      cardHeightMm:card.cardHeightMm,
-      cardWidthPx:card.cardWidthPx,
-      cardHeightPx:card.cardHeightPx,
-      mmPerPx:card.mmPerPx,
-      confidence:card.confidence,
-      corners:card.corners,
-      timestamp:card.timestamp,
-    });
-  },[]);
-  const handleCardSkipped=useCallback(()=>{
-    setCalibration({
-      source:"iris-fallback",
-      skippedCard:true,
-      timestamp:new Date().toISOString(),
-    });
-  },[]);
-  const handleScanAbort=useCallback((message)=>{
-    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    processingTimerRef.current=null;
-    settleTimerRef.current=null;
-    setScanProcessing(false);
-    setConfirmedMeas(null);
-    setCalibration(null);
-    setScanning(false);
-    setScanSettling(false);
-    setCameraIntro(false);
-    setScanPrepDismissed(true);
-    setScanRestartCopy(message||"scan lost. position your face and tap start again.");
-    scanCompletePostedRef.current=false;
-  },[]);
-  const scan=useFaceScan({
-    videoRef,
-    scanning,
-    canvasRef,
-    scaleMmPerPx:calibration?.mmPerPx||null,
-    scaleSource:calibration?.source||"iris-fallback",
-    needsCard:step===1&&camReady&&!cameraIntro&&scanning,
-    faceEnabled:step===1&&camReady&&!cameraIntro,
-    debugScan:debugEnabled,
-    onCardLocked:handleCardLocked,
-    onCardSkipped:handleCardSkipped,
-    engineActive:step===1,
-    onAutoStart:startSettledScan,
-    onScanAbort:handleScanAbort,
-  });
-  // Measurements worth showing: confirmed ones, or fresh scan results whose
-  // quality did NOT demand a rescan (rescan-grade scans carry null measurements).
-  const currentMeas=confirmedMeas||(!scan.quality?.rescan?scan.measurements:null);
+  // Measurements worth showing: by the time step 2 renders, measurements are
+  // always confirmed (ScanStage's auto-advance effect confirms before advancing;
+  // acceptMeasurements confirms too).
+  const currentMeas=confirmedMeas;
 
   // Persist
   useEffect(()=>{
@@ -630,15 +484,6 @@ export default function FramesSite(){
 
   const chosenFrame=FITFRAME_FRAME;
 
-  useEffect(()=>{ if(step!==1) stopCamera(); },[step,stopCamera]);
-  // Release the camera as soon as the scan finishes — the video is hidden at that
-  // point, and leaving the stream (and the camera light) on undermines the
-  // "scan stays on this device" promise while the user reviews results.
-  useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); stopCamera(); } },[scan.done,stopCamera]);
-  useEffect(()=>()=>{
-    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-  },[]);
   useEffect(()=>{
     requestAnimationFrame(()=>setIntroReady(true));
     const timer=setTimeout(()=>setIntroDone(true),720);
@@ -684,16 +529,6 @@ export default function FramesSite(){
     })();
     return ()=>{ cancelled=true; };
   },[]);
-  useEffect(()=>{
-    if (!scan.done) return;
-    const ctx=canvasRef.current?.getContext("2d");
-    if (ctx) ctx.clearRect(0,0,canvasRef.current.width,canvasRef.current.height);
-  },[scan.done]);
-  useEffect(()=>{
-    if (!camReady||!cameraIntro) return;
-    const timer=setTimeout(()=>setCameraIntro(false),2000);
-    return ()=>clearTimeout(timer);
-  },[camReady,cameraIntro]);
 
   const postScanComplete=useCallback(()=>{
     if (scanCompletePostedRef.current) return;
@@ -704,71 +539,21 @@ export default function FramesSite(){
       .catch(()=>{});
   },[]);
 
-  // Keep the user on scan review until they accept the measured spec.
-  useEffect(()=>{
-    if (scan.done&&scan.measurements&&scan.quality&&!scan.quality.rescan&&!confirmedMeas&&!scanProcessing&&!processingTimerRef.current){
-      setScanProcessing(true);
-      processingTimerRef.current=setTimeout(()=>{
-        setConfirmedMeas({
-          ...scan.measurements,
-          scanQuality:scan.quality?.label||"Review",
-          scanReason:scan.quality?.reason||"",
-          validPct:scan.validPct,
-        });
-        postScanComplete();
-        setScanProcessing(false);
-        processingTimerRef.current=null;
-        setStep(2); // advance automatically to the measurements payoff
-      },2000);
-    }
-  },[confirmedMeas,postScanComplete,scan.done,scan.measurements,scan.quality,scan.validPct,scanProcessing]);
-
-  function acceptMeasurements(){
-    const m=currentMeas||scan.measurements;
-    if (!m) return;
-    const accepted={
-      ...m,
-      scanQuality:m.scanQuality||scan.quality?.label||"Review your numbers",
-      scanReason:m.scanReason||scan.quality?.reason||"",
-      validPct:m.validPct??scan.validPct,
-    };
-    setConfirmedMeas(accepted);
-    postScanComplete();
-    setStep(2);
-  }
-
   function startFreshScan(){
     clearSession();
-    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    processingTimerRef.current=null;
-    settleTimerRef.current=null;
-    setScanProcessing(false);
-    setScanSettling(false);
-    setScanRestartCopy("");
     setConfirmedMeas(null);
     setCalibration(null);
     setFounderAnswers({wearNow:"",whatsWrong:"",willShare:null,marketingOptIn:false});
     setReserveError("");
-    scan.reset();
-    setScanning(false);
-    setCameraIntro(false);
+    setResetToken(t=>t+1);
     setSent(false);
     setSubmitting(false);
     scanCompletePostedRef.current=false;
-    setScanPrepDismissed(false);
     setStep(1);
   }
 
   function restartFlow(){
     clearSession();
-    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    processingTimerRef.current=null;
-    settleTimerRef.current=null;
-    setScanProcessing(false);
-    setScanSettling(false);
-    setScanRestartCopy("");
     setConfirmedMeas(null);
     setCalibration(null);
     setFounderAnswers({wearNow:"",whatsWrong:"",willShare:null,marketingOptIn:false});
@@ -778,38 +563,9 @@ export default function FramesSite(){
     setOrderId(genOrderId());
     setSubmitting(false);
     setSent(false);
-    scan.reset();
-    setScanning(false);
-    setCameraIntro(false);
-    setScanPrepDismissed(false);
+    setResetToken(t=>t+1);
     scanCompletePostedRef.current=false;
-    stopCamera();
     setStep(0);
-  }
-
-  function rescan(){
-    if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    processingTimerRef.current=null;
-    settleTimerRef.current=null;
-    setScanProcessing(false);
-    setScanSettling(false);
-    setScanRestartCopy("");
-    scan.reset();
-    setScanning(false);
-    setCameraIntro(false);
-    setConfirmedMeas(null);
-    setCalibration(null);
-    scanCompletePostedRef.current=false;
-    setScanPrepDismissed(false);
-    stopCamera();
-  }
-
-  function beginScanSetup(){
-    setScanRestartCopy("");
-    setScanPrepDismissed(true);
-    setCameraIntro(true);
-    startCamera();
   }
 
   const shareYes=founderAnswers.willShare===true;
@@ -823,7 +579,7 @@ export default function FramesSite(){
     if (!isValidEmail(email)){ setReserveError("enter a valid email."); return; }
     if (!shareYes){ setReserveError("a founder photo + honest review is part of the deal."); return; }
     setSubmitting(true); setReserveError("");
-    const m=currentMeas||scan.measurements||{};
+    const m=currentMeas||{};
     try {
       const res=await fetch("/api/create-checkout-session",{
         method:"POST",
@@ -861,50 +617,6 @@ export default function FramesSite(){
       setSubmitting(false);
     }
   }
-  const cameraActive=camReady||camRequesting;
-  const showScanPrep=!scanPrepDismissed&&!scan.done&&!currentMeas&&!camErr&&!cameraActive;
-  const scanState=scanRestartCopy?"lost":scan.done||confirmedMeas?"complete":scanning||scanSettling?"scanning":"idle";
-  const scaleIndicator=calibration?.source==="credit-card"?"scale — card reference":"scale — iris reference";
-  const scanTitle=scanProcessing
-    ?"your face is mapped."
-    :scanState==="lost"
-      ?"Face scan"
-    :scanState==="scanning"
-      ?scanSettling?"Find your spot.":"Stay still."
-    :cameraIntro
-      ?"Look straight ahead."
-    :scanState==="complete"
-      ?"your face is mapped."
-    :showScanPrep
-      ?"Take a quick calibrated face scan to begin."
-    :camRequesting||!camReady
-      ?"Opening camera."
-      :"Ready to measure.";
-  const scanCamInst=(()=>{
-    if (scanRestartCopy) return {text:scanRestartCopy,lost:true};
-    if (scanning) return {text:"Hold steady"};
-    if (scanSettling) return {text:"Find your spot"};
-    if (scan.poseHint) return {text:scan.poseHint,warn:true};
-    if (scan.autoStartPct>0&&scan.autoStartPct<1) return {text:"Hold still..."};
-    return {text:"Look directly at the camera."};
-  })();
-  const scanCopy=scanProcessing
-    ?""
-    :scanState==="scanning"
-      ?scanSettling?"Hold still for a second before measuring.":""
-    :cameraIntro
-      ?"Fill the oval with your face."
-    :scanState==="complete"
-      ?""
-    :scanState==="lost"
-      ?""
-    :showScanPrep
-      ?""
-    :camRequesting
-      ?"Allow camera access to continue."
-    :camReady
-      ?"Position your face in the oval, then start the scan."
-      :"";
 
   return (
     <>
@@ -968,117 +680,16 @@ export default function FramesSite(){
 
           {/* ── 1: Scan ── */}
           {step===1&&(
-            <div className="section">
-              <div className="eyebrow">Face scan</div>
-              <div className="step-head">{scanTitle}</div>
-              {scanCopy&&<p className="step-sub">{scanCopy}</p>}
-
-              {showScanPrep&&(
-                <div className="cam-placeholder pre-scan-card">
-                  <div className="pre-scan-line">this scan takes about {SCAN_DURATION_SECONDS_PLACEHOLDER} seconds.</div>
-                  <div className="pre-scan-line">have a credit or ID card ready.</div>
-                  <ScanSetupDiagram/>
-                  <div className="pre-scan-support">hold a card flat under your chin, facing the camera.</div>
-                  <div className="pre-scan-support">this gives the scan a much better size reference.</div>
-                  <div className="pre-scan-support">no card? just hold still — we'll measure from your iris.</div>
-                  <div className="setup-list">
-                    <div>arm's length from your phone</div>
-                    <div>good overhead light, face it directly</div>
-                  </div>
-                  <button className="btn btn-primary" style={{alignSelf:"stretch",width:"100%",marginTop:4}} onClick={beginScanSetup}>I'm ready →</button>
-                  <div className="privacy-inline"><Padlock/><span>Scan stays on this device. Images are not transmitted.</span></div>
-                </div>
-              )}
-
-              {cameraActive&&!scan.done&&(
-                <div className="cam-outer">
-                  <div className="cam-inner">
-                    <video ref={videoRef} autoPlay playsInline muted/>
-                    <canvas ref={canvasRef}/>
-                    <div className="cam-vignette"/>
-                    <FaceGuide fill={scan.fill} poseHint={!scanRestartCopy&&!scanning&&!scanSettling?scan.poseHint:null} done={scan.done}/>
-                    {cameraIntro&&!scanRestartCopy&&(
-                      <div className="face-intro">
-                        <div className="face-intro-main">Look straight ahead</div>
-                        <div className="face-intro-sub">Fill the oval with your face</div>
-                      </div>
-                    )}
-                    {scanSettling&&!scanRestartCopy&&(
-                      <div className="settle-intro">
-                        <div className="settle-intro-main">Find your spot</div>
-                      </div>
-                    )}
-                    {debugEnabled&&(
-                      <div className="debug-overlay">
-                        <div>L iris: {scan.debugInfo?.lIrisPx ?? "-"}px</div>
-                        <div>R iris: {scan.debugInfo?.rIrisPx ?? "-"}px</div>
-                        <div>Scale: {scan.debugInfo?.scaleFactor ?? "-"}</div>
-                        <div>Raw PD: {scan.debugInfo?.rawPd ?? "-"}mm</div>
-                        <div>Frames: {scan.debugInfo?.validFrames ?? 0}/{scan.debugInfo?.totalFrames ?? 0}</div>
-                        <div>Source: {scan.debugInfo?.scaleSource ?? "iris-fallback"}</div>
-                        <div>Discard: {scan.debugInfo?.discarded ? Object.entries(scan.debugInfo.discarded).map(([k,v])=>`${k}:${v}`).join(", ") : "-"}</div>
-                      </div>
-                    )}
-                    <div className="cam-bottom">
-                      <div className={`scan-inst ${scanCamInst.lost?"scan-inst-lost":""}`} aria-live="polite" style={scanCamInst.warn?{color:"#C49A2E"}:undefined}>
-                        {scanCamInst.text}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {scanProcessing&&(
-                <div className="processing-card">
-                  <div className="processing-logo">fitframe<span className="logo-dot">.</span></div>
-                  <div className="processing-copy">mapping your face</div>
-                  <div className="processing-track"><div className="processing-fill"/></div>
-                </div>
-              )}
-
-              {camErr&&(
-                <div className="cam-placeholder">
-                  <div className="cam-label" style={{color:"var(--red)"}}>{camErr.headline}</div>
-                  {camErr.type==="denied"?<div className="err-box">{camErr.detail}</div>:<div className="cam-sub">{camErr.detail}</div>}
-                  {camErr.fix==="retry"&&<button className="btn btn-ghost" onClick={startCamera}>Try again</button>}
-                  {camErr.fix==="reload"&&<button className="btn btn-ghost" onClick={()=>location.reload()}>Reload page</button>}
-                </div>
-              )}
-
-              {camReady&&!scan.done&&(
-                <div style={{textAlign:"center",marginTop:14}}>
-                  <div className="calibration-strip"><span>{scaleIndicator}</span></div>
-                  {!scanning&&!scanSettling&&(
-                      <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent||scanSettling} onClick={startSettledScan}>
-                        {scan.mpReady?scan.facePresent?"start scan →":"find your face first":"loading..."}
-                      </button>
-                  )}
-                </div>
-              )}
-
-              {scan.done&&!scanProcessing&&!currentMeas&&(
-                <div className="cam-placeholder" style={{marginTop:0}}>
-                  <div className="cam-label" style={{color:"var(--red)"}}>{scan.quality?.label||"No face data captured."}</div>
-                  <div className="cam-sub">{scan.quality?.reason||"Ensure your face is well-lit and centered."}</div>
-                  <button className="btn btn-ghost" style={{marginTop:4}} onClick={rescan}>Try again</button>
-                </div>
-              )}
-
-              {(scan.done||confirmedMeas)&&currentMeas&&!scanProcessing&&!scan.quality?.rescan&&(
-                <div className="quality-card">
-                  <div className="quality-head">
-                    <div className="quality-title">your face is mapped.</div>
-                  </div>
-                  <p className="quality-copy">
-                    here are your measurements.
-                  </p>
-                  <div className="btn-row">
-                    <button className="btn btn-primary" onClick={acceptMeasurements}>see my measurements &rarr;</button>
-                    <button className="btn btn-ghost" onClick={rescan}>rescan</button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ScanStage
+              calibration={calibration}
+              setCalibration={setCalibration}
+              confirmedMeas={confirmedMeas}
+              setConfirmedMeas={setConfirmedMeas}
+              onAdvance={()=>setStep(2)}
+              onScanComplete={postScanComplete}
+              debugEnabled={debugEnabled}
+              resetToken={resetToken}
+            />
           )}
 
           {/* ── 2: Your measurements (the free payoff) ── */}
@@ -1107,7 +718,7 @@ export default function FramesSite(){
                 <p className="reserve-note">these are yours. we don't keep your scan unless you claim a spot.</p>
                 <div className="btn-row" style={{marginTop:8}}>
                   <button className="btn btn-accent" onClick={()=>{setReserveError("");setStep(3);}}>claim my founder pair →</button>
-                  <button className="btn btn-ghost" onClick={startFreshScan}>rescan</button>
+                  <button className="btn btn-ghost" onClick={()=>{setConfirmedMeas(null);setCalibration(null);setResetToken(t=>t+1);setStep(1);}}>rescan</button>
                 </div>
               </div>
             );
