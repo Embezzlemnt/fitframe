@@ -165,6 +165,7 @@ const css = `
   .scan-note{font-size:12px;color:var(--dim);line-height:1.55;text-align:center;margin:-4px auto 16px;max-width:310px;font-weight:300;}
   .calibration-strip{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);font-size:10px;color:var(--dim);}
   .calibration-strip strong{color:var(--accent);font-weight:500;}
+  .scale-badge{display:inline-block;margin:2px 0 10px;padding:5px 11px;border:1px solid var(--border);border-radius:999px;font-size:10.5px;color:var(--dim);font-family:'Geist Mono',monospace;letter-spacing:.02em;}
   .cam-placeholder{width:100%;min-height:260px;border-radius:12px;background:var(--surface2);border:1px dashed var(--border2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:28px 24px;margin-bottom:18px;text-align:center;}
   .pre-scan-card{align-items:flex-start;text-align:left;border-style:solid;gap:13px;background:#111312;border-color:rgba(255,255,255,0.07);border-radius:18px;}
   .pre-scan-line{font-size:13px;color:var(--text);font-weight:400;line-height:1.45;}
@@ -710,6 +711,7 @@ export default function FramesSite(){
               <div className="section">
                 <div className="eyebrow eyebrow-accent">your measurements</div>
                 <div className="step-head">these are yours.</div>
+                <div className="scale-badge">{m.scaleSource==="credit-card"?"calibrated with card — highest accuracy":"calibrated from iris — solid accuracy"}</div>
                 <div className="meas-grid">
                   {cells.map(c=>(
                     <div key={c.label} className={`meas-cell ${c.wide?"wide":""}`}>
