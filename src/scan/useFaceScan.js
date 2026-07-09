@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements, calcEAR, redoReason } from "./faceMetrics.js";
 import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, drawCardBlurMask, detectionSimilarity } from "./cardDetection.js";
-import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY, SCAN_BASE_MS, SCAN_MAX_MS, TARGET_VALID_SAMPLES, REDO_MIN_SAMPLES } from "./constants.js";
+import { drawEyeOval, drawConstellation } from "./overlays.js";
+import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY, SCAN_BASE_MS, SCAN_MAX_MS, TARGET_VALID_SAMPLES, REDO_MIN_SAMPLES, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR } from "./constants.js";
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
@@ -38,6 +39,10 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
   const fillRef        = useRef(0);
   const abortingRef    = useRef(false);
   const scanStartRef   = useRef(null);
+  const constAlphaRef  = useRef(0);
+  const lastFrameTsRef = useRef(0);
+  // Computed once per hook instance — cheap, and a plain const avoids a ref indirection.
+  const reduceMotion=typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const [fill,         setFill]         = useState(0);
   const [done,         setDone]         = useState(false);
@@ -332,9 +337,18 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       poseLostRef.current=0;
     }
 
+    const now=performance.now();
+    const dt=lastFrameTsRef.current?now-lastFrameTsRef.current:16;
+    lastFrameTsRef.current=now;
+    const targetAlpha=scanningRef.current?1:0;
+    constAlphaRef.current+= (targetAlpha-constAlphaRef.current)*Math.min(1,dt/600);
+    drawConstellation(ctx,pts,now,constAlphaRef.current,reduceMotion);
+
     const lId=iris.lId||0;
     const rId=iris.rId||0;
     if (scanningRef.current&&iris.valid){
+      drawEyeOval(ctx,pts,LEFT_EYE_CONTOUR);
+      drawEyeOval(ctx,pts,RIGHT_EYE_CONTOUR);
       const ink="#4caf7d"; // LOCKED — must match --accent
       [[pts[468],lId],[pts[473],rId]].forEach(([c,diam])=>{
         ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
@@ -369,7 +383,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       }
       checkScanCompletion();
     }
-  },[abortActiveScan,canvasRef,checkScanCompletion,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,processCardFrame,videoRef]);
+  },[abortActiveScan,canvasRef,checkScanCompletion,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,processCardFrame,reduceMotion,videoRef]);
 
   // The results callback changes identity as scan state changes; route it through a
   // ref so FaceMesh (a heavy wasm graph) is constructed exactly once per session
