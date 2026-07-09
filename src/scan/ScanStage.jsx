@@ -218,7 +218,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     onAdvance();
   }
 
-  function internalReset(){
+  function resetScanState({keepMode}){
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     processingTimerRef.current=null;
@@ -231,13 +231,29 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     setCameraIntro(false);
     setConfirmedMeas(null);
     setCalibration(null);
-    setScanPrepDismissed(false);
-    setScanMode(null);
+    if (keepMode){
+      setScanPrepDismissed(true);
+    } else {
+      setScanPrepDismissed(false);
+      setScanMode(null);
+    }
     stopCamera();
   }
 
+  function internalReset(){
+    resetScanState({keepMode:false});
+  }
+
+  // Quick retry (in-scan "Try again" / "rescan" buttons): the user already
+  // consented and picked a mode, so keep scanMode and skip consent — just
+  // clear scan state and restart the camera flow like beginScanSetup does.
+  // Guard: if scanMode is somehow null here, fall back to a full reset so we
+  // never start the camera without a mode.
   function rescan(){
-    internalReset();
+    if (!scanMode){ internalReset(); return; }
+    resetScanState({keepMode:true});
+    setCameraIntro(true);
+    startCamera();
   }
 
   // FramesSite increments resetToken instead of calling scan.reset()/rescan
