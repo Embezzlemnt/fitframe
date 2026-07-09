@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements } from "./faceMetrics.js";
 import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, detectionSimilarity } from "./cardDetection.js";
-import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_FALLBACK_MS, MEDIAPIPE_FACE_MESH_VERSION, SCAN_SEQ, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY } from "./constants.js";
+import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, SCAN_SEQ, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY } from "./constants.js";
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
-export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", needsCard=false, faceEnabled=true, engineActive=true, debugScan=false, onCardLocked, onCardSkipped, onAutoStart, onScanAbort }) {
+export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerPx=null, scaleSource="iris-fallback", cardLockActive=false, wantsCard=false, faceEnabled=true, engineActive=true, debugScan=false, onCardLocked, onCardTimeout, onAutoStart, onScanAbort }) {
   const fmRef          = useRef(null);
   const workCanvasRef  = useRef(null);
   const [mpReady,      setMpReady]      = useState(false);
@@ -25,6 +25,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
   const cardLockedRef  = useRef(false);
   const cardLoadFailedRef = useRef(false);
   const cardStartedRef = useRef(null);
+  const cardTimeoutFiredRef = useRef(false);
+  const cardLockActiveRef = useRef(cardLockActive);
   const loopRef        = useRef(null);
   const procRef        = useRef(false);
   const scanningRef    = useRef(false);
@@ -51,7 +53,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
   useEffect(()=>{ scanningRef.current=scanning; },[scanning]);
   useEffect(()=>{ doneRef.current=done; },[done]);
   useEffect(()=>{ scaleRef.current=scaleMmPerPx; scaleSourceRef.current=scaleSource; },[scaleMmPerPx,scaleSource]);
-  useEffect(()=>{ if (!needsCard) cardStartedRef.current=null; },[needsCard]);
+  useEffect(()=>{ cardLockActiveRef.current=cardLockActive; },[cardLockActive]);
 
   const clearScanCanvas=useCallback(()=>{
     const canvas=canvasRef.current;
@@ -101,7 +103,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     setDebugInfo(null);
     setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     resetSampleState();
-    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
+    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null; cardTimeoutFiredRef.current=false;
     holdRef.current=0; autoStarted.current=false;
     onScanAbort?.(reason);
     requestAnimationFrame(()=>{ abortingRef.current=false; });
@@ -111,34 +113,18 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     if (done) clearScanCanvas();
   },[clearScanCanvas,done]);
 
-  const processCardFrame=useCallback((drawOverlay=true)=>{
-    const video=videoRef.current, canvas=canvasRef.current;
-    if (!video||(!canvas&&drawOverlay)||cardLockedRef.current) return;
-    const W=video.videoWidth||640, H=video.videoHeight||480;
-    let ctx=null;
-    if (drawOverlay){
-      canvas.width=W; canvas.height=H;
-      ctx=canvas.getContext("2d");
-      ctx.clearRect(0,0,W,H);
-      setFacePresent(false);
-      setPoseHint(null);
-      setAutoStartPct(0);
-    }
-
+  const processCardFrame=useCallback((ctx)=>{
+    const video=videoRef.current;
+    if (!video||cardLockedRef.current) return;
     if (!cardStartedRef.current) cardStartedRef.current=performance.now();
-    const timedOut=performance.now()-cardStartedRef.current>CARD_FALLBACK_MS;
-    if (cardLoadFailedRef.current||timedOut){
-      cardLockedRef.current=true;
-      scaleSourceRef.current="iris-fallback";
-      setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
-      onCardSkipped?.();
+    const timedOut=performance.now()-cardStartedRef.current>CARD_LOCK_TIMEOUT_MS;
+    if ((cardLoadFailedRef.current||timedOut)&&!cardTimeoutFiredRef.current){
+      cardTimeoutFiredRef.current=true;
+      onCardTimeout?.();
       return;
     }
-    if (!cvReady){
-      setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
-      return;
-    }
-
+    if (!cvReady||cardTimeoutFiredRef.current) return;
+    const W=video.videoWidth||640, H=video.videoHeight||480;
     const workCanvas=workCanvasRef.current||(workCanvasRef.current=document.createElement("canvas"));
     const detection=detectCardOutline(video,W,H,workCanvas);
     if (detection){
@@ -172,16 +158,22 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       lastCardRef.current=null;
       setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     }
-  },[canvasRef,cvReady,onCardLocked,onCardSkipped,videoRef]);
+  },[cvReady,onCardLocked,onCardTimeout,videoRef]);
 
-  // opencv.js is ~10MB — only fetch it once the user actually enters the scan step.
+  const retryCardLock=useCallback(()=>{
+    cardStartedRef.current=null; cardStableRef.current=0; lastCardRef.current=null;
+    cardLockedRef.current=false; cardTimeoutFiredRef.current=false;
+    setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
+  },[]);
+
+  // opencv.js is ~10MB — only fetch it once the user enters card-lock mode.
   useEffect(()=>{
-    if (!engineActive) return;
+    if (!engineActive||!wantsCard) return;
     loadOpenCv().then(()=>setCvReady(true)).catch(()=>{
       cardLoadFailedRef.current=true;
       setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     });
-  },[engineActive]);
+  },[engineActive,wantsCard]);
 
   const handleResults=useCallback((results)=>{
     const video=videoRef.current, canvas=canvasRef.current;
@@ -191,6 +183,9 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     const ctx=canvas.getContext("2d");
     ctx.clearRect(0,0,W,H);
     if (doneRef.current||abortingRef.current) { clearScanCanvas(); return; }
+
+    const cardLockActiveNow=cardLockActiveRef.current;   // routed via ref like scanningRef
+    if (cardLockActiveNow&&!cardLockedRef.current) processCardFrame(ctx);
 
     if (!results.multiFaceLandmarks?.length){
       holdRef.current=0; setFacePresent(false); setPoseHint(null);
@@ -240,7 +235,6 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       totalRef.current++;
       facePresentFramesRef.current++;
       faceLostRef.current=0;
-      if (needsCard&&!cardLockedRef.current) processCardFrame(false);
       if (!pose.valid||!yawValid){
         poseLostRef.current++;
         markDiscard(pose.valid?"yaw":"pose");
@@ -285,7 +279,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
         });
       }
     }
-  },[abortActiveScan,canvasRef,clearScanCanvas,logScanDebug,markDiscard,needsCard,onAutoStart,processCardFrame,videoRef]);
+  },[abortActiveScan,canvasRef,clearScanCanvas,logScanDebug,markDiscard,onAutoStart,processCardFrame,videoRef]);
 
   // The results callback changes identity as scan state changes; route it through a
   // ref so FaceMesh (a heavy wasm graph) is constructed exactly once per session
@@ -429,9 +423,9 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     setAutoStartPct(0); setFacePresent(false); setPoseHint(null); setDebugInfo(null);
     setCardStatus({label:"scale — iris reference",stablePct:0,reason:""});
     resetSampleState();
-    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null;
+    cardStableRef.current=0; lastCardRef.current=null; cardLockedRef.current=false; cardStartedRef.current=null; cardTimeoutFiredRef.current=false;
     holdRef.current=0; autoStarted.current=false; abortingRef.current=false;
   },[resetSampleState]);
 
-  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset};
+  return {seqIdx,fill,done,measurements,mpReady,cvReady,autoStartPct,facePresent,poseHint,quality,validPct,cardStatus,debugInfo,reset,retryCardLock};
 }

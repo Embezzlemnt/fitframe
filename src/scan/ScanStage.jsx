@@ -81,15 +81,21 @@ function Padlock(){
 
 // ─── ScanStage ────────────────────────────────────────────────────────────────
 export default function ScanStage({calibration,setCalibration,confirmedMeas,setConfirmedMeas,onAdvance,onScanComplete,debugEnabled,resetToken}){
-  const [scanning,      setScanning]      = useState(false);
+  const [phase,         setPhase]         = useState("consent"); // consent|positioning|cardlock|settling|scanning|processing
+  const [cardChoice,    setCardChoice]    = useState(false);
   const [scanMode,      setScanMode]      = useState(null);
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
   const [cameraIntro,   setCameraIntro]   = useState(false);
-  const [scanSettling,  setScanSettling]  = useState(false);
   const [scanRestartCopy,setScanRestartCopy] = useState("");
-  const [scanProcessing,setScanProcessing] = useState(false);
   const processingTimerRef                 = useRef(null);
   const settleTimerRef                     = useRef(null);
+  const lockBeatTimerRef                   = useRef(null);
+
+  const scanning=phase==="scanning";
+  const scanSettling=phase==="settling";
+  const scanProcessing=phase==="processing";
+  const cardLockActive=phase==="cardlock";
+  const wantsCard=scanMode==="card";
 
   const canvasRef=useRef(null);
   const {
@@ -100,17 +106,26 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     start: startCamera,
     stop: stopCamera,
   } = useCamera();
-  const startSettledScan=useCallback(()=>{
+  const advanceToSettling=useCallback(()=>{
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     setScanRestartCopy("");
-    setScanSettling(true);
-    setScanning(false);
+    setPhase("settling");
     settleTimerRef.current=setTimeout(()=>{
-      setScanSettling(false);
-      setScanning(true);
+      setPhase("scanning");
       settleTimerRef.current=null;
     },PRE_SCAN_SETTLE_MS);
   },[]);
+  // Auto-start / manual "start scan" both route here: card mode goes through
+  // cardlock first (unless the scale is already locked from a prior lock —
+  // e.g. recovering from a mid-scan abort), iris mode settles straight away.
+  const routeAfterPositioning=useCallback(()=>{
+    if (scanMode==="card"&&calibration?.source!=="credit-card"){
+      setCardChoice(false);
+      setPhase("cardlock");
+    } else {
+      advanceToSettling();
+    }
+  },[advanceToSettling,calibration,scanMode]);
   const handleCardLocked=useCallback((card)=>{
     setCalibration({
       source:"credit-card",
@@ -123,41 +138,53 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
       corners:card.corners,
       timestamp:card.timestamp,
     });
-  },[setCalibration]);
-  const handleCardSkipped=useCallback(()=>{
+    if (lockBeatTimerRef.current) clearTimeout(lockBeatTimerRef.current);
+    lockBeatTimerRef.current=setTimeout(()=>{
+      lockBeatTimerRef.current=null;
+      advanceToSettling();
+    },900);
+  },[advanceToSettling,setCalibration]);
+  const handleCardTimeout=useCallback(()=>{
+    setCardChoice(true);
+  },[]);
+  const continueWithIris=useCallback(()=>{
+    setCardChoice(false);
+    setScanMode("iris");
     setCalibration({
       source:"iris-fallback",
       skippedCard:true,
       timestamp:new Date().toISOString(),
     });
-  },[setCalibration]);
+    advanceToSettling();
+  },[advanceToSettling,setCalibration]);
   const handleScanAbort=useCallback((message)=>{
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    if (lockBeatTimerRef.current) clearTimeout(lockBeatTimerRef.current);
     processingTimerRef.current=null;
     settleTimerRef.current=null;
-    setScanProcessing(false);
+    lockBeatTimerRef.current=null;
     setConfirmedMeas(null);
-    setCalibration(null);
-    setScanning(false);
-    setScanSettling(false);
     setCameraIntro(false);
     setScanPrepDismissed(true);
+    setCardChoice(false);
+    setPhase("positioning");
     setScanRestartCopy(message||"scan lost. position your face and tap start again.");
-  },[setCalibration,setConfirmedMeas]);
+  },[setConfirmedMeas]);
   const scan=useFaceScan({
     videoRef,
     scanning,
     canvasRef,
     scaleMmPerPx:calibration?.mmPerPx||null,
     scaleSource:calibration?.source||"iris-fallback",
-    needsCard:scanMode==="card"&&camReady&&!cameraIntro&&scanning,
+    cardLockActive,
+    wantsCard,
     faceEnabled:camReady&&!cameraIntro,
     debugScan:debugEnabled,
     onCardLocked:handleCardLocked,
-    onCardSkipped:handleCardSkipped,
+    onCardTimeout:handleCardTimeout,
     engineActive:true,
-    onAutoStart:startSettledScan,
+    onAutoStart:routeAfterPositioning,
     onScanAbort:handleScanAbort,
   });
   // Measurements worth showing: confirmed ones, or fresh scan results whose
@@ -169,10 +196,11 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   // Release the camera as soon as the scan finishes — the video is hidden at that
   // point, and leaving the stream (and the camera light) on undermines the
   // "scan stays on this device" promise while the user reviews results.
-  useEffect(()=>{ if(scan.done){ setScanning(false); setScanSettling(false); stopCamera(); } },[scan.done,stopCamera]);
+  useEffect(()=>{ if(scan.done){ stopCamera(); } },[scan.done,stopCamera]);
   useEffect(()=>()=>{
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    if (lockBeatTimerRef.current) clearTimeout(lockBeatTimerRef.current);
   },[]);
   useEffect(()=>{
     if (!scan.done) return;
@@ -188,7 +216,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   // Keep the user on scan review until they accept the measured spec.
   useEffect(()=>{
     if (scan.done&&scan.measurements&&scan.quality&&!scan.quality.rescan&&!confirmedMeas&&!scanProcessing&&!processingTimerRef.current){
-      setScanProcessing(true);
+      setPhase("processing");
       processingTimerRef.current=setTimeout(()=>{
         setConfirmedMeas({
           ...scan.measurements,
@@ -197,7 +225,6 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
           validPct:scan.validPct,
         });
         onScanComplete();
-        setScanProcessing(false);
         processingTimerRef.current=null;
         onAdvance(); // advance automatically to the measurements payoff
       },2000);
@@ -221,21 +248,23 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   function resetScanState({keepMode}){
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current);
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    if (lockBeatTimerRef.current) clearTimeout(lockBeatTimerRef.current);
     processingTimerRef.current=null;
     settleTimerRef.current=null;
-    setScanProcessing(false);
-    setScanSettling(false);
+    lockBeatTimerRef.current=null;
     setScanRestartCopy("");
+    setCardChoice(false);
     scan.reset();
-    setScanning(false);
     setCameraIntro(false);
     setConfirmedMeas(null);
     setCalibration(null);
     if (keepMode){
       setScanPrepDismissed(true);
+      setPhase("positioning");
     } else {
       setScanPrepDismissed(false);
       setScanMode(null);
+      setPhase("consent");
     }
     stopCamera();
   }
@@ -270,7 +299,11 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     setScanRestartCopy("");
     setScanPrepDismissed(true);
     setCameraIntro(true);
-    if (mode==="iris") handleCardSkipped();
+    setCardChoice(false);
+    setPhase("positioning");
+    if (mode==="iris"){
+      setCalibration({source:"iris-fallback",skippedCard:true,timestamp:new Date().toISOString()});
+    }
     startCamera();
   }
 
@@ -354,7 +387,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
             <canvas ref={canvasRef}/>
             <div className="cam-vignette"/>
             <FaceGuide fill={scan.fill} poseHint={!scanRestartCopy&&!scanning&&!scanSettling?scan.poseHint:null} done={scan.done}/>
-            {cameraIntro&&!scanRestartCopy&&(
+            {cameraIntro&&!scanRestartCopy&&phase!=="cardlock"&&(
               <div className="face-intro">
                 <div className="face-intro-main">Look straight ahead</div>
                 <div className="face-intro-sub">Fill the oval with your face</div>
@@ -363,6 +396,22 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
             {scanSettling&&!scanRestartCopy&&(
               <div className="settle-intro">
                 <div className="settle-intro-main">Find your spot</div>
+              </div>
+            )}
+            {phase==="cardlock"&&!cardChoice&&(
+              <div className="settle-intro">
+                <div className="settle-intro-main">{scan.cardStatus.stablePct>=1?"scale locked.":"show your card"}</div>
+                {scan.cardStatus.stablePct<1&&<div className="face-intro-sub">hold it flat under your chin, facing the camera{scan.cardStatus.reason?` — ${scan.cardStatus.reason}`:""}</div>}
+              </div>
+            )}
+            {phase==="cardlock"&&cardChoice&&(
+              <div className="face-intro" style={{pointerEvents:"auto",background:"rgba(0,0,0,.55)"}}>
+                <div className="face-intro-main">having trouble?</div>
+                <div className="face-intro-sub">we couldn't get a clean read on the card.</div>
+                <div className="btn-row" style={{marginTop:14}}>
+                  <button className="btn btn-primary" onClick={()=>{setCardChoice(false);scan.retryCardLock();}}>retry card</button>
+                  <button className="btn btn-ghost" onClick={continueWithIris}>continue with iris</button>
+                </div>
               </div>
             )}
             {debugEnabled&&(
@@ -405,8 +454,8 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
       {camReady&&!scan.done&&(
         <div style={{textAlign:"center",marginTop:14}}>
           <div className="calibration-strip"><span>{scaleIndicator}</span></div>
-          {!scanning&&!scanSettling&&(
-              <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent||scanSettling} onClick={startSettledScan}>
+          {phase==="positioning"&&(
+              <button className="btn btn-primary" disabled={!scan.mpReady||!scan.facePresent} onClick={routeAfterPositioning}>
                 {scan.mpReady?scan.facePresent?"start scan →":"find your face first":"loading..."}
               </button>
           )}

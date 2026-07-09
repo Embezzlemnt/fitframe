@@ -20,7 +20,7 @@ export const CARD_ASPECT = CREDIT_CARD_WIDTH_MM / CREDIT_CARD_HEIGHT_MM;
 export const CARD_STABLE_FRAMES = 6;
 export const CARD_MAX_ROTATION_DEG = 14;
 export const CARD_MIN_CONFIDENCE = 0.58;
-export const CARD_FALLBACK_MS = 8000;
+export const CARD_LOCK_TIMEOUT_MS = 20000;
 export const OPENCV_URL = "https://docs.opencv.org/4.9.0/opencv.js";
 // Pinned MediaPipe version — the scan engine must not float with CDN "latest".
 // This is the final published version of the legacy MediaPipe JS face_mesh solution.
