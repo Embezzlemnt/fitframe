@@ -260,7 +260,6 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     }
 
     if (scanningRef.current){
-      const ear=calcEAR(d);
       if (!iris.valid){
         markDiscard(iris.reason);
       } else if (ear.min<EAR_BLINK_MIN){
