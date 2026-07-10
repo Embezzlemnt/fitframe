@@ -356,6 +356,8 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     ?"your face is mapped."
     :scanState==="lost"
       ?"Face scan"
+    :phase==="cardlock"
+      ?"Show your card."
     :scanState==="scanning"
       ?scanSettling?"Find your spot.":"Stay still."
     :cameraIntro
@@ -371,6 +373,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     if (scanRestartCopy) return {text:scanRestartCopy,lost:true};
     if (scanning) return {text:"Hold steady"};
     if (scanSettling) return {text:"Find your spot"};
+    if (phase==="cardlock") return {text:""}; // the settle-intro overlay carries card guidance
     if (guideState==="lost") return {text:"Come back into frame",warn:true};
     if (scan.poseHint) return {text:scan.poseHint,warn:true};
     if (scan.autoStartPct>0&&scan.autoStartPct<1) return {text:"Hold still..."};
@@ -378,6 +381,8 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   })();
   const scanCopy=scanProcessing
     ?""
+    :phase==="cardlock"
+      ?""
     :scanState==="scanning"
       ?scanSettling?"Hold still for a second before measuring.":""
     :cameraIntro
@@ -428,7 +433,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
             <video ref={videoRef} autoPlay playsInline muted/>
             <canvas ref={canvasRef}/>
             <div className="cam-vignette"/>
-            <FaceGuide fill={scan.fill} poseHint={!scanRestartCopy&&!scanning&&!scanSettling?scan.poseHint:null} done={scan.done} state={guideState} bloomKey={bloomKey}/>
+            <FaceGuide fill={scan.fill} poseHint={!scanRestartCopy&&!scanning&&!scanSettling&&phase!=="cardlock"?scan.poseHint:null} done={scan.done} state={phase==="cardlock"?"cardlock":guideState} bloomKey={bloomKey}/>
             {cameraIntro&&!scanRestartCopy&&phase!=="cardlock"&&(
               <div className="face-intro">
                 <div className="face-intro-main">Look straight ahead</div>
@@ -468,11 +473,13 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
                 <div>Discard: {scan.debugInfo?.discarded ? Object.entries(scan.debugInfo.discarded).map(([k,v])=>`${k}:${v}`).join(", ") : "-"}</div>
               </div>
             )}
-            <div className="cam-bottom">
-              <div className={`scan-inst ${scanCamInst.lost?"scan-inst-lost":""}`} aria-live="polite" style={scanCamInst.warn?{color:"#C49A2E"}:undefined}>
-                {scanCamInst.text}
+            {phase!=="cardlock"&&(
+              <div className="cam-bottom">
+                <div className={`scan-inst ${scanCamInst.lost?"scan-inst-lost":""}`} aria-live="polite" style={scanCamInst.warn?{color:"#C49A2E"}:undefined}>
+                  {scanCamInst.text}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -494,7 +501,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
         </div>
       )}
 
-      {camReady&&!scan.done&&(
+      {camReady&&!scan.done&&phase!=="cardlock"&&(
         <div style={{textAlign:"center",marginTop:14}}>
           <div className="calibration-strip"><span>{scaleIndicator}</span></div>
           {phase==="positioning"&&(

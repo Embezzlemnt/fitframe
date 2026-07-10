@@ -152,6 +152,7 @@ const css = `
   .fg-found{stroke:rgba(255,255,255,.6);transform:scale(1);}
   .fg-scanning{stroke:rgba(255,255,255,.32);transform:scale(1);}
   .fg-lost{stroke:rgba(229,166,74,.85);transform:scale(.88);}
+  .fg-cardlock{stroke:rgba(255,255,255,.1);transform:scale(1);}
   @keyframes fgBreathe{0%,100%{transform:scale(.94);}50%{transform:scale(.952);}}
   .fg-bloom{transform-box:fill-box;transform-origin:center;animation:fgBloom 1.1s cubic-bezier(.2,.6,.35,1) both;}
   @keyframes fgBloom{0%{opacity:.45;transform:scale(1);}100%{opacity:0;transform:scale(1.22);}}
