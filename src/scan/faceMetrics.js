@@ -2,9 +2,12 @@ import { IRIS_MM, IRIS_SD, IRIS_MIN_PX, IRIS_MAX_PX, TILT_THRESHOLD, IRIS_MISMAT
 
 // ─── Pose validation ──────────────────────────────────────────────────────────
 export function validatePose(lm) {
+  // The nose must sit inside the guide oval, not merely inside the frame —
+  // measurements taken off-center pick up perspective error the yaw gate
+  // can't fully catch.
   const nx = lm[1].x, ny = lm[1].y;
-  if (nx < 0.10 || nx > 0.90) return { valid:false, reason:"Center your face" };
-  if (ny < 0.08 || ny > 0.92) return { valid:false, reason:"Center your face" };
+  if (nx < 0.40 || nx > 0.60) return { valid:false, reason:"Center your face" };
+  if (ny < 0.34 || ny > 0.66) return { valid:false, reason:"Center your face" };
   return { valid:true, reason:null };
 }
 
@@ -73,6 +76,7 @@ export function redoReason(discards){
     case "blink": return "we caught too many blinks — keep your eyes relaxed and open, then go again.";
     case "no-face": return "we lost your face — keep it inside the oval this time.";
     case "pose": case "yaw": return "too much head movement — face the camera straight on and hold steady.";
+    case "tilt": return "your head was tilted — keep your eyes level, like looking at your reflection.";
     case "too-far": return "you're a bit far away — bring the phone to about arm's length.";
     case "too-close": return "you're too close — ease back to about arm's length.";
     case "iris-lost": case "iris-mismatch": return "we lost track of your eyes — try facing a light so your eyes are clearly lit.";

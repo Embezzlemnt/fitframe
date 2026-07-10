@@ -1,7 +1,7 @@
 // ─── Measurement math ─────────────────────────────────────────────────────────
 export const IRIS_MM = 11.8;          // HVID mean reference
 export const IRIS_SD = 0.5;           // +/-1 SD - acceptable iris diameter range: 10.8-12.8mm
-export const IRIS_MIN_PX = 13;        // Below this the iris is too low-res for a trustworthy scale
+export const IRIS_MIN_PX = 15;        // Below this the iris is too low-res for a trustworthy scale
 export const IRIS_MAX_PX = 80;        // Above this, face is too close and landmarks compress
 export const PD_ADULT_MIN = 52.0;     // Adult binocular PD lower reference
 export const PD_ADULT_MAX = 80.0;     // Adult binocular PD upper reference
@@ -12,10 +12,10 @@ export const TILT_THRESHOLD = 0.12;   // Iris center Y difference as a fraction 
 export const IRIS_MISMATCH_MAX = 0.12;// Left/right iris reads differing more than this are bad landmark fits
 export const MIN_VALID_SAMPLES = 3;   // Review-screen safety net handles small usable samples
 export const FACE_ABORT_FRAMES = 80;  // ~2.5s of sustained face/pose loss during active scan (~32fps)
-export const FACE_YAW_MAX = 0.10;     // Beyond this, perspective compresses the inter-pupil span
+export const FACE_YAW_MAX = 0.08;     // Beyond this, perspective compresses the inter-pupil span
 export const EAR_BLINK_MIN = 0.18;    // Catches partial blinks that squash the iris read
 export const SCALE_HISTORY_FRAMES = 10;
-export const SCALE_DRIFT_MAX = 0.06;  // Frame scale deviating >6% from the running median = distance/lighting shift
+export const SCALE_DRIFT_MAX = 0.05;  // Frame scale deviating >5% from the running median = distance/lighting shift
 export const PD_STD_CLEAN_MM = 2.0;   // A clean scan must hold the PD spread under 2mm
 export const BRIDGE_STD_CLEAN_MM = 1.5;
 export const CREDIT_CARD_WIDTH_MM = 85.6;

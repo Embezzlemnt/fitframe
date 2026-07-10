@@ -364,6 +364,8 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
         markDiscard(iris.reason);
       } else if (ear.min<EAR_BLINK_MIN){
         markDiscard("blink");
+      } else if (iris.isTilted){
+        markDiscard("tilt");
       } else if (!scaleRef.current&&scaleHistoryRef.current.length>=5
           &&Math.abs(IRIS_MM/iris.avgDiam-median(scaleHistoryRef.current))/median(scaleHistoryRef.current)>SCALE_DRIFT_MAX){
         // Iris-scale frames that disagree >6% with the running median are distance or
@@ -406,7 +408,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
         function init(retry){
           if (!window.FaceMesh){ if(retry) setTimeout(()=>init(false),800); return; }
           const fm=new window.FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${MEDIAPIPE_FACE_MESH_VERSION}/${f}`});
-          fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
+          fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.6,minTrackingConfidence:.6});
           fm.onResults(results=>handleResultsRef.current?.(results));
           fm.initialize().then(()=>{ fmRef.current=fm; setMpReady(true); });
         }
