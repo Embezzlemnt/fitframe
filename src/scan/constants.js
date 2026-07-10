@@ -40,29 +40,16 @@ export const REDO_MIN_SAMPLES = 40;
 // visual-only landmark sets (measurement never reads these)
 export const LEFT_EYE_CONTOUR =[33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
 export const RIGHT_EYE_CONTOUR=[263,249,390,373,374,380,381,382,362,398,384,385,386,387,388,466];
-export const CONSTELLATION_INDICES=[
-  // silhouette / jawline
-  10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,
-  // brows
-  70,63,105,66,107,55,65,52,53,46, 300,293,334,296,336,285,295,282,283,276,
-  // nose bridge + base
-  168,6,197,195,5,4,1,19,94,2,98,327,
-  // outer lips
-  61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185,
-  // cheeks
-  50,101,118,205,280,330,347,425,
-  // full-face coverage: forehead, under-eye, cheekbones, nose sides, chin
-  151,9,8,108,337,69,299,117,119,346,348,36,266,129,358,49,279,175,199,200,32,262,113,342,124,353,
+// The measurement blueprint: smooth contour curves traced in anatomical order
+// (jaw ring from the chin, brows, nose, lips), plus registration marks at the
+// twelve true measurement sites. Visual-only — measurement never reads these.
+export const CONTOUR_CHAINS=[
+  {loop:true, idx:[152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377]},
+  {loop:false,idx:[70,63,105,66,107]},
+  {loop:false,idx:[300,293,334,296,336]},
+  {loop:false,idx:[168,6,197,195,5,4,1]},
+  {loop:false,idx:[98,97,2,326,327]},
+  {loop:true, idx:[61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185]},
 ];
-// Hairline traces drawn between anchors as the scan converges — chains along
-// real anatomy (jaw ring, brows, nose bridge, lip ring), never a full mesh.
-export const CONSTELLATION_EDGES=(()=>{
-  const chain=(a,loop=false)=>{const e=[];for(let i=1;i<a.length;i++)e.push([a[i-1],a[i]]);if(loop)e.push([a[a.length-1],a[0]]);return e;};
-  return [
-    ...chain([10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109],true),
-    ...chain([70,63,105,66,107]), ...chain([46,53,52,65,55]),
-    ...chain([300,293,334,296,336]), ...chain([276,283,282,295,285]),
-    ...chain([168,6,197,195,5,4,1,19,94,2]), [2,98],[2,327],
-    ...chain([61,146,91,181,84,17,314,405,321,375,291,409,270,269,267,0,37,39,40,185],true),
-  ];
-})();
+// ordered to match the trace: jaw sites first, then brow/nose/eye-corner sites
+export const REGISTRATION_INDICES=[152,58,288,234,454,10,105,334,168,1,133,362];
