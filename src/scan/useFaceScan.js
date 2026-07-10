@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements, calcEAR, redoReason, median } from "./faceMetrics.js";
-import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, drawCardBlurMask, detectionSimilarity } from "./cardDetection.js";
+import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, drawCardBlurMask, drawCardTarget, detectionSimilarity } from "./cardDetection.js";
 import { drawEyeOval, drawConstellation } from "./overlays.js";
 import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY, SCAN_BASE_MS, SCAN_MAX_MS, TARGET_VALID_SAMPLES, REDO_MIN_SAMPLES, SCALE_DRIFT_MAX, PD_STD_CLEAN_MM, BRIDGE_STD_CLEAN_MM, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR } from "./constants.js";
 
@@ -277,7 +277,10 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     if (doneRef.current||abortingRef.current) { clearScanCanvas(); return; }
 
     const cardLockActiveNow=cardLockActiveRef.current;   // routed via ref like scanningRef
-    if (cardLockActiveNow&&!cardLockedRef.current) processCardFrame(ctx);
+    if (cardLockActiveNow&&!cardLockedRef.current){
+      drawCardTarget(ctx,W,H,performance.now(),REDUCE_MOTION); // placement zone under the live detection
+      processCardFrame(ctx);
+    }
 
     if (!results.multiFaceLandmarks?.length){
       holdRef.current=0; setFacePresent(false); setPoseHint(null);

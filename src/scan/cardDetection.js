@@ -1,5 +1,16 @@
 import { clamp, distPt } from "./faceMetrics.js";
-import { OPENCV_URL, CREDIT_CARD_WIDTH_MM, CARD_ASPECT, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE } from "./constants.js";
+import { OPENCV_URL, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_ASPECT, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE } from "./constants.js";
+
+// The overlay canvas is CSS-mirrored for selfie view, so text drawn normally
+// reads backwards on screen. Flip the context around the vertical axis for the
+// duration of the draw and mirror the x coordinate.
+function drawMirroredText(ctx,text,x,y){
+  const W=ctx.canvas.width;
+  ctx.save();
+  ctx.translate(W,0); ctx.scale(-1,1);
+  ctx.fillText(text,W-x,y);
+  ctx.restore();
+}
 
 // ─── Script loader ────────────────────────────────────────────────────────────
 export function loadScript(src) {
@@ -89,7 +100,29 @@ export function drawDetectedCard(ctx,detection,stablePct){
   ctx.font="13px 'Geist Mono', monospace";
   ctx.fillStyle="rgba(255,255,255,.9)";
   ctx.textAlign="center";
-  ctx.fillText(stablePct>=1?"SCALE LOCKED":`CARD ${Math.round(stablePct*100)}%`, detection.center.x, detection.center.y);
+  drawMirroredText(ctx,stablePct>=1?"SCALE LOCKED":`CARD ${Math.round(stablePct*100)}%`, detection.center.x, detection.center.y);
+  ctx.restore();
+}
+
+// Placement target for the card-lock phase: a dashed card-proportioned zone
+// under the chin, inside the detector's search region, breathing gently until
+// the live detection outline takes over on top of it.
+export function drawCardTarget(ctx,W,H,tMs,reduceMotion){
+  const w=W*.5, h=w*CREDIT_CARD_HEIGHT_MM/CREDIT_CARD_WIDTH_MM;
+  const x=(W-w)/2, y=H*.72-h/2, r=w*.045;
+  const breathe=reduceMotion?1:.7+.3*Math.sin(tMs/1600);
+  ctx.save();
+  ctx.strokeStyle=`rgba(242,240,232,${.5*breathe})`;
+  ctx.lineWidth=1.5;
+  ctx.setLineDash([8,7]);
+  ctx.beginPath();
+  ctx.roundRect(x,y,w,h,r);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle=`rgba(242,240,232,${.5*breathe})`;
+  ctx.font="12px 'Geist Mono', monospace";
+  ctx.textAlign="center";
+  drawMirroredText(ctx,"card here",W/2,y+h/2+4);
   ctx.restore();
 }
 
