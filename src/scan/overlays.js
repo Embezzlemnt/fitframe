@@ -13,24 +13,25 @@ export function drawEyeOval(ctx,pts,indices){
     ctx.quadraticCurveTo(ring[i].x,ring[i].y,m.x,m.y);
   }
   ctx.closePath();
-  ctx.strokeStyle="rgba(76,175,125,.85)";
-  ctx.lineWidth=1.5;
-  ctx.shadowColor="rgba(76,175,125,.5)";
-  ctx.shadowBlur=6;
+  ctx.strokeStyle="rgba(242,240,232,.45)";
+  ctx.lineWidth=1;
   ctx.stroke();
-  ctx.shadowBlur=0;
 }
 
+// Small white measurement anchors on the face — the only dots anywhere on screen.
+// Subtle by design: they read as the instrument sampling, not decoration.
 export function drawConstellation(ctx,pts,tMs,alpha,reduceMotion){
   if (alpha<=0.01) return;
   ctx.save();
-  ctx.fillStyle="#73d7a0";
+  ctx.fillStyle="#f2f0e8";
   for (let k=0;k<CONSTELLATION_INDICES.length;k++){
     const p=pts[CONSTELLATION_INDICES[k]];
     if (!p) continue;
-    const shimmer=reduceMotion?1:.55+.45*Math.sin(tMs/900+k*1.7);
-    ctx.globalAlpha=alpha*(.14+.14*shimmer);
-    ctx.fillRect(p.x-.6,p.y-.6,1.2,1.2);
+    const breathe=reduceMotion?1:.5+.5*Math.sin(tMs/1400+k*1.1);
+    ctx.globalAlpha=alpha*(.22+.3*breathe);
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,1.1,0,Math.PI*2);
+    ctx.fill();
   }
   ctx.restore();
 }

@@ -146,9 +146,16 @@ const css = `
   .cam-inner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0;}
   .cam-inner canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none;z-index:1;}
   .cam-vignette{position:absolute;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at center,transparent 54%,rgba(0,0,0,.34) 100%);}
-  .face-guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;filter:drop-shadow(0 0 7px rgba(76,175,125,.55));}
-  @keyframes ovalPulse{0%,100%{opacity:0.28;}50%{opacity:0.5;}}
-  .oval-waiting{animation:ovalPulse 2.2s ease-in-out infinite;}
+  .face-guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;}
+  .fg-oval{transition:transform .7s cubic-bezier(.32,1.2,.5,1),stroke .5s ease;transform-box:fill-box;transform-origin:center;}
+  .fg-searching{stroke:rgba(255,255,255,.28);animation:fgBreathe 3.4s ease-in-out infinite;}
+  .fg-found{stroke:rgba(255,255,255,.6);transform:scale(1);}
+  .fg-scanning{stroke:rgba(255,255,255,.32);transform:scale(1);}
+  .fg-lost{stroke:rgba(229,166,74,.85);transform:scale(.88);}
+  @keyframes fgBreathe{0%,100%{transform:scale(.94);}50%{transform:scale(.952);}}
+  .fg-bloom{transform-box:fill-box;transform-origin:center;animation:fgBloom 1.1s cubic-bezier(.2,.6,.35,1) both;}
+  @keyframes fgBloom{0%{opacity:.45;transform:scale(1);}100%{opacity:0;transform:scale(1.22);}}
+  @media (prefers-reduced-motion:reduce){.fg-searching{animation:none;transform:scale(.94);}.fg-bloom{animation:none;opacity:0;}}
   .cam-bottom{position:absolute;bottom:0;left:0;right:0;z-index:5;padding:28px 16px 15px;background:linear-gradient(transparent,rgba(0,0,0,.68));display:flex;flex-direction:column;align-items:center;gap:4px;}
   @keyframes cardPulse{0%,100%{opacity:.74;filter:drop-shadow(0 0 4px rgba(76,175,125,.35));}50%{opacity:1;filter:drop-shadow(0 0 14px rgba(76,175,125,.72));}}
   .scan-inst{font-size:15px;font-weight:500;color:rgba(255,255,255,.92);letter-spacing:-.01em;text-align:center;}

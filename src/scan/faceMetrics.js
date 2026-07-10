@@ -76,6 +76,7 @@ export function redoReason(discards){
     case "too-far": return "you're a bit far away — bring the phone to about arm's length.";
     case "too-close": return "you're too close — ease back to about arm's length.";
     case "iris-lost": case "iris-mismatch": return "we lost track of your eyes — try facing a light so your eyes are clearly lit.";
+    case "scale-drift": return "your distance to the camera shifted mid-scan — pick a spot at arm's length and hold it.";
     default: return "the scan couldn't get enough clean frames — find even light, hold steady, and go again.";
   }
 }

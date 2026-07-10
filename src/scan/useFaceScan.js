@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements, calcEAR, redoReason } from "./faceMetrics.js";
+import { validatePose, calcIrisMetrics, calcYawRatio, calcMeasurements, calcEAR, redoReason, median } from "./faceMetrics.js";
 import { loadScript, loadOpenCv, detectCardOutline, drawDetectedCard, drawCardBlurMask, detectionSimilarity } from "./cardDetection.js";
 import { drawEyeOval, drawConstellation } from "./overlays.js";
-import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY, SCAN_BASE_MS, SCAN_MAX_MS, TARGET_VALID_SAMPLES, REDO_MIN_SAMPLES, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR } from "./constants.js";
+import { IRIS_MM, FACE_ABORT_FRAMES, FACE_YAW_MAX, EAR_BLINK_MIN, CREDIT_CARD_WIDTH_MM, CREDIT_CARD_HEIGHT_MM, CARD_STABLE_FRAMES, CARD_MAX_ROTATION_DEG, CARD_MIN_CONFIDENCE, CARD_LOCK_TIMEOUT_MS, MEDIAPIPE_FACE_MESH_VERSION, MIN_VALID_SAMPLES, PD_ADULT_MIN, PD_ADULT_MAX, BRIDGE_MIN, BRIDGE_MAX, MONOCULAR_SYMMETRY, SCAN_BASE_MS, SCAN_MAX_MS, TARGET_VALID_SAMPLES, REDO_MIN_SAMPLES, SCALE_DRIFT_MAX, PD_STD_CLEAN_MM, BRIDGE_STD_CLEAN_MM, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR } from "./constants.js";
 
 // ─── useFaceScan ──────────────────────────────────────────────────────────────
 const HOLD_FRAMES = 18;
@@ -223,19 +223,20 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
       const finalPd=Math.abs(monoSum-pd)>2&&monoSumSane?monoSum:pd;
       const pdStd=weightedStd("pd");
       const bridgeStd=weightedStd("bridge");
-      const stable=pdStd<=2.0&&bridgeStd<=1.5;
+      // The product bar: a clean scan holds the PD spread under 2mm (PD_STD_CLEAN_MM).
+      const stable=pdStd<=PD_STD_CLEAN_MM&&bridgeStd<=BRIDGE_STD_CLEAN_MM;
       const hardOutOfRange=!directPdSane&&!monoSumSane;
       const reviewRangeIssue=br<BRIDGE_MIN||br>BRIDGE_MAX||Math.abs(lMono-rMono)>MONOCULAR_SYMMETRY;
-      setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:finalScaleSource});
+      setMeasurements({pd:finalPd.toFixed(1),pdLeft:lMono.toFixed(1),pdRight:rMono.toFixed(1),bridge:br.toFixed(1),temple:weightedAvg("temple").toFixed(0),lensH:weightedAvg("lensH").toFixed(1),faceW:face.toFixed(0),scaleSource:finalScaleSource,pdSpread:pdStd.toFixed(1)});
       const nextQuality=hardOutOfRange
         ?{label:"Out of range",rescan:false,reason:"The PD landed outside the frame-fitting range. Review before continuing."}
         :s.length<MIN_VALID_SAMPLES||vp<.25
           ?{label:"Double-check these",rescan:false,reason:"We captured a small sample. Double-check the numbers below."}
-          :reviewRangeIssue||pdStd>4.5||bridgeStd>3
-            ?{label:"Review your numbers",rescan:false,reason:"Usable scan with some movement. Review the numbers below."}
+          :reviewRangeIssue||pdStd>3.0||bridgeStd>2.2
+            ?{label:"Review your numbers",rescan:false,reason:`PD spread was ±${pdStd.toFixed(1)}mm — above our 2mm bar. Review the numbers, or rescan holding stiller.`}
             :stable&&vp>=.6
-              ?{label:"Clean scan",rescan:false,reason:"The scan had steady tracking and enough usable frames."}
-              :{label:"Fair scan",rescan:false,reason:"Usable scan with natural movement. Review the numbers below."};
+              ?{label:"Clean scan",rescan:false,reason:`Steady tracking — PD spread held to ±${pdStd.toFixed(1)}mm, inside the 2mm bar.`}
+              :{label:"Fair scan",rescan:false,reason:`Usable scan (PD spread ±${pdStd.toFixed(1)}mm). Review the numbers below.`};
       setQuality(nextQuality);
       logScanDebug("complete",{
         finalPd:Number(finalPd.toFixed(1)),
@@ -351,13 +352,11 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     if (scanningRef.current&&iris.valid){
       drawEyeOval(ctx,pts,LEFT_EYE_CONTOUR);
       drawEyeOval(ctx,pts,RIGHT_EYE_CONTOUR);
-      const ink="#4caf7d"; // LOCKED — must match --accent
+      const ink="rgba(242,240,232,.8)"; // measurement anchors read white, like the constellation
       [[pts[468],lId],[pts[473],rId]].forEach(([c,diam])=>{
         ctx.beginPath(); ctx.arc(c.x,c.y,diam/2,0,Math.PI*2);
-        ctx.strokeStyle=ink; ctx.lineWidth=1.5; ctx.stroke();
+        ctx.strokeStyle=ink; ctx.lineWidth=1; ctx.stroke();
       });
-      ctx.beginPath(); ctx.moveTo(pts[468].x,pts[468].y); ctx.lineTo(pts[473].x,pts[473].y);
-      ctx.strokeStyle=ink; ctx.lineWidth=.75; ctx.setLineDash([3,4]); ctx.stroke(); ctx.setLineDash([]);
     }
 
     if (scanningRef.current){
@@ -365,6 +364,11 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
         markDiscard(iris.reason);
       } else if (ear.min<EAR_BLINK_MIN){
         markDiscard("blink");
+      } else if (!scaleRef.current&&scaleHistoryRef.current.length>=5
+          &&Math.abs(IRIS_MM/iris.avgDiam-median(scaleHistoryRef.current))/median(scaleHistoryRef.current)>SCALE_DRIFT_MAX){
+        // Iris-scale frames that disagree >6% with the running median are distance or
+        // lighting shifts, not measurements — reject them instead of averaging them in.
+        markDiscard("scale-drift");
       } else {
         const m=calcMeasurements(lm,W,H,scaleRef.current,scaleHistoryRef,iris);
         if (m){

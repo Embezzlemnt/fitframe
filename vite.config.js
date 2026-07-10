@@ -28,6 +28,10 @@ export default defineConfig({
   plugins: [react(), cleanUrlPages],
   // No effect on the production build.
   server: {
+    // Lets a Cloudflare quick tunnel (random *.trycloudflare.com hostname per
+    // run) or Tailscale Serve reach this dev server for on-device testing —
+    // Vite blocks unrecognized Host headers by default (DNS-rebinding guard).
+    allowedHosts: ['.trycloudflare.com', '.ts.net'],
     proxy: {
       '/api': {
         target: apiTarget,

@@ -5,10 +5,13 @@ import { clamp } from "./faceMetrics.js";
 import { PRE_SCAN_SETTLE_MS, SCAN_DURATION_SECONDS_PLACEHOLDER } from "./constants.js";
 
 // ─── FaceGuide ────────────────────────────────────────────────────────────────
-function FaceGuide({fill,poseHint,done=false}){
+// The oval is the only frame element. It reacts physically to detection:
+// searching = dim hairline breathing · found = springs wider and brightens ·
+// lost = narrows to amber · lock = one green ripple (bloomKey retriggers it) ·
+// scanning = its own stroke fills as clean samples land.
+function FaceGuide({fill,poseHint,done=false,state="searching",bloomKey=0}){
   const VW=400,VH=300,cx=200,cy=150,rx=78,ry=108;
   const activeFill=clamp(done?0:fill,0,1);
-  const waiting=!done&&activeFill<=0;
   return (
     <svg className="face-guide" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <defs>
@@ -20,18 +23,19 @@ function FaceGuide({fill,poseHint,done=false}){
           </feMerge>
         </filter>
       </defs>
+      {bloomKey>0&&<ellipse key={bloomKey} className="fg-bloom" cx={cx} cy={cy} rx={rx} ry={ry}
+        fill="none" stroke="rgba(115,215,160,.8)" strokeWidth="1.5"/>}
       <ellipse
-        className={waiting?"oval-waiting":undefined}
+        className={`fg-oval fg-${state}`}
         cx={cx} cy={cy} rx={rx} ry={ry}
         fill="none"
-        stroke="rgba(255,255,255,0.28)"
         strokeWidth="1.5"
       />
       <path
         d={`M${cx},${cy+ry} A${rx},${ry} 0 0,1 ${cx},${cy-ry}`}
         fill="none"
         stroke="var(--accent)"
-        strokeWidth="3"
+        strokeWidth="2"
         strokeLinecap="round"
         pathLength="1"
         strokeDasharray="1"
@@ -42,7 +46,7 @@ function FaceGuide({fill,poseHint,done=false}){
         d={`M${cx},${cy+ry} A${rx},${ry} 0 0,0 ${cx},${cy-ry}`}
         fill="none"
         stroke="var(--accent)"
-        strokeWidth="3"
+        strokeWidth="2"
         strokeLinecap="round"
         pathLength="1"
         strokeDasharray="1"
@@ -87,6 +91,8 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   const [scanPrepDismissed,setScanPrepDismissed] = useState(false);
   const [cameraIntro,   setCameraIntro]   = useState(false);
   const [scanRestartCopy,setScanRestartCopy] = useState("");
+  const [hadFace,       setHadFace]       = useState(false); // distinguishes "searching" from "you left the frame"
+  const [bloomKey,      setBloomKey]      = useState(0);     // increments to fire the lock ripple
   const processingTimerRef                 = useRef(null);
   const settleTimerRef                     = useRef(null);
   const lockBeatTimerRef                   = useRef(null);
@@ -119,6 +125,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   // cardlock first (unless the scale is already locked from a prior lock —
   // e.g. recovering from a mid-scan abort), iris mode settles straight away.
   const routeAfterPositioning=useCallback(()=>{
+    setBloomKey(k=>k+1); // position confirmed — the oval blooms once
     if (scanMode==="card"&&calibration?.source!=="credit-card"){
       setCardChoice(false);
       setPhase("cardlock");
@@ -191,6 +198,11 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
   // quality did NOT demand a rescan (rescan-grade scans carry null measurements).
   const currentMeas=confirmedMeas||(!scan.quality?.rescan?scan.measurements:null);
 
+  // The oval's physical state. "lost" only means something after a face has
+  // been seen — before that the frame is just searching.
+  useEffect(()=>{ if (scan.facePresent) setHadFace(true); },[scan.facePresent]);
+  const guideState=scanning||scanSettling?"scanning":scan.facePresent?"found":hadFace?"lost":"searching";
+
   // ScanStage only renders during step 1 — stop the camera on unmount.
   useEffect(()=>()=>stopCamera(),[stopCamera]);
   // Release the camera as soon as the scan finishes — the video is hidden at that
@@ -257,6 +269,8 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     lockBeatTimerRef.current=null;
     setScanRestartCopy("");
     setCardChoice(false);
+    setHadFace(false);
+    setBloomKey(0);
     scan.reset();
     setCameraIntro(false);
     setConfirmedMeas(null);
@@ -304,6 +318,8 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     lockBeatTimerRef.current=null;
     setScanRestartCopy("");
     setCardChoice(false);
+    setHadFace(false);
+    setBloomKey(0);
     scan.reset();
     setConfirmedMeas(null);
     setPhase("positioning");
@@ -355,6 +371,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
     if (scanRestartCopy) return {text:scanRestartCopy,lost:true};
     if (scanning) return {text:"Hold steady"};
     if (scanSettling) return {text:"Find your spot"};
+    if (guideState==="lost") return {text:"Come back into frame",warn:true};
     if (scan.poseHint) return {text:scan.poseHint,warn:true};
     if (scan.autoStartPct>0&&scan.autoStartPct<1) return {text:"Hold still..."};
     return {text:"Look directly at the camera."};
@@ -411,7 +428,7 @@ export default function ScanStage({calibration,setCalibration,confirmedMeas,setC
             <video ref={videoRef} autoPlay playsInline muted/>
             <canvas ref={canvasRef}/>
             <div className="cam-vignette"/>
-            <FaceGuide fill={scan.fill} poseHint={!scanRestartCopy&&!scanning&&!scanSettling?scan.poseHint:null} done={scan.done}/>
+            <FaceGuide fill={scan.fill} poseHint={!scanRestartCopy&&!scanning&&!scanSettling?scan.poseHint:null} done={scan.done} state={guideState} bloomKey={bloomKey}/>
             {cameraIntro&&!scanRestartCopy&&phase!=="cardlock"&&(
               <div className="face-intro">
                 <div className="face-intro-main">Look straight ahead</div>
