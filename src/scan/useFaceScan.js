@@ -345,7 +345,7 @@ export default function useFaceScan({ videoRef, scanning, canvasRef, scaleMmPerP
     lastFrameTsRef.current=now;
     const targetAlpha=scanningRef.current?1:0;
     constAlphaRef.current+= (targetAlpha-constAlphaRef.current)*Math.min(1,dt/600);
-    drawConstellation(ctx,pts,now,constAlphaRef.current,REDUCE_MOTION);
+    drawConstellation(ctx,pts,now,constAlphaRef.current,REDUCE_MOTION,fillRef.current);
 
     const lId=iris.lId||0;
     const rId=iris.rId||0;
